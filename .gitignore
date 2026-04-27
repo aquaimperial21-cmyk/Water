@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.next/
+.expo/
+.expo-shared/
+*.log
+.DS_Store
+.env
+*.tsbuildinfo
+coverage/
+prisma/dev.db*
+ios/
+android/
+web-build/
+*.txt
