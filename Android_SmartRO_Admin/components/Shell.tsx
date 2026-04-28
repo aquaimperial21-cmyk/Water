@@ -10,6 +10,7 @@ const NAV: Array<{ href: string; label: string; icon: string }> = [
   { href: '/inquiries', label: 'Inquiries', icon: '📥' },
   { href: '/bookings', label: 'Bookings', icon: '🛒' },
   { href: '/subscriptions', label: 'Subscriptions', icon: '💧' },
+  { href: '/products', label: 'Products', icon: '📦' },
   { href: '/customers', label: 'Customers', icon: '👥' },
   { href: '/tickets', label: 'Tickets', icon: '🎫' },
   { href: '/technicians', label: 'Technicians', icon: '🔧' },

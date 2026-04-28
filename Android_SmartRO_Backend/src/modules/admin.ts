@@ -1,9 +1,20 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
-import { asyncHandler } from '../core/errors';
+import { asyncHandler, NotFound, BadRequest } from '../core/errors';
+import { validateBody } from '../core/validate';
 
 const router = Router();
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
 
 router.get(
   '/dashboard/stats',
@@ -123,6 +134,170 @@ router.get(
       take: 200,
     });
     res.json({ data: logs });
+  })
+);
+
+// ───────────────────────────────────── Catalog management ──────────────────────────────────────
+
+const productSchema = z.object({
+  name: z.string().min(2).max(120),
+  slug: z.string().min(2).max(80).regex(/^[a-z0-9-]+$/).optional(),
+  kind: z.enum(['HOME', 'COMMERCIAL']),
+  capacityLitres: z.number().int().positive().max(1000),
+  technology: z.string().min(1).max(40), // e.g. RO, RO+UV, RO+UV+UF
+  mounting: z.enum(['WALL', 'COUNTERTOP', 'UNDER_SINK']),
+  description: z.string().min(10).max(2000),
+  imageUrl: z.string().url().nullish(),
+  warrantyMonths: z.number().int().min(0).max(120).default(12),
+  isActive: z.boolean().default(true),
+});
+
+const productPatchSchema = productSchema.partial();
+
+const pricingSchema = z.object({
+  planId: z.string().uuid(),
+  cityId: z.string().uuid(),
+  monthlyPricePaise: z.number().int().nonnegative(),
+  depositPaise: z.number().int().nonnegative(),
+});
+
+// List all products (incl inactive) — admin view
+router.get(
+  '/products',
+  authRequired(['ADMIN']),
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.product.findMany({
+      include: {
+        prices: { include: { plan: true, city: true } },
+        _count: { select: { bookings: true, subscriptions: true, devices: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ data: items });
+  })
+);
+
+// Single product (admin)
+router.get(
+  '/products/:id',
+  authRequired(['ADMIN']),
+  asyncHandler(async (req, res) => {
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id },
+      include: {
+        prices: { include: { plan: true, city: true } },
+        _count: { select: { bookings: true, subscriptions: true, devices: true } },
+      },
+    });
+    if (!product) throw NotFound('Product not found');
+    res.json({ data: product });
+  })
+);
+
+// Create product
+router.post(
+  '/products',
+  authRequired(['ADMIN']),
+  validateBody(productSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as z.infer<typeof productSchema>;
+    const slug = input.slug ?? slugify(input.name);
+    const existing = await prisma.product.findUnique({ where: { slug } });
+    if (existing) throw BadRequest(`Slug "${slug}" already in use`);
+    const product = await prisma.product.create({
+      data: {
+        name: input.name,
+        slug,
+        kind: input.kind,
+        capacityLitres: input.capacityLitres,
+        technology: input.technology,
+        mounting: input.mounting,
+        description: input.description,
+        imageUrl: input.imageUrl ?? null,
+        warrantyMonths: input.warrantyMonths,
+        isActive: input.isActive,
+      },
+      include: { prices: { include: { plan: true, city: true } } },
+    });
+    res.status(201).json({ data: product });
+  })
+);
+
+// Update product (partial)
+router.patch(
+  '/products/:id',
+  authRequired(['ADMIN']),
+  validateBody(productPatchSchema),
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    const input = req.body as z.infer<typeof productPatchSchema>;
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) throw NotFound('Product not found');
+    if (input.slug && input.slug !== existing.slug) {
+      const dup = await prisma.product.findUnique({ where: { slug: input.slug } });
+      if (dup) throw BadRequest(`Slug "${input.slug}" already in use`);
+    }
+    const product = await prisma.product.update({
+      where: { id },
+      data: input,
+      include: { prices: { include: { plan: true, city: true } } },
+    });
+    res.json({ data: product });
+  })
+);
+
+// Deactivate (soft delete) — keeps history
+router.delete(
+  '/products/:id',
+  authRequired(['ADMIN']),
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) throw NotFound('Product not found');
+    const product = await prisma.product.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    res.json({ data: product });
+  })
+);
+
+// Upsert a price for (product, city, plan)
+router.post(
+  '/products/:id/pricing',
+  authRequired(['ADMIN']),
+  validateBody(pricingSchema),
+  asyncHandler(async (req, res) => {
+    const productId = req.params.id;
+    const { planId, cityId, monthlyPricePaise, depositPaise } = req.body as z.infer<typeof pricingSchema>;
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw NotFound('Product not found');
+    const [city, plan] = await Promise.all([
+      prisma.city.findUnique({ where: { id: cityId } }),
+      prisma.plan.findUnique({ where: { id: planId } }),
+    ]);
+    if (!city) throw BadRequest('City not found');
+    if (!plan) throw BadRequest('Plan not found');
+    const price = await prisma.planCityPrice.upsert({
+      where: { planId_cityId_productId: { planId, cityId, productId } },
+      update: { monthlyPricePaise, depositPaise, effectiveFrom: new Date() },
+      create: { planId, cityId, productId, monthlyPricePaise, depositPaise },
+      include: { plan: true, city: true },
+    });
+    res.status(201).json({ data: price });
+  })
+);
+
+// Remove a price row
+router.delete(
+  '/products/:id/pricing/:priceId',
+  authRequired(['ADMIN']),
+  asyncHandler(async (req, res) => {
+    const { id, priceId } = req.params;
+    const price = await prisma.planCityPrice.findUnique({ where: { id: priceId } });
+    if (!price || price.productId !== id) throw NotFound('Price not found');
+    await prisma.planCityPrice.delete({ where: { id: priceId } });
+    res.json({ data: { ok: true } });
   })
 );
 
