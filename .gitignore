@@ -9,7 +9,7 @@ build/
 .env
 *.tsbuildinfo
 coverage/
-prisma/dev.db*
+**/prisma/dev.db*
 ios/
 android/
 web-build/
