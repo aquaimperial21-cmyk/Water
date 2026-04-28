@@ -1,0 +1,392 @@
+// SmartRO Prisma schema
+// SQLite for local prototype. To move to Postgres (per system-architecture doc):
+//   1. Change provider to "postgresql"
+//   2. Set DATABASE_URL to a postgres connection string
+//   3. Run: npx prisma migrate dev --name init
+// No application code changes required.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enums; we model them as strings with comments listing allowed values.
+// Switch to native enums when moving to Postgres.
+
+// ───────────────────────────────────── Identity ──────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  kind         String   // CUSTOMER | ADMIN | TECHNICIAN
+  status       String   @default("ACTIVE") // ACTIVE | SUSPENDED | DELETED
+  phone        String   @unique
+  email        String?  @unique
+  passwordHash String?  // admins only
+  fullName     String?
+  referralCode String?  @unique
+  preferredLanguage String @default("en")
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  addresses    Address[]
+  inquiries    Inquiry[]
+  bookings     Booking[]
+  subscriptions Subscription[]
+  tickets      Ticket[]
+  payments     Payment[]
+  kycRecords   KycRecord[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  technician   Technician?
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OtpAttempt {
+  id        String   @id @default(uuid())
+  phone     String
+  otp       String
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
+}
+
+model Address {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String? // Home | Office
+  line1     String
+  line2     String?
+  cityId    String
+  city      City    @relation(fields: [cityId], references: [id])
+  pincode   String
+  lat       Float?
+  lng       Float?
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ───────────────────────────────────── Catalog ──────────────────────────────────────
+
+model City {
+  id           String  @id @default(uuid())
+  name         String
+  state        String
+  isServiceable Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  addresses    Address[]
+  prices       PlanCityPrice[]
+  inquiries    Inquiry[]
+  bookings     Booking[]
+}
+
+model Product {
+  id              String  @id @default(uuid())
+  slug            String  @unique
+  name            String
+  kind            String  // HOME | COMMERCIAL
+  capacityLitres  Int
+  technology      String  // RO | RO+UV | RO+UV+UF | UV
+  mounting        String  // WALL | COUNTERTOP | UNDER_SINK
+  description     String
+  imageUrl        String?
+  warrantyMonths  Int     @default(12)
+  isActive        Boolean @default(true)
+  createdAt       DateTime @default(now())
+
+  prices          PlanCityPrice[]
+  bookings        Booking[]
+  subscriptions   Subscription[]
+  devices         Device[]
+}
+
+model Plan {
+  id           String  @id @default(uuid())
+  name         String
+  durationDays Int
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  prices       PlanCityPrice[]
+  bookings     Booking[]
+  subscriptions Subscription[]
+}
+
+model PlanCityPrice {
+  id                String  @id @default(uuid())
+  planId            String
+  plan              Plan    @relation(fields: [planId], references: [id])
+  cityId            String
+  city              City    @relation(fields: [cityId], references: [id])
+  productId         String
+  product           Product @relation(fields: [productId], references: [id])
+  monthlyPricePaise Int
+  depositPaise      Int
+  effectiveFrom     DateTime @default(now())
+
+  @@unique([planId, cityId, productId])
+  @@index([cityId, productId])
+}
+
+// ───────────────────────────────────── Inquiry / Booking ──────────────────────────────────────
+
+model Inquiry {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  name          String
+  phone         String
+  pincode       String
+  cityId        String?
+  city          City?    @relation(fields: [cityId], references: [id])
+  productId     String?
+  planId        String?
+  preferredSlot String?
+  notes         String?
+  status        String   @default("NEW") // NEW | CONTACTED | PROPOSAL_SENT | BOOKED | LOST
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  events        InquiryEvent[]
+
+  @@index([status, createdAt])
+}
+
+model InquiryEvent {
+  id          String   @id @default(uuid())
+  inquiryId   String
+  inquiry     Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  type        String   // STATUS_CHANGE | NOTE | CALL | MESSAGE
+  payload     String   // JSON string
+  createdAt   DateTime @default(now())
+
+  @@index([inquiryId])
+}
+
+model Booking {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  productId         String
+  product           Product  @relation(fields: [productId], references: [id])
+  planId            String
+  plan              Plan     @relation(fields: [planId], references: [id])
+  cityId            String
+  city              City     @relation(fields: [cityId], references: [id])
+  addressId         String?
+  depositPaise      Int
+  firstPaymentPaise Int
+  status            String   @default("PENDING_KYC") // PENDING_KYC | PENDING_PAY | PAID | INSTALLED | CANCELLED
+  installationSlot  DateTime?
+  agreementSignedAt DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  payments          Payment[]
+  subscription      Subscription?
+
+  @@index([userId, status])
+}
+
+// ───────────────────────────────────── Payments / Subs ──────────────────────────────────────
+
+model Payment {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  bookingId      String?
+  booking        Booking? @relation(fields: [bookingId], references: [id])
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  kind           String   // DEPOSIT | RECHARGE | REFUND
+  amountPaise    Int
+  status         String   @default("INITIATED") // INITIATED | SUCCESS | FAILED
+  gatewayRef     String?
+  invoice        Invoice?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+model Invoice {
+  id          String   @id @default(uuid())
+  paymentId   String   @unique
+  payment     Payment  @relation(fields: [paymentId], references: [id])
+  number      String   @unique
+  amountPaise Int
+  gstPaise    Int
+  pdfUrl      String?
+  createdAt   DateTime @default(now())
+}
+
+model Subscription {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  bookingId    String   @unique
+  booking      Booking  @relation(fields: [bookingId], references: [id])
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  planId       String
+  plan         Plan     @relation(fields: [planId], references: [id])
+  deviceId     String?  @unique
+  device       Device?  @relation(fields: [deviceId], references: [id])
+  status       String   @default("ACTIVE") // ACTIVE | GRACE | SUSPENDED | CLOSED
+  startedAt    DateTime @default(now())
+  expiresAt    DateTime
+  lockInUntil  DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  payments     Payment[]
+  tickets      Ticket[]
+
+  @@index([userId, status])
+}
+
+// ───────────────────────────────────── Devices ──────────────────────────────────────
+
+model Device {
+  id          String   @id @default(uuid())
+  serial      String   @unique
+  qr          String   @unique
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  status      String   @default("WAREHOUSE") // WAREHOUSE | ALLOCATED | INSTALLED | IN_SERVICE | RETURNED | RETIRED
+  warehouse   String   @default("Pune-W1")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscription Subscription?
+  tickets     Ticket[]
+
+  @@index([status])
+}
+
+// ───────────────────────────────────── KYC ──────────────────────────────────────
+
+model KycRecord {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  aadhaarLast4   String
+  pan            String
+  selfieUrl      String?
+  status         String   @default("PENDING") // PENDING | IN_REVIEW | VERIFIED | REJECTED
+  rejectionReason String?
+  verifiedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+// ───────────────────────────────────── Tickets / Jobs ──────────────────────────────────────
+
+model Ticket {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  subscriptionId  String?
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  deviceId        String?
+  device          Device?  @relation(fields: [deviceId], references: [id])
+  category        String   // INSTALL | REPAIR | FILTER | PICKUP | OTHER
+  description     String
+  status          String   @default("OPEN") // OPEN | ASSIGNED | IN_PROGRESS | RESOLVED | CLOSED | REOPENED
+  priority        String   @default("MEDIUM") // LOW | MEDIUM | HIGH
+  technicianId    String?
+  technician      Technician? @relation(fields: [technicianId], references: [id])
+  slaDueAt        DateTime?
+  rating          Int?
+  ratingComment   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  jobs            Job[]
+
+  @@index([status, createdAt])
+  @@index([technicianId, status])
+}
+
+model Technician {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  employeeCode String   @unique
+  zone         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  tickets      Ticket[]
+  jobs         Job[]
+}
+
+model Job {
+  id            String   @id @default(uuid())
+  ticketId      String?
+  ticket        Ticket?  @relation(fields: [ticketId], references: [id])
+  technicianId  String
+  technician    Technician @relation(fields: [technicianId], references: [id])
+  type          String   // INSTALL | SERVICE | FILTER | PICKUP
+  scheduledFor  DateTime
+  status        String   @default("SCHEDULED") // SCHEDULED | EN_ROUTE | IN_PROGRESS | DONE | CANCELLED
+  notes         String?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([technicianId, status, scheduledFor])
+}
+
+// ───────────────────────────────────── Notifications / Audit ──────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  channel   String   // PUSH | SMS | EMAIL | INAPP
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  entity      String
+  entityId    String?
+  before      String?  // JSON string
+  after       String?  // JSON string
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+}
