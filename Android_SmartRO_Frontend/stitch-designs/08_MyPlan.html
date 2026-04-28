@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>My Plan - PureFlow</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#763125",
+                    "surface-variant": "#dfe3e0",
+                    "on-error-container": "#93000a",
+                    "outline-variant": "#bdc9c4",
+                    "primary-fixed-dim": "#7bd7bd",
+                    "inverse-on-surface": "#eef2ee",
+                    "surface-dim": "#d7dbd8",
+                    "on-background": "#181d1b",
+                    "outline": "#6e7a75",
+                    "on-surface-variant": "#3e4945",
+                    "on-tertiary": "#ffffff",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed": "#ffdad3",
+                    "on-primary-fixed": "#002019",
+                    "on-primary": "#ffffff",
+                    "background": "#f6faf7",
+                    "on-secondary-fixed-variant": "#00458f",
+                    "surface-bright": "#f6faf7",
+                    "primary-fixed": "#97f4d9",
+                    "surface": "#f6faf7",
+                    "on-secondary-fixed": "#001b3f",
+                    "on-primary-fixed-variant": "#005141",
+                    "tertiary-fixed-dim": "#ffb4a6",
+                    "primary-container": "#0e7c66",
+                    "surface-container-low": "#f0f5f1",
+                    "tertiary-container": "#a75748",
+                    "surface-container": "#ebefeb",
+                    "on-tertiary-container": "#ffeeea",
+                    "secondary-fixed-dim": "#abc7ff",
+                    "secondary-fixed": "#d7e2ff",
+                    "secondary-container": "#4c92fe",
+                    "surface-tint": "#006b57",
+                    "error": "#ba1a1a",
+                    "on-tertiary-fixed": "#3d0702",
+                    "surface-container-high": "#e5e9e6",
+                    "on-secondary-container": "#002b5e",
+                    "inverse-primary": "#7bd7bd",
+                    "primary": "#00614f",
+                    "tertiary": "#894032",
+                    "surface-container-highest": "#dfe3e0",
+                    "surface-container-lowest": "#ffffff",
+                    "inverse-surface": "#2d312f",
+                    "on-surface": "#181d1b",
+                    "on-secondary": "#ffffff",
+                    "on-primary-container": "#bcffe9",
+                    "secondary": "#005cbb",
+                    "error-container": "#ffdad6"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "md": "12px",
+                    "xs": "4px",
+                    "lg": "16px",
+                    "xl": "24px",
+                    "xxl": "32px"
+            },
+            "fontFamily": {
+                    "body": ["Inter"],
+                    "h1": ["Inter"],
+                    "h2": ["Inter"],
+                    "h3": ["Inter"],
+                    "small": ["Inter"]
+            },
+            "fontSize": {
+                    "body": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "h1": ["26px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "h2": ["20px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                    "h3": ["16px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "small": ["12px", {"lineHeight": "1.5", "fontWeight": "400"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen flex flex-col font-body text-body text-on-background pb-24 md:pb-0">
+<!-- TopAppBar (Hidden on mobile, mapped to shared component specs) -->
+<header class="hidden md:flex justify-between items-center w-full px-4 h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-gray-800 transition-colors duration-200 sticky top-0 z-50">
+<div class="flex items-center gap-2 text-teal-700 dark:text-teal-400">
+<span class="material-symbols-outlined">water_drop</span>
+<span class="font-sans text-lg font-bold tracking-tight text-xl font-black">PureFlow</span>
+</div>
+<nav class="flex gap-lg">
+<a class="text-gray-500 dark:text-gray-400 hover:bg-teal-50 dark:hover:bg-teal-900/30 px-sm py-xs rounded flex items-center gap-xs" href="#">
+<span class="material-symbols-outlined text-[20px]">home</span>
+                Home
+            </a>
+<a class="text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/30 px-sm py-xs rounded flex items-center gap-xs font-bold" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">description</span>
+                My Plan
+            </a>
+<a class="text-gray-500 dark:text-gray-400 hover:bg-teal-50 dark:hover:bg-teal-900/30 px-sm py-xs rounded flex items-center gap-xs" href="#">
+<span class="material-symbols-outlined text-[20px]">confirmation_number</span>
+                Tickets
+            </a>
+<a class="text-gray-500 dark:text-gray-400 hover:bg-teal-50 dark:hover:bg-teal-900/30 px-sm py-xs rounded flex items-center gap-xs" href="#">
+<span class="material-symbols-outlined text-[20px]">person</span>
+                Profile
+            </a>
+</nav>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-7xl mx-auto px-4 md:px-xl py-xl flex flex-col gap-xl">
+<!-- Mobile Header (Text only, visible only md:hidden) -->
+<div class="md:hidden pt-4 pb-2">
+<h1 class="font-h1 text-h1 text-on-background">My Plan</h1>
+</div>
+<!-- Desktop Header (Visible only hidden md:block) -->
+<div class="hidden md:block">
+<h1 class="font-h1 text-h1 text-on-background mb-2">Subscription Details</h1>
+<p class="text-on-surface-variant">Manage your current PureFlow subscription and check filter status.</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-xl">
+<!-- Left Column: Main Subscription Card -->
+<div class="lg:col-span-8 flex flex-col gap-xl">
+<!-- Subscription Card -->
+<div class="bg-surface-container-lowest border border-[#E4E9EE] rounded-[14px] p-xl flex flex-col gap-lg">
+<!-- Header Area -->
+<div class="flex justify-between items-start border-b border-[#E4E9EE] pb-md">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">water_bottle</span>
+</div>
+<div>
+<h2 class="font-h2 text-h2 text-on-background">AquaPure 7L</h2>
+<p class="font-small text-small text-on-surface-variant">Monthly Smart Filtration Plan</p>
+</div>
+</div>
+<div class="bg-primary-container/10 text-primary-container px-sm py-xs rounded-full font-small text-small font-bold flex items-center gap-xs">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+                            ACTIVE
+                        </div>
+</div>
+<!-- Metrics Area -->
+<div class="grid grid-cols-2 gap-md pt-xs">
+<div class="flex flex-col gap-xs">
+<span class="font-small text-small text-outline">Next Renewal Date</span>
+<span class="font-h3 text-h3 text-on-background flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px] text-outline">event</span>
+                                Expires 24 Sep
+                            </span>
+</div>
+<div class="flex flex-col gap-xs">
+<span class="font-small text-small text-outline">Commitment Period</span>
+<span class="font-h3 text-h3 text-on-background flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px] text-outline">lock</span>
+                                Lock-in until 24 Sep
+                            </span>
+</div>
+</div>
+<!-- Usage Progress -->
+<div class="flex flex-col gap-xs pt-md">
+<div class="flex justify-between items-end">
+<span class="font-small text-small text-on-surface-variant font-bold">Filter Lifespan</span>
+<span class="font-small text-small text-primary-container font-bold">65% Remaining</span>
+</div>
+<div class="w-full h-2 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[65%] rounded-full"></div>
+</div>
+<p class="font-small text-small text-outline mt-1">Estimated replacement in 45 days based on your current usage.</p>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col sm:flex-row gap-md pt-md mt-sm border-t border-[#E4E9EE]">
+<button class="flex-1 bg-primary-container text-on-primary font-h3 text-h3 py-md px-lg rounded-[6px] hover:bg-surface-tint transition-colors flex justify-center items-center gap-sm">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+                            Recharge
+                        </button>
+<button class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface-variant font-h3 text-h3 py-md px-lg rounded-[6px] hover:bg-surface-container-low transition-colors flex justify-center items-center gap-sm">
+<span class="material-symbols-outlined text-[20px]">speed</span>
+                            Quick filter check
+                        </button>
+</div>
+</div>
+</div>
+<!-- Right Column: Support Links -->
+<div class="lg:col-span-4 flex flex-col gap-xl">
+<div class="bg-surface-container-lowest border border-[#E4E9EE] rounded-[14px] p-lg flex flex-col gap-md">
+<h3 class="font-h3 text-h3 text-on-background border-b border-[#E4E9EE] pb-xs mb-xs">Support &amp; Service</h3>
+<a class="flex items-center justify-between p-md rounded-lg hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-md">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">support_agent</span>
+</div>
+<span class="font-body text-body text-on-surface font-semibold group-hover:text-primary-container transition-colors">Raise a service ticket</span>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary-container transition-colors">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-md rounded-lg hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-md">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+</div>
+<span class="font-body text-body text-on-surface font-semibold group-hover:text-primary-container transition-colors">View Past Invoices</span>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary-container transition-colors">chevron_right</span>
+</a>
+</div>
+<!-- Decorative/Contextual Image -->
+<div class="rounded-[14px] overflow-hidden border border-[#E4E9EE] h-48 relative">
+<img alt="Fresh Water Pouring" class="w-full h-full object-cover" data-alt="clean clear fresh water pouring into a modern glass cup on a bright kitchen counter" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA07mseRA3NfDBsdBNnyvwvWW_rKPDeV8cvCF4Gthtpm5JnbVynKhsxVbwpugE8fVdh0IeE46g3dQHAyBdWUXFfmYb9VXLD9bD_uLnrONklLNJcQukAfqCjzICDGXIoVLSeekuadCy2CPbnn-npdfomSOfhuv4au9FGQ6np0997PLsUn4xzzStjnBFXohltv_VFzz6t0_cUvKUwQHEiMIx7Du0SmZhSBQ46NdlF0ACceyrwx3BnwSdi5r2DrZO-6QokA1nUTboP5suo"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-md">
+<span class="text-white font-small text-small font-semibold">Stay Hydrated, Stay Healthy</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Visible on mobile, mapped to shared component specs) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 flex justify-around items-center px-4 py-2 h-20 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800">
+<a class="flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-300 active:scale-95 transition-transform w-16" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="text-[11px] font-semibold uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-teal-700 dark:text-teal-400 bg-teal-50/50 dark:bg-teal-900/20 rounded-xl px-3 py-1 active:scale-95 transition-transform w-16" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">description</span>
+<span class="text-[11px] font-semibold uppercase tracking-wider">My Plan</span>
+</a>
+<a class="flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-300 active:scale-95 transition-transform w-16" href="#">
+<span class="material-symbols-outlined mb-1">confirmation_number</span>
+<span class="text-[11px] font-semibold uppercase tracking-wider">Tickets</span>
+</a>
+<a class="flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-300 active:scale-95 transition-transform w-16" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+<span class="text-[11px] font-semibold uppercase tracking-wider">Profile</span>
+</a>
+</nav>
+</body></html>

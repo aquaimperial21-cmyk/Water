@@ -1,41 +1,88 @@
-import React from 'react';
-import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { colors, radius, spacing } from '../theme';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import { colors, radius, spacing, type } from '../theme';
 
 interface Props extends TextInputProps {
   label?: string;
   error?: string;
   hint?: string;
+  prefix?: string;
+  containerStyle?: ViewStyle;
 }
 
-export function Input({ label, error, hint, style, ...rest }: Props) {
+export function Input({ label, error, hint, prefix, style, containerStyle, onFocus, onBlur, ...rest }: Props) {
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <TextInput
-        placeholderTextColor={colors.textMuted}
-        style={[styles.input, !!error && styles.inputError, style]}
-        {...rest}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      <View
+        style={[
+          styles.inputWrap,
+          focused && styles.inputFocused,
+          !!error && styles.inputError,
+        ]}
+      >
+        {prefix ? (
+          <View style={styles.prefix}>
+            <Text style={styles.prefixText}>{prefix}</Text>
+          </View>
+        ) : null}
+        <TextInput
+          placeholderTextColor={colors.outline}
+          style={[styles.input, style]}
+          onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+          onBlur={(e) => { setFocused(false); onBlur?.(e); }}
+          {...rest}
+        />
+      </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.md },
-  label: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
-  input: {
+  label: {
+    ...type.labelMd,
+    color: colors.onSurfaceVariant,
+    marginBottom: spacing.sm,
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#fff',
+    borderColor: colors.outlineVariant,
+    backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.md,
+    overflow: 'hidden',
+    minHeight: 52,
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
+  },
+  inputError: { borderColor: colors.error },
+  prefix: {
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRightWidth: 1,
+    borderRightColor: colors.outlineVariant,
+    justifyContent: 'center',
+  },
+  prefixText: { ...type.labelMd, color: colors.onSurface },
+  input: {
+    flex: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
+    ...type.bodyMd,
+    color: colors.onSurface,
+    // RN Web shim: remove default browser focus ring
+    ...({ outlineStyle: 'none' } as object),
   },
-  inputError: { borderColor: colors.danger },
-  error: { fontSize: 12, color: colors.danger, marginTop: spacing.xs },
-  hint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  errorText: { ...type.caption, color: colors.error, marginTop: spacing.xs },
+  hint: { ...type.caption, color: colors.onSurfaceVariant, marginTop: spacing.xs },
 });

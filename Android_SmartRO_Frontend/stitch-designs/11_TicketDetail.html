@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ticket Detail</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#763125",
+                        "surface-variant": "#dfe3e0",
+                        "on-error-container": "#93000a",
+                        "outline-variant": "#bdc9c4",
+                        "primary-fixed-dim": "#7bd7bd",
+                        "inverse-on-surface": "#eef2ee",
+                        "surface-dim": "#d7dbd8",
+                        "on-background": "#181d1b",
+                        "outline": "#6e7a75",
+                        "on-surface-variant": "#3e4945",
+                        "on-tertiary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#ffdad3",
+                        "on-primary-fixed": "#002019",
+                        "on-primary": "#ffffff",
+                        "background": "#f6faf7",
+                        "on-secondary-fixed-variant": "#00458f",
+                        "surface-bright": "#f6faf7",
+                        "primary-fixed": "#97f4d9",
+                        "surface": "#f6faf7",
+                        "on-secondary-fixed": "#001b3f",
+                        "on-primary-fixed-variant": "#005141",
+                        "tertiary-fixed-dim": "#ffb4a6",
+                        "primary-container": "#0e7c66",
+                        "surface-container-low": "#f0f5f1",
+                        "tertiary-container": "#a75748",
+                        "surface-container": "#ebefeb",
+                        "on-tertiary-container": "#ffeeea",
+                        "secondary-fixed-dim": "#abc7ff",
+                        "secondary-fixed": "#d7e2ff",
+                        "secondary-container": "#4c92fe",
+                        "surface-tint": "#006b57",
+                        "error": "#ba1a1a",
+                        "on-tertiary-fixed": "#3d0702",
+                        "surface-container-high": "#e5e9e6",
+                        "on-secondary-container": "#002b5e",
+                        "inverse-primary": "#7bd7bd",
+                        "primary": "#00614f",
+                        "tertiary": "#894032",
+                        "surface-container-highest": "#dfe3e0",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#2d312f",
+                        "on-surface": "#181d1b",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#bcffe9",
+                        "secondary": "#005cbb",
+                        "error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "md": "12px",
+                        "xs": "4px",
+                        "lg": "16px",
+                        "xl": "24px",
+                        "xxl": "32px"
+                    },
+                    "fontFamily": {
+                        "body": ["Inter"],
+                        "h1": ["Inter"],
+                        "h2": ["Inter"],
+                        "h3": ["Inter"],
+                        "small": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "h1": ["26px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "h2": ["20px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "h3": ["16px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "small": ["12px", { "lineHeight": "1.5", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body text-body min-h-screen">
+<header class="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center w-full px-4 h-16 transition-colors duration-200 sticky top-0 z-50">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-teal-700 dark:text-teal-400" style="font-variation-settings: 'FILL' 1;">water_drop</span>
+<span class="text-xl font-black text-teal-700 dark:text-teal-400 font-sans tracking-tight">PureFlow</span>
+</div>
+<div class="flex items-center">
+<span class="material-symbols-outlined text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/30 p-xs rounded-full transition-colors duration-200">close</span>
+</div>
+</header>
+<main class="max-w-5xl mx-auto p-xl grid grid-cols-1 md:grid-cols-12 gap-xl pb-xxl">
+<div class="col-span-1 md:col-span-7 flex flex-col gap-xl">
+<section>
+<div class="flex items-center gap-sm mb-xs">
+<h1 class="font-h1 text-h1 text-on-background">Ticket #8492</h1>
+<span class="bg-surface-container-high text-on-surface-variant px-sm py-xs rounded-full font-small text-small border border-outline-variant">Routine Maintenance</span>
+</div>
+<p class="font-body text-body text-on-surface-variant">Commercial HVAC Inspection &amp; Filter Replacement</p>
+</section>
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-xl shadow-none">
+<h2 class="font-h2 text-h2 text-on-background mb-xl pb-md border-b border-outline-variant">Status Timeline</h2>
+<div class="flex flex-col">
+<div class="flex gap-lg">
+<div class="flex flex-col items-center">
+<div class="w-lg h-lg rounded-full bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-[12px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="w-px h-xl bg-primary-container my-xs"></div>
+</div>
+<div class="pb-xl">
+<h3 class="font-h3 text-h3 text-on-background">Open</h3>
+<p class="font-small text-small text-on-surface-variant mt-xs">Oct 24, 08:30 AM</p>
+</div>
+</div>
+<div class="flex gap-lg">
+<div class="flex flex-col items-center">
+<div class="w-lg h-lg rounded-full bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-[12px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="w-px h-xl bg-primary-container my-xs"></div>
+</div>
+<div class="pb-xl">
+<h3 class="font-h3 text-h3 text-on-background">Assigned</h3>
+<p class="font-small text-small text-on-surface-variant mt-xs">Oct 24, 09:15 AM - Assigned to Alex Mercer</p>
+</div>
+</div>
+<div class="flex gap-lg">
+<div class="flex flex-col items-center">
+<div class="w-lg h-lg rounded-full border-2 border-primary-container bg-surface-container-lowest flex items-center justify-center">
+<div class="w-xs h-xs rounded-full bg-primary-container"></div>
+</div>
+<div class="w-px h-xl bg-outline-variant my-xs"></div>
+</div>
+<div class="pb-xl">
+<h3 class="font-h3 text-h3 text-primary-container">In Progress</h3>
+<p class="font-small text-small text-on-surface-variant mt-xs">Technician is on site</p>
+</div>
+</div>
+<div class="flex gap-lg">
+<div class="flex flex-col items-center">
+<div class="w-lg h-lg rounded-full border-2 border-outline-variant bg-surface-container-lowest"></div>
+</div>
+<div>
+<h3 class="font-h3 text-h3 text-outline">Resolved</h3>
+<p class="font-small text-small text-outline mt-xs">Pending completion</p>
+</div>
+</div>
+</div>
+</section>
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-xl shadow-none">
+<h2 class="font-h2 text-h2 text-on-background mb-xl pb-md border-b border-outline-variant">Job Schedule Details</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-xl">
+<div class="flex gap-md items-start">
+<span class="material-symbols-outlined text-outline">calendar_today</span>
+<div>
+<p class="font-small text-small text-on-surface-variant">Date</p>
+<p class="font-body text-body text-on-background font-semibold mt-xs">October 24, 2023</p>
+</div>
+</div>
+<div class="flex gap-md items-start">
+<span class="material-symbols-outlined text-outline">schedule</span>
+<div>
+<p class="font-small text-small text-on-surface-variant">Time Window</p>
+<p class="font-body text-body text-on-background font-semibold mt-xs">10:00 AM - 12:00 PM</p>
+</div>
+</div>
+<div class="flex gap-md items-start sm:col-span-2">
+<span class="material-symbols-outlined text-outline">location_on</span>
+<div>
+<p class="font-small text-small text-on-surface-variant">Location</p>
+<p class="font-body text-body text-on-background font-semibold mt-xs">1400 Corporate Blvd, Suite 200<br/>Sector 4, North Wing</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="col-span-1 md:col-span-5 flex flex-col gap-xl">
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-xl shadow-none flex flex-col items-center text-center">
+<img class="w-24 h-24 rounded-full object-cover border border-outline-variant mb-md" data-alt="professional portrait of a confident male utility technician in a dark uniform, brightly lit corporate setting, soft focus background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBW6keWK6Duw1u-VRf17oxz_yBb6yVzd_h54tDaV-z0xMh4NL_dzJficQ5-dR99THYPjZZOcZaTT0JcMs_RL0IgyfltmAiuIWON4ymfm__xeIJAXp-coM-cW1u7DhgWfcPRgzmme8njp93-t2Qyk0MhVcVRZcKyrrp_nPtSjXO11z_VOGNs-59VwwGR1hgkLPurvkAndmF9dUYcH1E3iv55S683XrwItEbhbgXaDw5Jc0qn3N3HX_JNcr_F6v6-1Qs9eEk8azgPOy4L"/>
+<h2 class="font-h2 text-h2 text-on-background">Alex Mercer</h2>
+<p class="font-body text-body text-on-surface-variant mb-xl">Lead HVAC Specialist</p>
+<button class="w-full bg-primary-container text-on-primary font-h3 text-h3 py-md px-lg rounded-lg flex items-center justify-center gap-sm hover:bg-opacity-90 transition-colors">
+<span class="material-symbols-outlined">call</span>
+                    Call Technician
+                </button>
+</section>
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-xl shadow-none opacity-50 pointer-events-none">
+<h2 class="font-h2 text-h2 text-on-background mb-sm">Post-Resolve Rating</h2>
+<p class="font-small text-small text-on-surface-variant mb-xl pb-md border-b border-outline-variant">Available once ticket is marked resolved.</p>
+<div class="flex justify-center gap-sm mb-xl">
+<span class="material-symbols-outlined text-outline-variant text-[32px]">star</span>
+<span class="material-symbols-outlined text-outline-variant text-[32px]">star</span>
+<span class="material-symbols-outlined text-outline-variant text-[32px]">star</span>
+<span class="material-symbols-outlined text-outline-variant text-[32px]">star</span>
+<span class="material-symbols-outlined text-outline-variant text-[32px]">star</span>
+</div>
+<div class="flex flex-col gap-sm">
+<label class="font-h3 text-h3 text-on-background">Feedback</label>
+<textarea class="w-full bg-surface-bright border border-outline-variant rounded-lg p-md font-body text-body text-on-background resize-none" placeholder="Leave a review..." rows="3"></textarea>
+</div>
+<button class="w-full bg-surface-variant text-on-surface-variant font-h3 text-h3 py-md px-lg rounded-lg mt-xl cursor-not-allowed">
+                    Submit Rating
+                </button>
+</section>
+</div>
+</main>
+</body></html>

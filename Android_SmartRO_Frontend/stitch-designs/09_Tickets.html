@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SmartRO - Tickets</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-fixed": "#5af8fb",
+                        "tertiary-fixed": "#d5e3ff",
+                        "on-secondary-fixed": "#002020",
+                        "tertiary-fixed-dim": "#a7c8ff",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed": "#001b3c",
+                        "inverse-primary": "#adc7ff",
+                        "on-tertiary-container": "#fefcff",
+                        "on-primary-fixed-variant": "#004493",
+                        "secondary-fixed-dim": "#2ddbde",
+                        "surface": "#f6faff",
+                        "primary": "#0059bb",
+                        "on-secondary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface-variant": "#414754",
+                        "tertiary-container": "#5275ac",
+                        "inverse-surface": "#2a3137",
+                        "surface-container": "#e8eff7",
+                        "on-secondary-fixed-variant": "#004f51",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#385d92",
+                        "surface-container-low": "#edf4fc",
+                        "surface-variant": "#dce3eb",
+                        "on-primary-container": "#fefcff",
+                        "on-primary-fixed": "#001a41",
+                        "primary-container": "#0070ea",
+                        "background": "#f6faff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-highest": "#dce3eb",
+                        "outline-variant": "#c1c6d7",
+                        "secondary-container": "#56f5f8",
+                        "on-secondary-container": "#006e70",
+                        "surface-bright": "#f6faff",
+                        "secondary": "#00696b",
+                        "primary-fixed": "#d8e2ff",
+                        "on-tertiary-fixed-variant": "#1f477b",
+                        "inverse-on-surface": "#eaf1f9",
+                        "surface-dim": "#d4dbe3",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#005bc0",
+                        "outline": "#717786",
+                        "on-surface": "#151c22",
+                        "surface-container-high": "#e2e9f1",
+                        "on-background": "#151c22",
+                        "primary-fixed-dim": "#adc7ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "sm": "8px",
+                        "margin": "24px",
+                        "unit": "4px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Manrope"],
+                        "headline-xl": ["Manrope"],
+                        "headline-md": ["Manrope"],
+                        "headline-lg": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "body-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen antialiased flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-white/70 backdrop-blur-lg dark:bg-slate-900/70 text-sky-500 dark:text-sky-400 font-['Manrope'] font-semibold tracking-tight docked full-width top-0 z-50 border-b border-white/20 dark:border-slate-800/50 shadow-[0_4px_20px_rgba(0,51,102,0.08)] flex justify-between items-center w-full px-6 py-4 sticky">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sky-600 dark:text-sky-400" style="font-variation-settings: 'FILL' 1;">water_full</span>
+<span class="text-xl font-extrabold text-sky-600 dark:text-sky-400 tracking-tight">SmartRO</span>
+</div>
+<div class="flex items-center gap-4 hidden md:flex">
+<a class="text-slate-400 dark:text-slate-500 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors px-3 py-2 rounded-lg active:scale-95 duration-200" href="#">Home</a>
+<a class="text-slate-400 dark:text-slate-500 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors px-3 py-2 rounded-lg active:scale-95 duration-200" href="#">Purifiers</a>
+<a class="text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors px-3 py-2 rounded-lg active:scale-95 duration-200" href="#">Tickets</a>
+<a class="text-slate-400 dark:text-slate-500 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors px-3 py-2 rounded-lg active:scale-95 duration-200" href="#">Profile</a>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container overflow-hidden ring-2 ring-primary-container/20">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="close up portrait of a smiling young professional man with short dark hair in a clean studio setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_DqzWh-vMljKriPMh5Y2FBqFL_Qm5uO_IHwc_lD12r-4PxmczTiiGDHQGEQltgGLSJGuYVbkJVM5iMH-zY3YLzRdYfe2UmMpMeiBGffSb05_g-g29X9ainMMlaoRF7fCF1H7O2kWS4tAwWLzFMvCwcTChBBNPvHglKtP8YWNfZr_6T_knDYnqkdGKoggzogI70DLHxTBAWIdfBcPp12Lx_WLwM6WAYJki-rIFJGTr-QNCjXG6Pcg8I4E2HA-AdnEHJpZi19NzSdbq"/>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-grow p-margin pb-[100px] max-w-4xl mx-auto w-full">
+<!-- Header Section -->
+<div class="flex justify-between items-center mb-lg">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Tickets</h1>
+<button class="bg-primary-container text-on-primary-container font-label-md text-label-md px-md py-sm rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-2 active:scale-95">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                New Ticket
+            </button>
+</div>
+<!-- Filter/Tabs (Optional UI Enhancement) -->
+<div class="flex gap-4 mb-margin overflow-x-auto pb-2 scrollbar-hide">
+<button class="px-md py-sm rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md whitespace-nowrap">All Tickets</button>
+<button class="px-md py-sm rounded-full bg-surface text-outline font-label-md text-label-md border border-outline-variant whitespace-nowrap">Open (1)</button>
+<button class="px-md py-sm rounded-full bg-surface text-outline font-label-md text-label-md border border-outline-variant whitespace-nowrap">Assigned (1)</button>
+<button class="px-md py-sm rounded-full bg-surface text-outline font-label-md text-label-md border border-outline-variant whitespace-nowrap">Closed</button>
+</div>
+<!-- Ticket List -->
+<div class="grid gap-md">
+<!-- Ticket Card 1: High Priority / Open -->
+<div class="bg-surface-container-lowest rounded-[14px] p-lg shadow-[0_4px_20px_rgba(0,51,102,0.08)] border border-white/50 flex flex-col gap-md relative overflow-hidden group">
+<!-- Status/Priority Row -->
+<div class="flex justify-between items-start">
+<div class="flex gap-sm items-center">
+<span class="bg-error-container text-on-error-container px-2 py-1 rounded-[6px] text-[12px] font-bold tracking-wide uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                            High Priority
+                        </span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-1 rounded-[6px] text-[12px] font-semibold tracking-wide uppercase">
+                            Open
+                        </span>
+</div>
+<span class="text-outline text-[12px] font-medium">#TRQ-8821</span>
+</div>
+<!-- Main Content Row -->
+<div class="flex gap-md items-start">
+<div class="w-12 h-12 rounded-full bg-error-container/30 text-error flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">plumbing</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] leading-tight text-on-surface mb-1">Water flow has reduced significantly</h3>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-2">The water pressure from the main RO faucet has dropped to a trickle over the last 48 hours. The system is making a slight humming noise.</p>
+</div>
+</div>
+<!-- Footer Row -->
+<div class="flex justify-between items-end mt-sm pt-md border-t border-surface-variant/50">
+<div class="flex gap-margin">
+<div class="flex flex-col">
+<span class="text-[11px] text-outline uppercase tracking-wider font-semibold mb-1">Category</span>
+<span class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">build</span>
+                                REPAIR
+                            </span>
+</div>
+<div class="flex flex-col">
+<span class="text-[11px] text-outline uppercase tracking-wider font-semibold mb-1">Raised</span>
+<span class="font-label-md text-label-md text-on-surface">Oct 24, 09:15 AM</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-[11px] text-error uppercase tracking-wider font-bold mb-1 block">SLA Breaching In</span>
+<span class="font-label-md text-label-md text-error">4 Hours</span>
+</div>
+</div>
+</div>
+<!-- Ticket Card 2: Medium Priority / Assigned -->
+<div class="bg-surface-container-lowest rounded-[14px] p-lg shadow-[0_4px_20px_rgba(0,51,102,0.08)] border border-white/50 flex flex-col gap-md relative overflow-hidden group">
+<!-- Status/Priority Row -->
+<div class="flex justify-between items-start">
+<div class="flex gap-sm items-center">
+<span class="bg-tertiary-container text-on-tertiary-container px-2 py-1 rounded-[6px] text-[12px] font-bold tracking-wide uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">remove_red_eye</span>
+                            Medium Priority
+                        </span>
+<span class="bg-primary-container/20 text-primary-container px-2 py-1 rounded-[6px] text-[12px] font-semibold tracking-wide uppercase flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+                            Assigned
+                        </span>
+</div>
+<span class="text-outline text-[12px] font-medium">#TRQ-8704</span>
+</div>
+<!-- Main Content Row -->
+<div class="flex gap-md items-start">
+<div class="w-12 h-12 rounded-full bg-tertiary-container/20 text-tertiary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">filter_alt</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] leading-tight text-on-surface mb-1">Routine quarterly filter replacement</h3>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-2">Scheduled maintenance to replace Stage 1 sediment filter and Stage 2 carbon block as per the 90-day cycle.</p>
+</div>
+</div>
+<!-- Footer Row -->
+<div class="flex justify-between items-end mt-sm pt-md border-t border-surface-variant/50">
+<div class="flex gap-margin">
+<div class="flex flex-col">
+<span class="text-[11px] text-outline uppercase tracking-wider font-semibold mb-1">Category</span>
+<span class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">autorenew</span>
+                                FILTER
+                            </span>
+</div>
+<div class="flex flex-col">
+<span class="text-[11px] text-outline uppercase tracking-wider font-semibold mb-1">Scheduled Date</span>
+<span class="font-label-md text-label-md text-on-surface">Oct 26, 02:00 PM</span>
+</div>
+</div>
+<!-- Assigned Tech Avatar -->
+<div class="flex items-center gap-2 bg-surface p-1.5 rounded-full border border-surface-variant">
+<div class="w-6 h-6 rounded-full bg-secondary-container overflow-hidden">
+<img alt="Technician" class="w-full h-full object-cover" data-alt="small circular portrait of a male maintenance technician in uniform" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqcc18XZNwLEgVOoPC2C0wYSkToxd06BDRahVZGOgmj37VRbKXFI8TXzbGMu7ycS-GpRNMLbLzTKLMcC04wDDwK_tynAWpNqa4LurncFt-IwfVl-dlgrjI6Hl5Fo8czBCUoUPSN3730hbeq5aeQb7KCnY5uSJY013GBiuvYbH4ic6i8OiJisQPfPQMU5E4AmDvqrCRdB1ENke7SpYglfiNic8FGVU3A04Cdpl-1mNQgGFrNbFCulASdmnhb_c0jPoliClyPAhxAi6m"/>
+</div>
+<span class="text-[12px] font-medium text-on-surface pr-2">J. Smith</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="bg-white/80 backdrop-blur-xl dark:bg-slate-900/80 font-['Manrope'] text-[11px] font-medium fixed bottom-0 w-full rounded-t-[24px] border-t border-white/30 shadow-[0_-8px_30px_rgba(0,51,102,0.12)] fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 md:hidden">
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1 hover:text-sky-500 dark:hover:text-sky-300 tap-highlight-transparent transition-all duration-300 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+            Home
+        </a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1 hover:text-sky-500 dark:hover:text-sky-300 tap-highlight-transparent transition-all duration-300 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1">opacity</span>
+            Purifiers
+        </a>
+<a class="flex flex-col items-center justify-center text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/40 rounded-xl px-4 py-1 hover:text-sky-500 dark:hover:text-sky-300 tap-highlight-transparent transition-all duration-300 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">confirmation_number</span>
+            Tickets
+        </a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1 hover:text-sky-500 dark:hover:text-sky-300 tap-highlight-transparent transition-all duration-300 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+            Profile
+        </a>
+</nav>
+</body></html>

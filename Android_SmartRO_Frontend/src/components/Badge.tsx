@@ -1,27 +1,44 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../theme';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { colors, radius, type } from '../theme';
 
-interface Props { tone?: 'success' | 'warning' | 'danger' | 'info' | 'neutral'; label: string; }
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
-export function Badge({ tone = 'info', label }: Props) {
+interface Props {
+  tone?: Tone;
+  label: string;
+  withDot?: boolean;
+  style?: ViewStyle;
+}
+
+export function Badge({ tone = 'info', label, withDot = true, style }: Props) {
   const t = tones[tone];
   return (
-    <View style={[styles.box, { backgroundColor: t.bg }]}>
+    <View style={[styles.box, { backgroundColor: t.bg }, style]}>
+      {withDot ? <View style={[styles.dot, { backgroundColor: t.dot }]} /> : null}
       <Text style={[styles.text, { color: t.text }]}>{label}</Text>
     </View>
   );
 }
 
-const tones: Record<string, { bg: string; text: string }> = {
-  success: { bg: '#E1F5EC', text: colors.success },
-  warning: { bg: '#FFF4DC', text: colors.warning },
-  danger: { bg: '#FBE3E3', text: colors.danger },
-  info: { bg: colors.primaryLight, text: colors.primary },
-  neutral: { bg: '#EEF1F4', text: colors.textMuted },
+const tones: Record<Tone, { bg: string; text: string; dot: string }> = {
+  success: { bg: 'rgba(86,245,248,0.18)', text: colors.onSecondaryContainer, dot: colors.secondary },
+  warning: { bg: '#fff0c2', text: '#7a5a00', dot: colors.warning },
+  danger: { bg: colors.errorContainer, text: colors.onErrorContainer, dot: colors.error },
+  info: { bg: 'rgba(0,89,187,0.10)', text: colors.primary, dot: colors.primary },
+  neutral: { bg: colors.surfaceContainerHigh, text: colors.onSurfaceVariant, dot: colors.outline },
 };
 
 const styles = StyleSheet.create({
-  box: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.sm },
-  text: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  box: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  text: { ...type.labelSm, fontSize: 10 },
 });

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SmartRO - KYC Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary-fixed": "#5af8fb",
+                      "tertiary-fixed": "#d5e3ff",
+                      "on-secondary-fixed": "#002020",
+                      "tertiary-fixed-dim": "#a7c8ff",
+                      "on-error-container": "#93000a",
+                      "on-tertiary-fixed": "#001b3c",
+                      "inverse-primary": "#adc7ff",
+                      "on-tertiary-container": "#fefcff",
+                      "on-primary-fixed-variant": "#004493",
+                      "secondary-fixed-dim": "#2ddbde",
+                      "surface": "#f6faff",
+                      "primary": "#0059bb",
+                      "on-secondary": "#ffffff",
+                      "on-error": "#ffffff",
+                      "error": "#ba1a1a",
+                      "surface-container-lowest": "#ffffff",
+                      "on-surface-variant": "#414754",
+                      "tertiary-container": "#5275ac",
+                      "inverse-surface": "#2a3137",
+                      "surface-container": "#e8eff7",
+                      "on-secondary-fixed-variant": "#004f51",
+                      "error-container": "#ffdad6",
+                      "tertiary": "#385d92",
+                      "surface-container-low": "#edf4fc",
+                      "surface-variant": "#dce3eb",
+                      "on-primary-container": "#fefcff",
+                      "on-primary-fixed": "#001a41",
+                      "primary-container": "#0070ea",
+                      "background": "#f6faff",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-highest": "#dce3eb",
+                      "outline-variant": "#c1c6d7",
+                      "secondary-container": "#56f5f8",
+                      "on-secondary-container": "#006e70",
+                      "surface-bright": "#f6faff",
+                      "secondary": "#00696b",
+                      "primary-fixed": "#d8e2ff",
+                      "on-tertiary-fixed-variant": "#1f477b",
+                      "inverse-on-surface": "#eaf1f9",
+                      "surface-dim": "#d4dbe3",
+                      "on-primary": "#ffffff",
+                      "surface-tint": "#005bc0",
+                      "outline": "#717786",
+                      "on-surface": "#151c22",
+                      "surface-container-high": "#e2e9f1",
+                      "on-background": "#151c22",
+                      "primary-fixed-dim": "#adc7ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xs": "4px",
+                      "sm": "8px",
+                      "margin": "24px",
+                      "unit": "4px",
+                      "xl": "32px",
+                      "lg": "24px",
+                      "md": "16px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "label-md": [
+                              "Manrope"
+                      ],
+                      "headline-xl": [
+                              "Manrope"
+                      ],
+                      "headline-md": [
+                              "Manrope"
+                      ],
+                      "headline-lg": [
+                              "Manrope"
+                      ],
+                      "body-lg": [
+                              "Manrope"
+                      ],
+                      "body-md": [
+                              "Manrope"
+                      ]
+              },
+              "fontSize": {
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-xl": [
+                              "40px",
+                              {
+                                      "lineHeight": "48px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill-icon {
+          font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+      </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen pb-24 text-on-background antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar (Transactional - Hidden/Customized for flow) -->
+<header class="sticky top-0 z-50 bg-white/70 backdrop-blur-lg border-b border-white/20 shadow-[0_4px_20px_rgba(0,51,102,0.08)] flex justify-between items-center w-full px-6 py-4">
+<button aria-label="Go back" class="text-primary p-2 -ml-2 rounded-full hover:bg-sky-50 transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md text-primary tracking-tight">Booking</h1>
+<div class="w-10"></div> <!-- Spacer for centering -->
+</header>
+<main class="max-w-3xl mx-auto px-4 md:px-margin pt-6">
+<!-- Stepper -->
+<div class="mb-8 px-2">
+<div class="flex items-center justify-between relative">
+<!-- Track -->
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-full h-[2px] bg-surface-variant -z-10"></div>
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-1/4 h-[2px] bg-primary -z-10 transition-all duration-500"></div>
+<!-- Step 1: KYC (Active) -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-[0_0_0_4px_rgba(246,250,255,1)]">
+<span class="w-2 h-2 rounded-full bg-white"></span>
+</div>
+<span class="font-label-md text-label-md text-primary">KYC</span>
+</div>
+<!-- Step 2: Sign -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high border-2 border-surface-variant flex items-center justify-center shadow-[0_0_0_4px_rgba(246,250,255,1)]">
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">Sign</span>
+</div>
+<!-- Step 3: Pay -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high border-2 border-surface-variant flex items-center justify-center shadow-[0_0_0_4px_rgba(246,250,255,1)]">
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">Pay</span>
+</div>
+<!-- Step 4: Done -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high border-2 border-surface-variant flex items-center justify-center shadow-[0_0_0_4px_rgba(246,250,255,1)]">
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">Done</span>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<!-- Order Summary Card -->
+<section class="bg-surface-container-lowest rounded-[14px] shadow-[0_4px_20px_rgba(0,51,102,0.08)] p-md overflow-hidden relative">
+<!-- Decorative subtle glass effect -->
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-primary-container/5 rounded-full blur-2xl"></div>
+<h2 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-4">Order Summary</h2>
+<div class="flex items-start justify-between mb-4">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined fill-icon">water_drop</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md font-semibold text-on-surface">Half-yearly Plan</h3>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm">SmartRO Purifier</p>
+</div>
+</div>
+</div>
+<div class="space-y-2 border-t border-surface-variant pt-4 mb-4">
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">Plan Cost</span>
+<span class="font-body-md text-body-md text-on-surface">₹1,999</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">Deposit (Refundable)</span>
+<span class="font-body-md text-body-md text-on-surface">₹500</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">GST (18%)</span>
+<span class="font-body-md text-body-md text-on-surface">₹478</span>
+</div>
+</div>
+<div class="border-t border-surface-variant pt-4 flex justify-between items-center">
+<span class="font-label-md text-label-md text-on-surface font-bold">Total Amount</span>
+<span class="font-headline-md text-headline-md text-primary">₹2,477</span>
+</div>
+</section>
+<!-- KYC Details Card -->
+<section class="bg-surface-container-lowest rounded-[14px] shadow-[0_4px_20px_rgba(0,51,102,0.08)] p-md">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary">verified_user</span>
+<h2 class="font-headline-md text-headline-md text-on-surface text-xl">Identity Verification</h2>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Please provide your details as per official records to proceed with the booking.</p>
+<form class="space-y-5">
+<!-- PAN Number Input -->
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2" for="pan">PAN Number</label>
+<div class="relative">
+<input class="block w-full bg-surface-bright border border-outline-variant rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-colors uppercase placeholder:normal-case placeholder:text-on-surface-variant/50" id="pan" name="pan" placeholder="ABCDE1234F" type="text"/>
+<div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+<span class="material-symbols-outlined text-outline-variant">badge</span>
+</div>
+</div>
+</div>
+<!-- Aadhaar Input -->
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2" for="aadhaar">Aadhaar (Last 4 Digits)</label>
+<div class="relative">
+<input class="block w-full bg-surface-bright border border-outline-variant rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-colors placeholder:text-on-surface-variant/50" id="aadhaar" maxlength="4" name="aadhaar" placeholder="XXXX XXXX 1234" type="text"/>
+<div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+<span class="material-symbols-outlined text-outline-variant">pin</span>
+</div>
+</div>
+</div>
+<!-- Optional Selfie Upload -->
+<div class="pt-2">
+<label class="block font-label-md text-label-md text-on-surface mb-2">Selfie <span class="text-on-surface-variant font-normal text-xs ml-1">(Optional)</span></label>
+<button class="w-full flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-primary/40 rounded-lg bg-surface-container-low text-primary hover:bg-surface-container transition-colors active:scale-[0.98]" type="button">
+<span class="material-symbols-outlined">photo_camera</span>
+<span class="font-label-md text-label-md">Take or Upload Selfie</span>
+</button>
+</div>
+</form>
+</section>
+</div>
+<!-- Sticky Footer CTA -->
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest/90 backdrop-blur-lg border-t border-surface-variant p-4 md:px-margin z-40">
+<div class="max-w-3xl mx-auto">
+<button class="w-full bg-primary text-on-primary py-4 rounded-xl font-label-md text-label-md shadow-md hover:bg-surface-tint transition-colors active:scale-[0.98] flex items-center justify-center gap-2" type="button">
+                    Submit KYC
+                    <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+</main>
+<!-- Navigation omitted as per "Linear/Transactional" rule -->
+</body></html>

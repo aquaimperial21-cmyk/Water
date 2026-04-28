@@ -1,15 +1,15 @@
 import React from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/auth';
-import { colors } from '../theme';
+import { colors, spacing, type as t } from '../theme';
 
 import { PhoneScreen } from '../screens/auth/PhoneScreen';
 import { OtpScreen } from '../screens/auth/OtpScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
-import { CatalogScreen } from '../screens/catalog/CatalogScreen';
 import { ProductDetailScreen } from '../screens/catalog/ProductDetailScreen';
 import { BookingScreen } from '../screens/booking/BookingScreen';
 import { MyPlanScreen } from '../screens/plan/MyPlanScreen';
@@ -21,19 +21,27 @@ export type RootStackParamList = {
   Phone: undefined;
   Otp: { phone: string };
   Tabs: undefined;
-  Catalog: { cityId: string; cityName: string };
-  ProductDetail: { slug: string; cityId: string; cityName: string };
+  ProductDetail: { slug: string };
   Booking: { productId: string; planId: string; cityId: string };
   NewTicket: { subscriptionId?: string };
 };
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
+type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
+
+function TabPill({ icon, label, focused }: { icon: IconName; label: string; focused: boolean }) {
   return (
-    <Text style={{ fontSize: 11, color: focused ? colors.primary : colors.textMuted, fontWeight: focused ? '700' : '500' }}>
-      {label}
-    </Text>
+    <View style={[tabStyles.pill, focused && tabStyles.pillActive]}>
+      <MaterialIcons
+        name={icon}
+        size={focused ? 22 : 20}
+        color={focused ? colors.primary : colors.outline}
+      />
+      <Text style={[tabStyles.label, focused && tabStyles.labelActive]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -43,15 +51,31 @@ function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { borderTopColor: colors.border, paddingTop: 6, paddingBottom: 8, height: 60 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarInactiveTintColor: colors.outline,
+        tabBarShowLabel: false,
+        tabBarStyle: tabStyles.bar,
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="🏠" focused={focused} /> }} />
-      <Tab.Screen name="My Plan" component={MyPlanScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="💧" focused={focused} /> }} />
-      <Tab.Screen name="Tickets" component={TicketsScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="🎫" focused={focused} /> }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="👤" focused={focused} /> }} />
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabPill icon="home" label="Home" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="MyPlan"
+        component={MyPlanScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabPill icon="layers" label="My Plan" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Tickets"
+        component={TicketsScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabPill icon="confirmation-number" label="Tickets" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabPill icon="person" label="Profile" focused={focused} /> }}
+      />
     </Tab.Navigator>
   );
 }
@@ -62,29 +86,68 @@ export function RootNavigator() {
 
   if (!hydrated) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
-        <Text style={{ color: colors.text, fontSize: 16 }}>Loading…</Text>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surfaceBright }}>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.bg }, headerShadowVisible: false, headerTintColor: colors.text, headerTitleStyle: { fontWeight: '700' } }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.surfaceBright },
+        }}
+      >
         {!user ? (
           <>
-            <Stack.Screen name="Phone" component={PhoneScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="Otp" component={OtpScreen} options={{ title: 'Verify OTP' }} />
+            <Stack.Screen name="Phone" component={PhoneScreen} />
+            <Stack.Screen name="Otp" component={OtpScreen} />
           </>
         ) : (
           <>
-            <Stack.Screen name="Tabs" component={MainTabs} options={{ headerShown: false }} />
-            <Stack.Screen name="Catalog" component={CatalogScreen} options={({ route }) => ({ title: `Purifiers in ${route.params.cityName}` })} />
-            <Stack.Screen name="ProductDetail" component={ProductDetailScreen} options={{ title: 'Details' }} />
-            <Stack.Screen name="Booking" component={BookingScreen} options={{ title: 'Book Subscription' }} />
-            <Stack.Screen name="NewTicket" component={NewTicketScreen} options={{ title: 'Raise a Ticket' }} />
+            <Stack.Screen name="Tabs" component={MainTabs} />
+            <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+            <Stack.Screen name="Booking" component={BookingScreen} />
+            <Stack.Screen name="NewTicket" component={NewTicketScreen} />
           </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
+const tabStyles = StyleSheet.create({
+  bar: {
+    position: 'absolute',
+    bottom: 16,
+    marginHorizontal: spacing.md,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderTopWidth: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(193,198,215,0.5)',
+    shadowColor: '#003366',
+    shadowOpacity: 0.10,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+    paddingHorizontal: spacing.sm,
+    paddingTop: 6,
+    paddingBottom: 6,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    minWidth: 50,
+    justifyContent: 'center',
+  },
+  pillActive: { backgroundColor: 'rgba(0,89,187,0.10)' },
+  label: { ...t.labelSm, fontSize: 10, color: colors.outline },
+  labelActive: { color: colors.primary },
+});
