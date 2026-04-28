@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "SmartRO",
+    "slug": "smartro-customer",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#0E7C66",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.smartro.customer"
+    },
+    "android": {
+      "package": "in.smartro.customer",
+      "adaptiveIcon": {
+        "backgroundColor": "#0E7C66"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:4000/api/v1"
+    }
+  }
+}

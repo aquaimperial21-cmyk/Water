@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "SmartRO Technician",
+    "slug": "smartro-technician",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": { "backgroundColor": "#0a5d4d", "resizeMode": "contain" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "in.smartro.technician" },
+    "android": { "package": "in.smartro.technician", "adaptiveIcon": { "backgroundColor": "#0a5d4d" } },
+    "web": { "bundler": "metro" },
+    "extra": { "apiBaseUrl": "http://localhost:4000/api/v1" }
+  }
+}
