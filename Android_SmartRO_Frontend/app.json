@@ -46,7 +46,11 @@
       "bundler": "metro"
     },
     "extra": {
-      "apiBaseUrl": "http://localhost:4000/api/v1"
-    }
+      "apiBaseUrl": "http://localhost:4000/api/v1",
+      "eas": {
+        "projectId": "ba0f7967-4248-4fa1-b993-1dfffa9ed5c5"
+      }
+    },
+    "owner": "aquaimperial"
   }
 }
