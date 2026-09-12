@@ -26,13 +26,13 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-ME.up.railway.app/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://water-production-278c.up.railway.app/api/v1"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-ME.up.railway.app/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://water-production-278c.up.railway.app/api/v1"
       }
     }
   },
