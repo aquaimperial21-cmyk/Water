@@ -6,8 +6,8 @@ import { api, apiErrorMessage, setAuth } from '../../lib/api';
 
 export default function Login() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@smartro.in');
-  const [password, setPassword] = useState('Admin@12345');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +67,6 @@ export default function Login() {
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
-          <p className="text-xs text-ink-muted text-center pt-2">Demo: admin@smartro.in / Admin@12345</p>
         </form>
       </div>
     </div>

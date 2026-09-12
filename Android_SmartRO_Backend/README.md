@@ -7,7 +7,7 @@ Node.js + Express + Prisma + SQLite + JWT.
 ```bash
 cd Android_SmartRO_Backend
 npm install
-npm run setup           # runs prisma migrate dev + seed
+SEED_ADMIN_PASSWORD=... SEED_TECH_PASSWORD=... npm run setup   # migrate + seed
 npm run dev             # starts on http://localhost:4000
 ```
 
@@ -32,9 +32,9 @@ Health check: `curl http://localhost:4000/health`
 
 After `npm run setup`:
 
-- Admin (web): `admin@smartro.in` / `Admin@12345`
-- Technician 1: `tech1@smartro.in` / `Tech@12345` (phone `+919999911111`)
-- Technician 2: `tech2@smartro.in` / `Tech@12345`
+- Admin (web): `admin@smartro.in` / `$SEED_ADMIN_PASSWORD`
+- Technician 1: `tech1@smartro.in` / `$SEED_TECH_PASSWORD` (phone `+919999911111`)
+- Technician 2: `tech2@smartro.in` / `$SEED_TECH_PASSWORD`
 - Customer (OTP login): `+919876543210` (Priya — has active subscription)
 - Customer: `+919812345678` (Rahul — booking pending KYC)
 - Customer: `+919800000001` (Aditi — inquiry only)

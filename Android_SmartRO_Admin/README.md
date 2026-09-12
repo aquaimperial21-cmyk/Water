@@ -14,7 +14,7 @@ npm run dev          # http://localhost:3000
 
 ## Demo login
 
-`admin@smartro.in` / `Admin@12345`
+`admin@smartro.in` / the password you seeded with (`SEED_ADMIN_PASSWORD`)
 
 ## Pages
 
