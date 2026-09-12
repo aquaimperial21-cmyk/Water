@@ -72,7 +72,7 @@ describe('Admin login', () => {
   it('logs in seeded admin', async () => {
     const r = await request(app)
       .post('/api/v1/auth/admin/login')
-      .send({ email: 'admin@smartro.in', password: 'Admin@12345' });
+      .send({ email: 'admin@smartro.in', password: process.env.SEED_ADMIN_PASSWORD });
     expect(r.status).toBe(200);
     expect(r.body.data.user.kind).toBe('ADMIN');
   });

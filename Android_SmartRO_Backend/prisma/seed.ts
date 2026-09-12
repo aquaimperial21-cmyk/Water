@@ -3,6 +3,25 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// This seed wipes and repopulates the database. It must never run against a
+// production deployment, and it must never invent a password of its own.
+function requireSeedPassword(key: 'SEED_ADMIN_PASSWORD' | 'SEED_TECH_PASSWORD'): string {
+  const value = process.env[key];
+  if (!value || value.length < 12) {
+    throw new Error(
+      `${key} must be set to a password of at least 12 characters before seeding.`
+    );
+  }
+  return value;
+}
+
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'yes') {
+  throw new Error(
+    'Refusing to seed with NODE_ENV=production. This deletes all data. ' +
+      'Set ALLOW_PRODUCTION_SEED=yes only if that is genuinely what you want.'
+  );
+}
+
 async function main() {
   // Wipe in safe order (FKs)
   await prisma.notification.deleteMany();
@@ -161,8 +180,11 @@ async function main() {
   }
 
   // ── Users ────────────────────────────────────────────────
-  const adminPwd = await bcrypt.hash('Admin@12345', 10);
-  const techPwd = await bcrypt.hash('Tech@12345', 10);
+  // Seed passwords come from the environment. They were hardcoded once, and
+  // because this repo is public that published the live admin credentials.
+  // No default: a missing value is an error, never a guessable fallback.
+  const adminPwd = await bcrypt.hash(requireSeedPassword('SEED_ADMIN_PASSWORD'), 10);
+  const techPwd = await bcrypt.hash(requireSeedPassword('SEED_TECH_PASSWORD'), 10);
 
   const admin = await prisma.user.create({
     data: {
@@ -490,11 +512,11 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log('Cities:', [pune.name, mumbai.name].join(', '));
   // eslint-disable-next-line no-console
-  console.log('Admin login → email: admin@smartro.in   password: Admin@12345');
+  console.log('Admin login → email: admin@smartro.in   password: (SEED_ADMIN_PASSWORD)');
   // eslint-disable-next-line no-console
-  console.log('Tech1 login  → email: tech1@smartro.in  password: Tech@12345  (phone: +919999911111)');
+  console.log('Tech1 login  → email: tech1@smartro.in  password: (SEED_TECH_PASSWORD)  (phone: +919999911111)');
   // eslint-disable-next-line no-console
-  console.log('Tech2 login  → email: tech2@smartro.in  password: Tech@12345  (phone: +919999922222)');
+  console.log('Tech2 login  → email: tech2@smartro.in  password: (SEED_TECH_PASSWORD)  (phone: +919999922222)');
   // eslint-disable-next-line no-console
   console.log('Customers (OTP login, OTP returned in dev response):');
   // eslint-disable-next-line no-console

@@ -31,3 +31,6 @@ firebase-service-account.json
 
 # Generated Railway variable block (contains secrets)
 .env.railway
+
+# Rotated production credentials (never commit)
+CREDENTIALS.local.md

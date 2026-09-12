@@ -75,12 +75,12 @@ this creates the admin user, products, pricing, and demo customers:
 ```bash
 cd Android_SmartRO_Backend
 npm install
-DATABASE_URL="postgresql://…your-neon-url…" npx tsx prisma/seed.ts
+SEED_ADMIN_PASSWORD="pick-a-strong-one" SEED_TECH_PASSWORD="pick-another" \n  DATABASE_URL="postgresql://…your-neon-url…" npx tsx prisma/seed.ts
 ```
 
 After it finishes you'll see:
 ```
-Admin login → email: admin@smartro.in   password: Admin@12345
+Admin login → email: admin@smartro.in   password: (whatever you set as SEED_ADMIN_PASSWORD)
 Customers (OTP login, OTP returned in dev response):
   • Priya Mehta  +919876543210
   • Rahul Iyer   +919812345678
@@ -111,7 +111,7 @@ Customers (OTP login, OTP returned in dev response):
    `https://smartro-admin.vercel.app`.
 6. Open it, click "Login", and sign in with:
    - Email: `admin@smartro.in`
-   - Password: `Admin@12345`
+   - Password: the `SEED_ADMIN_PASSWORD` you seeded with
 
 ### Lock down CORS (optional, recommended)
 
@@ -177,9 +177,9 @@ After ~15 min you get a download link. Testers install it like any APK.
 
 | Role | Login | Credential |
 |---|---|---|
-| Admin | `admin@smartro.in` | password: `Admin@12345` |
-| Technician 1 | `tech1@smartro.in` | password: `Tech@12345` |
-| Technician 2 | `tech2@smartro.in` | password: `Tech@12345` |
+| Admin | `admin@smartro.in` | password: `$SEED_ADMIN_PASSWORD` |
+| Technician 1 | `tech1@smartro.in` | password: `$SEED_TECH_PASSWORD` |
+| Technician 2 | `tech2@smartro.in` | password: `$SEED_TECH_PASSWORD` |
 | Customer (active sub) | `+919876543210` Priya | OTP returned in API response |
 | Customer (pending KYC) | `+919812345678` Rahul | OTP returned in API response |
 | Customer (inquiry only) | `+919800000001` Aditi | OTP returned in API response |
