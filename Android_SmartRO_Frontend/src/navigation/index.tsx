@@ -15,6 +15,8 @@ import { tokens } from '../theme/tokens';
 
 import { PhoneScreen } from '../screens/auth/PhoneScreen';
 import { OtpScreen } from '../screens/auth/OtpScreen';
+import { PasswordScreen } from '../screens/auth/PasswordScreen';
+import { SetPasswordScreen } from '../screens/profile/SetPasswordScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { ProductDetailScreen } from '../screens/catalog/ProductDetailScreen';
 import { BookingScreen } from '../screens/booking/BookingScreen';
@@ -32,6 +34,7 @@ import { registerPushToken } from '../utils/push';
 export type RootStackParamList = {
   Phone: undefined;
   Otp: { phone: string };
+  Password: { phone?: string } | undefined;
   Tabs: undefined;
   ProductDetail: { slug: string };
   Booking: { productId: string; planId: string; cityId: string };
@@ -42,6 +45,7 @@ export type RootStackParamList = {
   NewTicket: { subscriptionId?: string };
   Notifications: undefined;
   MyPlan: undefined;
+  SetPassword: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -173,6 +177,7 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="Phone" component={PhoneScreen} />
             <Stack.Screen name="Otp" component={OtpScreen} />
+            <Stack.Screen name="Password" component={PasswordScreen} />
           </>
         ) : (
           <>
@@ -189,6 +194,7 @@ export function RootNavigator() {
             <Stack.Screen name="Waitlist" component={WaitlistScreen} />
             <Stack.Screen name="NewTicket" component={NewTicketScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="SetPassword" component={SetPasswordScreen} />
           </>
         )}
       </Stack.Navigator>

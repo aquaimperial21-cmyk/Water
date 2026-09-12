@@ -11,7 +11,18 @@
 // services/push.ts to deliver Expo / FCM / APNs messages.
 
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { DeviceHealthApi } from '../api/endpoints';
+
+// SDK 51 requires an explicit EAS projectId when the app isn't running inside
+// Expo Go. `eas init` writes it to expoConfig.extra.eas.projectId; until then
+// this is undefined and we fall back to the argless call (fine in Expo Go).
+function easProjectId(): string | undefined {
+  const extra = Constants?.expoConfig?.extra as
+    | { eas?: { projectId?: string } }
+    | undefined;
+  return extra?.eas?.projectId ?? (Constants as any)?.easConfig?.projectId;
+}
 
 let attempted = false;
 
@@ -30,7 +41,18 @@ export async function registerPushToken(): Promise<void> {
     }
     if (status !== 'granted') return;
 
-    const tokenResp = await Notifications.getExpoPushTokenAsync();
+    if (Platform.OS === 'android') {
+      // Android 8+ drops notifications that arrive without a channel.
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+
+    const projectId = easProjectId();
+    const tokenResp = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined,
+    );
     const token: string | undefined = tokenResp?.data;
     if (!token) return;
 

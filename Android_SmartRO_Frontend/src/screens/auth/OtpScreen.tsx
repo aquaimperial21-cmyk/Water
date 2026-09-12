@@ -18,6 +18,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/auth';
 import { apiErrorMessage, setStoredUser, setTokens } from '../../api/client';
 import { Auth } from '../../api/endpoints';
+import { confirmPhoneCode, firebaseErrorMessage, sendPhoneCode } from '../../utils/firebasePhone';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
 import { notify } from '../../utils/confirm';
@@ -39,15 +40,11 @@ export function OtpScreen({ navigation, route }: Props) {
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [verified, setVerified] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(RESEND_SECONDS);
   const inputs = useRef<Array<TextInput | null>>([]);
 
-  useEffect(() => {
-    Auth.requestOtp(phone)
-      .then((r) => r.devOtp && setDevOtp(r.devOtp))
-      .catch(() => {});
-  }, [phone]);
+  // The code was already sent by PhoneScreen — Firebase holds the pending
+  // confirmation, so there is nothing to fetch here.
 
   useEffect(() => {
     if (seconds <= 0) return;
@@ -70,9 +67,11 @@ export function OtpScreen({ navigation, route }: Props) {
     if (name.trim().length < 2) return notify('Name needed', 'Tell us your name to continue.');
     setLoading(true);
     try {
+      // Firebase proves the number; our API turns that into a SmartRO session.
+      const idToken = await confirmPhoneCode(otp);
       // Call the API directly so we can play the success animation BEFORE
       // committing the user to the auth store (which swaps nav stacks).
-      const data = await Auth.verifyOtp(phone, otp, name.trim(), referralCode.trim() || undefined);
+      const data = await Auth.firebaseLogin(idToken, name.trim(), referralCode.trim() || undefined);
       setVerified(true);
       // Let the success animation play, then commit session.
       setTimeout(async () => {
@@ -81,7 +80,8 @@ export function OtpScreen({ navigation, route }: Props) {
         useAuthStore.setState({ user: data.user });
       }, 900);
     } catch (e) {
-      notify('Verification failed', apiErrorMessage(e));
+      const isApiError = Boolean((e as { response?: unknown })?.response);
+      notify('Verification failed', isApiError ? apiErrorMessage(e) : firebaseErrorMessage(e));
       setLoading(false);
     }
   }
@@ -89,11 +89,10 @@ export function OtpScreen({ navigation, route }: Props) {
   async function onResend() {
     if (seconds > 0) return;
     try {
-      const r = await Auth.requestOtp(phone);
-      if (r.devOtp) setDevOtp(r.devOtp);
+      await sendPhoneCode(phone, true);
       setSeconds(RESEND_SECONDS);
     } catch (e) {
-      notify('Could not resend', apiErrorMessage(e));
+      notify('Could not resend', firebaseErrorMessage(e));
     }
   }
 
@@ -278,12 +277,6 @@ export function OtpScreen({ navigation, route }: Props) {
                   {loading ? 'Verifying…' : 'Verify & continue'}
                 </Text>
               </Pressable>
-
-              {devOtp ? (
-                <View style={styles.devChip}>
-                  <Text style={styles.devText}>Dev OTP · {devOtp}</Text>
-                </View>
-              ) : null}
             </>
           )}
         </ScrollView>

@@ -14,7 +14,8 @@ interface AuthState {
   user: AuthUser | null;
   hydrated: boolean;
   hydrate: () => Promise<void>;
-  signIn: (phone: string, otp: string, fullName?: string) => Promise<void>;
+  signInWithFirebase: (idToken: string, fullName?: string, referralCode?: string) => Promise<void>;
+  signInWithPassword: (phone: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -25,8 +26,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     const u = await getStoredUser<AuthUser>();
     set({ user: u, hydrated: true });
   },
-  signIn: async (phone, otp, fullName) => {
-    const data = await Auth.verifyOtp(phone, otp, fullName);
+  signInWithFirebase: async (idToken, fullName, referralCode) => {
+    const data = await Auth.firebaseLogin(idToken, fullName, referralCode);
+    await setTokens(data.accessToken, data.refreshToken);
+    await setStoredUser(data.user);
+    set({ user: data.user });
+  },
+  signInWithPassword: async (phone, password) => {
+    const data = await Auth.passwordLogin(phone, password);
     await setTokens(data.accessToken, data.refreshToken);
     await setStoredUser(data.user);
     set({ user: data.user });

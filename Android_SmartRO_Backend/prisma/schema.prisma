@@ -28,7 +28,8 @@ model User {
   status              String    @default("ACTIVE") // ACTIVE | SUSPENDED | DELETED
   phone               String    @unique
   email               String?   @unique
-  passwordHash        String? // admins only
+  passwordHash        String? // legacy admin password login; retired by Firebase phone OTP
+  firebaseUid         String?   @unique // Firebase Auth uid, set on first phone login
   fullName            String?
   referralCode        String?   @unique // user's own code that they share
   referredByCode      String? // code of the user who referred them

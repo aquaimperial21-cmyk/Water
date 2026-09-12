@@ -18,7 +18,7 @@ import bannerRoutes from './modules/banner';
 import notificationRoutes from './modules/notification';
 import deviceRoutes from './modules/device';
 import webhookRoutes from './modules/webhook';
-import uploadRoutes from './modules/upload';
+import uploadRoutes, { UPLOAD_ROOT } from './modules/upload';
 import paymentRoutes, { webhookRouter as razorpayWebhookRouter } from './modules/payment';
 import referralRoutes from './modules/referral';
 import docRoutes from './modules/docs';
@@ -45,7 +45,7 @@ export function buildApp() {
 
   // Static-serve uploaded files. URLs returned by the upload endpoint look
   // like `/uploads/products/<uuid>.jpg` and resolve here.
-  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads'), { maxAge: '7d' }));
+  app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '7d' }));
 
   const v1 = express.Router();
   v1.use('/auth', authRoutes);

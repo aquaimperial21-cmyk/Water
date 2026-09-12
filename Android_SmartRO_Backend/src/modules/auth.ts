@@ -11,6 +11,8 @@ import {
 } from '../core/auth';
 import { BadRequest, NotFound, Unauthorized, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { verifyFirebasePhoneToken } from '../core/firebase';
+import { clear as clearRateLimit, hit as rateLimitHit } from '../core/ratelimit';
 import { getMessagingDriver } from '../services/messaging';
 
 const router = Router();
@@ -29,9 +31,41 @@ const adminLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+// Customers sign in by phone, not email — email is optional on a customer row.
+const passwordLoginSchema = z.object({
+  phone: phoneSchema,
+  password: z.string().min(1),
+});
+const passwordSetSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters').max(200),
+  currentPassword: z.string().min(1).optional(),
+});
+const firebaseLoginSchema = z.object({
+  idToken: z.string().min(1),
+  fullName: z.string().min(1).max(200).optional(),
+  email: z.string().email().optional(),
+  referralCode: z.string().min(3).max(40).optional(),
+  // The admin console sends 'STAFF' so a customer who completes a perfectly
+  // valid phone login cannot use that token to reach staff surfaces.
+  audience: z.enum(['CUSTOMER', 'STAFF']).default('CUSTOMER'),
+});
 
 const OTP_TTL_SEC = Number(process.env.OTP_TTL_SECONDS ?? 300);
 const OTP_DEV_RETURN = (process.env.OTP_DEV_RETURN ?? 'true') === 'true';
+
+// A referral code counts only when it belongs to someone other than the caller.
+async function resolveReferrer(code: string | undefined, phone: string): Promise<string | null> {
+  if (!code) return null;
+  const referrer = await prisma.user.findUnique({ where: { referralCode: code } });
+  if (!referrer || referrer.phone === phone) return null;
+  return referrer.referralCode;
+}
+
+// Firebase always reports E.164 (+919876543210). Rows seeded before this
+// migration may carry the bare national number, so match both.
+function phoneVariants(phone: string): string[] {
+  return phone.startsWith('+') ? [phone, phone.slice(1)] : [phone, '+' + phone];
+}
 
 function genOtp(): string {
   // Deterministic dev OTP for the seeded demo customer; random otherwise.
@@ -157,6 +191,153 @@ router.post(
 );
 
 router.post(
+  '/firebase',
+  validateBody(firebaseLoginSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as z.infer<typeof firebaseLoginSchema>;
+    const identity = await verifyFirebasePhoneToken(body.idToken);
+
+    // Match on the Firebase uid first, then fall back to phone so users who
+    // existed before this migration are adopted rather than duplicated.
+    let user = await prisma.user.findUnique({ where: { firebaseUid: identity.uid } });
+    if (!user) {
+      user = await prisma.user.findFirst({ where: { phone: { in: phoneVariants(identity.phone) } } });
+    }
+
+    if (!user) {
+      if (body.audience === 'STAFF') {
+        // Never auto-create staff. An unknown number at the console is a
+        // wrong-number login, not a new admin.
+        throw Unauthorized('No staff account for this number');
+      }
+      const referredByCode = await resolveReferrer(body.referralCode, identity.phone);
+      const seed = (body.fullName ?? identity.phone).replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
+      user = await prisma.user.create({
+        data: {
+          kind: 'CUSTOMER',
+          phone: identity.phone,
+          firebaseUid: identity.uid,
+          fullName: body.fullName ?? null,
+          email: body.email ?? null,
+          referralCode: `${seed || 'SMARTRO'}-${Math.floor(1000 + Math.random() * 9000)}`,
+          referredByCode,
+        },
+      });
+    } else {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          firebaseUid: identity.uid,
+          phone: identity.phone, // normalise legacy rows to E.164
+          fullName: user.fullName ?? body.fullName ?? null,
+          email: user.email ?? body.email ?? null,
+        },
+      });
+    }
+
+    if (user.status !== 'ACTIVE') throw Unauthorized('This account is not active');
+    if (body.audience === 'STAFF' && user.kind !== 'ADMIN' && user.kind !== 'TECHNICIAN') {
+      throw Unauthorized('No staff account for this number');
+    }
+
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    const kind = user.kind as 'CUSTOMER' | 'ADMIN' | 'TECHNICIAN';
+    const accessToken = signAccessToken({ sub: user.id, kind });
+    const refreshToken = await issueRefreshToken(user.id);
+
+    res.json({
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          kind: user.kind,
+          phone: user.phone,
+          email: user.email,
+          fullName: user.fullName,
+        },
+      },
+    });
+  })
+);
+
+// A customer can only get a password after a first OTP login, so this is a
+// returning-user path: no account is ever created here.
+router.post(
+  '/password/login',
+  validateBody(passwordLoginSchema),
+  asyncHandler(async (req, res) => {
+    const { phone, password } = req.body as z.infer<typeof passwordLoginSchema>;
+
+    const limitKey = `pwlogin:${phone}`;
+    const limit = rateLimitHit(limitKey, 5, 900);
+    if (!limit.allowed) {
+      throw BadRequest(
+        `Too many failed attempts. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes, or sign in with an OTP.`
+      );
+    }
+
+    const user = await prisma.user.findFirst({ where: { phone: { in: phoneVariants(phone) } } });
+    // Same message either way so this cannot be used to enumerate numbers.
+    if (!user || !user.passwordHash) throw Unauthorized('Invalid phone or password');
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) throw Unauthorized('Invalid phone or password');
+    if (user.status !== 'ACTIVE') throw Unauthorized('This account is not active');
+
+    clearRateLimit(limitKey);
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    const kind = user.kind as 'CUSTOMER' | 'ADMIN' | 'TECHNICIAN';
+    const accessToken = signAccessToken({ sub: user.id, kind });
+    const refreshToken = await issueRefreshToken(user.id);
+
+    res.json({
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          kind: user.kind,
+          phone: user.phone,
+          email: user.email,
+          fullName: user.fullName,
+        },
+      },
+    });
+  })
+);
+
+// Set or change your own password. Requires a live session — which means the
+// caller proved the phone number by OTP at some point. That also makes OTP the
+// password-reset path: sign in with a code, set a new one.
+router.post(
+  '/password/set',
+  authRequired(),
+  validateBody(passwordSetSchema),
+  asyncHandler(async (req, res) => {
+    const { password, currentPassword } = req.body as z.infer<typeof passwordSetSchema>;
+    const user = await prisma.user.findUnique({ where: { id: req.auth!.sub } });
+    if (!user) throw NotFound('User not found');
+
+    // Changing an existing password needs the old one; setting the first does not.
+    if (user.passwordHash) {
+      if (!currentPassword) throw BadRequest('Enter your current password');
+      const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!ok) throw Unauthorized('Current password is incorrect');
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await bcrypt.hash(password, 10) },
+    });
+
+    res.json({ data: { ok: true, hasPassword: true } });
+  })
+);
+
+router.post(
   '/admin/login',
   validateBody(adminLoginSchema),
   asyncHandler(async (req, res) => {
@@ -219,6 +400,7 @@ router.get(
         phone: user.phone,
         email: user.email,
         fullName: user.fullName,
+        hasPassword: Boolean(user.passwordHash),
         addresses: user.addresses,
       },
     });

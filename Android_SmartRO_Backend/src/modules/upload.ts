@@ -14,7 +14,9 @@ import { asyncHandler, BadRequest } from '../core/errors';
 
 const router = Router();
 
-const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
+// UPLOAD_DIR lets a platform point this at a mounted volume. The default keeps
+// the previous behaviour (<cwd>/uploads) for local dev.
+export const UPLOAD_ROOT = path.resolve(process.env.UPLOAD_DIR ?? path.join(process.cwd(), 'uploads'));
 
 const ALLOWED_SCOPES = new Set(['products', 'banners', 'documents']);
 

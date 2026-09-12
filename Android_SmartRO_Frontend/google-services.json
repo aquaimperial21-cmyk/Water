@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "137476306292",
+    "project_id": "aqua-32b1d",
+    "storage_bucket": "aqua-32b1d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:137476306292:android:21bb1657b0447b768ee821",
+        "android_client_info": {
+          "package_name": "in.smartro.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEpOg4OYKMnz5ZPSLaSx214i4D4Kwy1eE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

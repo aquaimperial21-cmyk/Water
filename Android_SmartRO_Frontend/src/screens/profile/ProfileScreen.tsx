@@ -32,6 +32,7 @@ export function ProfileScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [profile, setProfile] = React.useState<{
     addresses?: { line1: string; city?: { name: string }; pincode: string }[];
+    hasPassword?: boolean;
   } | null>(null);
   const [referral, setReferral] = React.useState<ReferralInfo | null>(null);
 
@@ -143,7 +144,12 @@ export function ProfileScreen() {
             <ListRow leading={<User size={16} color={tokens.color.accentInk} />} title="Personal details" subtitle="Name, email, DOB" onPress={() => {}} />
             <ListRow leading={<Bell size={16} color={tokens.color.accentInk} />} title="Notifications" subtitle="Service, billing, offers" onPress={() => {}} />
             <ListRow leading={<CreditCard size={16} color={tokens.color.accentInk} />} title="Payment methods" subtitle="UPI · Visa •• 4421" onPress={() => {}} />
-            <ListRow leading={<Lock size={16} color={tokens.color.accentInk} />} title="Security" subtitle="PIN, 2-step verification" onPress={() => {}} />
+            <ListRow
+              leading={<Lock size={16} color={tokens.color.accentInk} />}
+              title={profile?.hasPassword ? 'Change password' : 'Set a password'}
+              subtitle={profile?.hasPassword ? 'Sign in without an OTP' : 'Skip the OTP next time you sign in'}
+              onPress={() => nav.navigate('SetPassword')}
+            />
           </ListGroup>
         </View>
 

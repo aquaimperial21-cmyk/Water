@@ -13,8 +13,7 @@ import { ArrowRight, ShieldCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Auth } from '../../api/endpoints';
-import { apiErrorMessage } from '../../api/client';
+import { firebaseErrorMessage, sendPhoneCode } from '../../utils/firebasePhone';
 import { tokens } from '@theme/tokens';
 import { Aurora, WaterDrop, WaterDropLogo } from '@ui/index';
 import { notify } from '../../utils/confirm';
@@ -37,10 +36,10 @@ export function PhoneScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      await Auth.requestOtp(e164);
+      await sendPhoneCode(e164);
       navigation.navigate('Otp', { phone: e164 });
     } catch (e) {
-      notify('Could not send OTP', apiErrorMessage(e));
+      notify('Could not send code', firebaseErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -151,6 +150,15 @@ export function PhoneScreen({ navigation }: Props) {
                 color={valid && !loading ? '#FFFFFF' : tokens.color.textSubtle}
                 strokeWidth={2.4}
               />
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('Password', { phone: phone.length === 10 ? `+91${phone}` : undefined })}
+              hitSlop={8}
+              style={styles.altRow}
+            >
+              <Text style={styles.altText}>
+                Already set a password? <Text style={styles.altLink}>Sign in with it</Text>
+              </Text>
             </Pressable>
           </View>
 
@@ -317,6 +325,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
   },
+
+  altRow: { alignItems: 'center', paddingTop: 2 },
+  altText: { ...tokens.text.bodySm, color: tokens.color.textMuted },
+  altLink: { color: tokens.color.accentInk, fontFamily: 'Manrope_700Bold' },
 
   // mt-6 text-center text-xs leading-relaxed
   terms: {

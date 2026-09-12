@@ -21,3 +21,13 @@ web-build/
 # Separate nested repos (not part of this monorepo)
 RO_MAHESH/
 smartro-water/
+
+# Firebase service account private key — NEVER commit
+firebase-service-account.json
+*-firebase-adminsdk-*.json
+
+# Next.js local env
+.env*.local
+
+# Generated Railway variable block (contains secrets)
+.env.railway

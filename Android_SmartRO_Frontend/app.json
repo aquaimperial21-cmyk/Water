@@ -16,10 +16,32 @@
     },
     "android": {
       "package": "in.smartro.customer",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0E7C66"
       }
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#0E7C66"
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
+    ],
     "web": {
       "bundler": "metro"
     },

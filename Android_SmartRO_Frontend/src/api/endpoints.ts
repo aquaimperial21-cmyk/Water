@@ -97,11 +97,27 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; phone: string; email?: string; fullName?: string; kind: string };
+}
+
 export const Auth = {
   requestOtp: (phone: string) => api.post('/auth/otp/request', { phone }).then((r) => r.data.data as { sent: boolean; devOtp?: string }),
   verifyOtp: (phone: string, otp: string, fullName?: string, referralCode?: string) =>
     api.post('/auth/otp/verify', { phone, otp, fullName, referralCode })
-      .then((r) => r.data.data as { accessToken: string; refreshToken: string; user: { id: string; phone: string; email?: string; fullName?: string; kind: string } }),
+      .then((r) => r.data.data as Session),
+  // Exchanges a Firebase phone-auth ID token for a SmartRO session.
+  firebaseLogin: (idToken: string, fullName?: string, referralCode?: string) =>
+    api.post('/auth/firebase', { idToken, fullName, referralCode })
+      .then((r) => r.data.data as Session),
+  passwordLogin: (phone: string, password: string) =>
+    api.post('/auth/password/login', { phone, password })
+      .then((r) => r.data.data as Session),
+  setPassword: (password: string, currentPassword?: string) =>
+    api.post('/auth/password/set', { password, currentPassword })
+      .then((r) => r.data.data as { ok: boolean; hasPassword: boolean }),
   me: () => api.get('/auth/me').then((r) => r.data.data),
   logout: (refreshToken?: string) => api.post('/auth/logout', { refreshToken }),
 };

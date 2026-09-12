@@ -1,4 +1,4 @@
-# SmartRO backend — single-stage image for Fly.io.
+# SmartRO backend — single-stage image for Railway / Fly.io.
 #
 # We keep `prisma` CLI in the final image so the release_command in fly.toml
 # (`npx prisma migrate deploy`) works without an extra builder stage.
@@ -23,10 +23,12 @@ COPY . .
 RUN npx prisma generate \
   && npm run build
 
-# Persistent uploads volume is mounted at /uploads (see fly.toml [mounts]).
-RUN mkdir -p /uploads
+# Uploads live under the workdir so a mounted volume at /app/uploads is the
+# same path the app writes to. UPLOAD_DIR can override it per platform.
+RUN mkdir -p /app/uploads
 
 ENV NODE_ENV=production
-EXPOSE 4000
+# No EXPOSE: Railway injects PORT and the app binds it. A fixed EXPOSE makes
+# the platform route to the wrong port.
 
 CMD ["node", "dist/server.js"]
