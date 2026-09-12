@@ -18,6 +18,17 @@ function resolveBaseUrl(): string {
 
 export const apiBaseUrl = resolveBaseUrl();
 
+// Origin (no /api/v1) — used to resolve relative /uploads/... paths returned
+// by the admin upload endpoint into absolute URLs the RN <Image> can fetch.
+export const assetBaseUrl = apiBaseUrl.replace(/\/api\/v1\/?$/, '');
+
+/** Resolve a relative /uploads/... path to an absolute URL. */
+export function assetUrl(u?: string | null): string | null {
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  return `${assetBaseUrl}${u.startsWith('/') ? u : `/${u}`}`;
+}
+
 export const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 15000,

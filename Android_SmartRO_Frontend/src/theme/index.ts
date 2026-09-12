@@ -1,142 +1,110 @@
-// SmartRO theme — MD3 tokens lifted from Stitch design system
-// (Manrope, deep-blue primary, white surface, soft glass cards)
+// SmartRO theme — premium light tokens.
+// New code should import from `@theme/tokens` and `@theme/motion`.
+// This module re-exports the modern tokens AND a back-compat MD3-shaped
+// surface so any not-yet-migrated screens keep compiling.
 
+export { tokens } from './tokens';
+export { motion } from './motion';
+export type { Tokens } from './tokens';
+import { color, space, radius as r, shadow as sh, text as t } from './tokens';
+
+// Back-compat MD3-style aliases — DO NOT add new keys here, migrate instead.
 export const colors = {
-  // Primary blue family
-  primary: '#0059bb',
-  primaryDark: '#004493',
-  primaryContainer: '#0070ea',
-  onPrimary: '#ffffff',
-  onPrimaryContainer: '#fefcff',
-  primaryFixed: '#d8e2ff',
-  primaryFixedDim: '#adc7ff',
-  onPrimaryFixed: '#001a41',
-  onPrimaryFixedVariant: '#004493',
+  primary: color.accent,
+  primaryDark: color.accentPressed,
+  primaryContainer: color.accentSoftStrong,
+  onPrimary: '#FFFFFF',
+  onPrimaryContainer: color.accentInk,
+  primaryFixed: color.accentSoft,
+  primaryFixedDim: color.accentSoftStrong,
+  onPrimaryFixed: color.accentInk,
+  onPrimaryFixedVariant: color.accentPressed,
 
-  // Secondary teal accent
-  secondary: '#00696b',
-  secondaryContainer: '#56f5f8',
-  onSecondary: '#ffffff',
-  onSecondaryContainer: '#006e70',
+  secondary: color.accent,
+  secondaryContainer: color.accentSoft,
+  onSecondary: '#FFFFFF',
+  onSecondaryContainer: color.accentInk,
 
-  // Tertiary
-  tertiary: '#385d92',
-  tertiaryContainer: '#5275ac',
-  onTertiary: '#ffffff',
-  onTertiaryContainer: '#fefcff',
+  tertiary: color.text,
+  tertiaryContainer: color.surfaceMuted,
+  onTertiary: '#FFFFFF',
+  onTertiaryContainer: color.text,
 
-  // Surface family
-  surface: '#f6faff',
-  surfaceBright: '#f6faff',
-  surfaceDim: '#d4dbe3',
-  surfaceContainer: '#e8eff7',
-  surfaceContainerLow: '#edf4fc',
-  surfaceContainerLowest: '#ffffff',
-  surfaceContainerHigh: '#e2e9f1',
-  surfaceContainerHighest: '#dce3eb',
-  surfaceVariant: '#dce3eb',
+  surface: color.surface,
+  surfaceBright: color.bg,
+  surfaceDim: color.surfaceMuted,
+  surfaceContainer: color.surfaceMuted,
+  surfaceContainerLow: color.surface,
+  surfaceContainerLowest: color.surface,
+  surfaceContainerHigh: color.surfaceMuted,
+  surfaceContainerHighest: color.surfaceSunken,
+  surfaceVariant: color.surfaceMuted,
 
-  // On surface
-  onSurface: '#151c22',
-  onSurfaceVariant: '#414754',
-  onBackground: '#151c22',
+  onSurface: color.text,
+  onSurfaceVariant: color.textMuted,
+  onBackground: color.text,
 
-  // Outline
-  outline: '#717786',
-  outlineVariant: '#c1c6d7',
+  outline: color.borderStrong,
+  outlineVariant: color.border,
 
-  // Status
-  error: '#ba1a1a',
-  errorContainer: '#ffdad6',
-  onError: '#ffffff',
-  onErrorContainer: '#93000a',
-  success: '#1d8a4f',
-  successContainer: '#cfead8',
-  warning: '#b48a00',
-  warningContainer: '#fff0c2',
-  star: '#ffb800',
+  error: color.danger,
+  errorContainer: color.dangerSoft,
+  onError: '#FFFFFF',
+  onErrorContainer: color.danger,
+  success: color.success,
+  successContainer: color.successSoft,
+  warning: color.warn,
+  warningContainer: color.warnSoft,
+  star: color.star,
 
-  // Convenience aliases (kept for any legacy reference)
-  bg: '#f6faff',
-  card: '#ffffff',
-  text: '#151c22',
-  textMuted: '#414754',
-  border: '#c1c6d7',
-  danger: '#ba1a1a',
+  bg: color.bg,
+  card: color.surface,
+  text: color.text,
+  textMuted: color.textMuted,
+  border: color.border,
+  danger: color.danger,
 } as const;
 
 export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
-  gutter: 16,
-  margin: 24,
+  xs: space['1'],
+  sm: space['2'],
+  md: space['4'],
+  lg: space['6'],
+  xl: space['8'],
+  xxl: space['12'],
+  gutter: space['4'],
+  margin: space['6'],
 } as const;
 
 export const radius = {
-  none: 0,
-  sm: 4,
-  md: 8,
-  lg: 12,
-  xl: 16,
-  xxl: 24,
-  full: 9999,
+  none: r.none,
+  sm: r.sm,
+  md: r.md,
+  lg: r.lg,
+  xl: r.xl,
+  xxl: r['2xl'],
+  full: r.full,
 } as const;
 
 export const shadow = {
-  sm: {
-    shadowColor: '#003366',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  md: {
-    shadowColor: '#003366',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  lg: {
-    shadowColor: '#003366',
-    shadowOpacity: 0.12,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
+  sm: sh.xs,
+  md: sh.sm,
+  lg: sh.md,
 } as const;
 
-// Manrope-based type scale matching Stitch font tokens
 export const type = {
-  headlineXl: { fontFamily: 'Manrope_700Bold', fontSize: 40, lineHeight: 48, letterSpacing: -0.8 },
-  headlineLg: { fontFamily: 'Manrope_700Bold', fontSize: 32, lineHeight: 40, letterSpacing: -0.32 },
-  headlineMd: { fontFamily: 'Manrope_600SemiBold', fontSize: 24, lineHeight: 32 },
-  titleLg: { fontFamily: 'Manrope_700Bold', fontSize: 20, lineHeight: 28 },
-  titleMd: { fontFamily: 'Manrope_600SemiBold', fontSize: 18, lineHeight: 24 },
-  bodyLg: { fontFamily: 'Manrope_400Regular', fontSize: 18, lineHeight: 28 },
-  bodyMd: { fontFamily: 'Manrope_400Regular', fontSize: 16, lineHeight: 24 },
-  bodyMdSemi: { fontFamily: 'Manrope_600SemiBold', fontSize: 16, lineHeight: 24 },
-  bodySm: { fontFamily: 'Manrope_400Regular', fontSize: 14, lineHeight: 20 },
-  labelMd: {
-    fontFamily: 'Manrope_600SemiBold',
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase' as const,
-  },
-  labelSm: {
-    fontFamily: 'Manrope_600SemiBold',
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.55,
-    textTransform: 'uppercase' as const,
-  },
-  caption: { fontFamily: 'Manrope_400Regular', fontSize: 12, lineHeight: 16 },
+  headlineXl: t.displayXl,
+  headlineLg: t.displayLg,
+  headlineMd: t.headingLg,
+  titleLg: t.headingMd,
+  titleMd: t.headingSm,
+  bodyLg: t.body,
+  bodyMd: t.body,
+  bodyMdSemi: t.bodyMedium,
+  bodySm: t.bodySm,
+  labelMd: t.label,
+  labelSm: { ...t.label, fontSize: 11, lineHeight: 14 },
+  caption: t.caption,
 } as const;
 
-// Legacy alias used by some old imports
 export const typography = type;

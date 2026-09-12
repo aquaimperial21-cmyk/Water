@@ -1,37 +1,47 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowLeft, Check, Pencil } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
+import { MotiView } from 'moti';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button } from '../../components/Button';
-import { Input } from '../../components/Input';
-import { Screen } from '../../components/Screen';
-import { Bubbles } from '../../components/Bubbles';
 import { useAuthStore } from '../../store/auth';
-import { apiErrorMessage } from '../../api/client';
+import { apiErrorMessage, setStoredUser, setTokens } from '../../api/client';
 import { Auth } from '../../api/endpoints';
-import { colors, spacing, type, radius, shadow } from '../../theme';
+import { tokens } from '@theme/tokens';
+import { Aurora } from '@ui/index';
+import { notify } from '../../utils/confirm';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Otp'>;
+
+const RESEND_SECONDS = 30;
+
+function maskPhone(p: string) {
+  const last4 = p.slice(-4);
+  return `+91 ••••• ${last4}`;
+}
 
 export function OtpScreen({ navigation, route }: Props) {
   const { phone } = route.params;
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verified, setVerified] = useState(false);
   const [devOtp, setDevOtp] = useState<string | null>(null);
-  const [seconds, setSeconds] = useState(30);
+  const [seconds, setSeconds] = useState(RESEND_SECONDS);
   const inputs = useRef<Array<TextInput | null>>([]);
-  const signIn = useAuthStore((s) => s.signIn);
 
   useEffect(() => {
     Auth.requestOtp(phone)
@@ -56,13 +66,22 @@ export function OtpScreen({ navigation, route }: Props) {
 
   async function onVerify() {
     const otp = digits.join('');
-    if (otp.length !== 6) return Alert.alert('Invalid OTP', 'Enter the 6-digit code.');
+    if (otp.length !== 6) return notify('Invalid OTP', 'Enter the 6-digit code.');
+    if (name.trim().length < 2) return notify('Name needed', 'Tell us your name to continue.');
     setLoading(true);
     try {
-      await signIn(phone, otp, name || undefined);
+      // Call the API directly so we can play the success animation BEFORE
+      // committing the user to the auth store (which swaps nav stacks).
+      const data = await Auth.verifyOtp(phone, otp, name.trim(), referralCode.trim() || undefined);
+      setVerified(true);
+      // Let the success animation play, then commit session.
+      setTimeout(async () => {
+        await setTokens(data.accessToken, data.refreshToken);
+        await setStoredUser(data.user);
+        useAuthStore.setState({ user: data.user });
+      }, 900);
     } catch (e) {
-      Alert.alert('Verification failed', apiErrorMessage(e));
-    } finally {
+      notify('Verification failed', apiErrorMessage(e));
       setLoading(false);
     }
   }
@@ -72,174 +91,405 @@ export function OtpScreen({ navigation, route }: Props) {
     try {
       const r = await Auth.requestOtp(phone);
       if (r.devOtp) setDevOtp(r.devOtp);
-      setSeconds(30);
+      setSeconds(RESEND_SECONDS);
     } catch (e) {
-      Alert.alert('Error', apiErrorMessage(e));
+      notify('Could not resend', apiErrorMessage(e));
     }
   }
 
-  const filled = digits.filter(Boolean).length;
-  const lastFour = phone.slice(-4);
+  const code = digits.join('');
+  // Visual hint only — the button is always tappable and validates inside.
+  const looksReady = code.length === 6 && name.trim().length >= 2 && !loading;
+
+  // Timer ring math
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  const ringOffset = c - (seconds / RESEND_SECONDS) * c;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surfaceBright }}>
-      {/* Gradient header */}
-      <LinearGradient
-        colors={[colors.primaryFixed, colors.surfaceContainer]}
-        style={styles.headerWrap}
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <Aurora height={420} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
       >
-        <Bubbles
-          bubbles={[
-            { size: 160, top: -50, right: -30, color: colors.primary, opacity: 0.06 },
-            { size: 90, bottom: -20, left: 20, color: colors.primary, opacity: 0.05 },
-          ]}
-        />
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
-            <MaterialIcons name="arrow-back" size={22} color={colors.onPrimaryFixed} />
-          </Pressable>
-        </View>
-        <View style={styles.headerBody}>
-          <View style={styles.shieldIcon}>
-            <MaterialIcons name="verified-user" size={28} color={colors.primary} />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {/* pt-6 flex justify-between */}
+          <View style={styles.topRow}>
+            <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={10}>
+              <ArrowLeft size={18} color={tokens.color.text} />
+            </Pressable>
+            <Text style={styles.step}>Step 2 of 2</Text>
           </View>
-          <Text style={[type.headlineLg, { color: colors.onPrimaryFixed, fontSize: 28 }]}>
-            Verify your number
-          </Text>
-          <Text style={styles.headerSub}>
-            We sent a 6-digit code to <Text style={styles.phoneMask}>+91 ••••• {lastFour}</Text>
-          </Text>
-        </View>
-      </LinearGradient>
 
-      <Screen padded contentStyle={{ paddingTop: spacing.lg }}>
-        {/* OTP cells */}
-        <View style={styles.otpRow}>
-          {digits.map((d, idx) => {
-            const isFilled = !!d;
-            const isCurrent = idx === filled && !isFilled;
-            return (
-              <TextInput
-                key={idx}
-                ref={(r) => { inputs.current[idx] = r; }}
-                value={d}
-                onChangeText={(v) => setDigit(idx, v)}
-                keyboardType="number-pad"
-                maxLength={1}
-                style={[
-                  styles.otpCell,
-                  isFilled && styles.otpCellFilled,
-                  isCurrent && styles.otpCellCurrent,
-                ]}
-                selectTextOnFocus
-              />
-            );
-          })}
-        </View>
-
-        {/* Resend */}
-        <Pressable onPress={onResend} disabled={seconds > 0} style={styles.resendWrap}>
-          {seconds > 0 ? (
-            <Text style={styles.resend}>
-              Resend in <Text style={styles.resendTimer}>{seconds}s</Text>
-            </Text>
+          {verified ? (
+            <MotiView
+              from={{ opacity: 0, scale: 0.85, translateY: 16 }}
+              animate={{ opacity: 1, scale: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 480 }}
+              style={styles.verifiedWrap}
+            >
+              {/* Halo stack — sized box that contains the disk + animated rings */}
+              <View style={styles.haloBox}>
+                <View style={styles.haloBase} />
+                <MotiView
+                  from={{ scale: 1, opacity: 0.55 }}
+                  animate={{ scale: 2, opacity: 0 }}
+                  transition={{ type: 'timing', duration: 2000, loop: true }}
+                  style={styles.haloPulse}
+                />
+                <View style={styles.haloMid} />
+                <View style={styles.successDisk}>
+                  <Check size={36} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              </View>
+              <Text style={styles.verifiedTitle}>Verified</Text>
+              <Text style={styles.verifiedSub}>Welcome aboard.</Text>
+            </MotiView>
           ) : (
-            <Text style={styles.resend}>
-              Didn't get it? <Text style={styles.resendCta}>Resend</Text>
-            </Text>
+            <>
+              {/* mt-10 font-display text-display-md */}
+              <Text style={styles.headline}>Enter the code</Text>
+              {/* mt-2 sub line + edit button */}
+              <View style={styles.subRow}>
+                <Text style={styles.sub}>
+                  Sent to <Text style={styles.subStrong}>{maskPhone(phone)}</Text>
+                </Text>
+                <Pressable
+                  onPress={() => navigation.goBack()}
+                  style={styles.editBtn}
+                  hitSlop={8}
+                >
+                  <Pencil size={12} color={tokens.color.accent} />
+                  <Text style={styles.editText}>Edit</Text>
+                </Pressable>
+              </View>
+
+              {/* mt-8 flex justify-between gap-2 */}
+              <View style={styles.otpRow}>
+                {digits.map((d, idx) => {
+                  const isFilled = !!d;
+                  return (
+                    <TextInput
+                      key={idx}
+                      ref={(el) => { inputs.current[idx] = el; }}
+                      value={d}
+                      onChangeText={(v) => setDigit(idx, v)}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      autoFocus={idx === 0}
+                      selectTextOnFocus
+                      selectionColor={tokens.color.accent}
+                      style={[
+                        styles.cell,
+                        isFilled ? styles.cellFilled : styles.cellEmpty,
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+
+              {/* mt-5 timer / resend */}
+              <View style={styles.timerRow}>
+                {seconds > 0 ? (
+                  <>
+                    <Svg width={32} height={32}>
+                      <Circle
+                        cx={16}
+                        cy={16}
+                        r={r}
+                        fill="none"
+                        strokeWidth={3}
+                        stroke={tokens.color.surfaceMuted}
+                      />
+                      <Circle
+                        cx={16}
+                        cy={16}
+                        r={r}
+                        fill="none"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        strokeDasharray={`${c}`}
+                        strokeDashoffset={`${ringOffset}`}
+                        stroke={tokens.color.accent}
+                        transform={`rotate(-90 16 16)`}
+                      />
+                    </Svg>
+                    <Text style={styles.timerText}>Resend in {seconds}s</Text>
+                  </>
+                ) : (
+                  <Pressable onPress={onResend}>
+                    <Text style={styles.resendCta}>Resend code</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* mt-8 name field */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Tell us your name</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="e.g. Priya Sharma"
+                  placeholderTextColor={tokens.color.textSubtle}
+                  autoCapitalize="words"
+                  selectionColor={tokens.color.accent}
+                  style={styles.nameInput}
+                />
+              </View>
+
+              {/* Referral code — optional, applied if a friend's code is valid */}
+              <View style={[styles.field, { marginTop: 12 }]}>
+                <Text style={styles.fieldLabel}>Referral code (optional)</Text>
+                <TextInput
+                  value={referralCode}
+                  onChangeText={(t) => setReferralCode(t.toUpperCase().slice(0, 40))}
+                  placeholder="FRIEND-1234"
+                  placeholderTextColor={tokens.color.textSubtle}
+                  autoCapitalize="characters"
+                  selectionColor={tokens.color.accent}
+                  style={styles.nameInput}
+                />
+              </View>
+
+              {/* mt-6 h-14 rounded-2xl gradient cta — always tappable, validates inside */}
+              <Pressable
+                disabled={loading}
+                onPress={onVerify}
+                style={({ pressed }) => [
+                  styles.cta,
+                  !looksReady && styles.ctaDim,
+                  pressed && { opacity: 0.95 },
+                ]}
+              >
+                <LinearGradient
+                  colors={[tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                <Text style={styles.ctaText}>
+                  {loading ? 'Verifying…' : 'Verify & continue'}
+                </Text>
+              </Pressable>
+
+              {devOtp ? (
+                <View style={styles.devChip}>
+                  <Text style={styles.devText}>Dev OTP · {devOtp}</Text>
+                </View>
+              ) : null}
+            </>
           )}
-        </Pressable>
-
-        {/* Profile completion */}
-        <View style={styles.divider} />
-        <Text style={[type.titleMd, { color: colors.onSurface, marginBottom: 4 }]}>Complete your profile</Text>
-        <Text style={[type.caption, { color: colors.onSurfaceVariant, marginBottom: spacing.md }]}>
-          Helps our team route service tickets to you faster.
-        </Text>
-        <Input label="Full Name" value={name} onChangeText={setName} placeholder="Priya Mehta" />
-        <Input
-          label="Email Address (optional)"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-
-        <Button title="Verify & continue" onPress={onVerify} loading={loading} fullWidth iconRight="arrow-forward" />
-
-        {devOtp ? (
-          <View style={styles.devChip}>
-            <MaterialIcons name="vpn-key" size={14} color={colors.primary} />
-            <Text style={styles.devText}>Dev OTP: {devOtp}</Text>
-          </View>
-        ) : null}
-      </Screen>
-    </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerWrap: {
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
-    overflow: 'hidden',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  headerRow: { paddingHorizontal: spacing.md },
-  backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.5)' },
-  headerBody: { paddingHorizontal: spacing.lg, marginTop: spacing.sm },
-  shieldIcon: {
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: '#ffffff',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: spacing.md,
-    ...shadow.sm,
-  },
-  headerSub: { ...type.bodyMd, color: colors.onPrimaryFixedVariant, marginTop: 6 },
-  phoneMask: { fontFamily: 'Manrope_700Bold', color: colors.onPrimaryFixed },
+  root: { flex: 1, backgroundColor: tokens.color.bg },
+  // px-5 + pt-6 (PhoneShell parity), pb generous so content never clips above the keyboard
+  body: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 48, flexGrow: 1 },
 
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: spacing.md },
-  otpCell: {
-    flex: 1,
-    height: 64,
-    textAlign: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.outlineVariant,
-    backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: radius.md,
-    fontSize: 24,
-    fontFamily: 'Manrope_700Bold',
-    color: colors.onSurface,
-    ...({ outlineStyle: 'none' } as object),
-  },
-  otpCellFilled: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(0,89,187,0.06)',
-  },
-  otpCellCurrent: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-  },
-
-  resendWrap: { alignSelf: 'center', marginTop: spacing.sm, marginBottom: spacing.md },
-  resend: { ...type.bodyMd, color: colors.onSurfaceVariant },
-  resendTimer: { color: colors.onSurface, fontFamily: 'Manrope_700Bold' },
-  resendCta: { color: colors.primary, fontFamily: 'Manrope_700Bold' },
-
-  divider: { height: 1, backgroundColor: colors.outlineVariant, marginVertical: spacing.lg },
-
-  devChip: {
-    alignSelf: 'center',
-    marginTop: spacing.lg,
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: tokens.color.surface,
+    borderWidth: 1,
+    borderColor: tokens.color.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...tokens.shadow.xs,
+  },
+  step: { ...tokens.text.label, color: tokens.color.textMuted, fontSize: 11 },
+
+  // mt-10 font-display text-display-md
+  headline: {
+    marginTop: 40,
+    ...tokens.text.displayMd,
+    color: tokens.color.text,
+  },
+  // mt-2
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
-    backgroundColor: 'rgba(0,89,187,0.10)',
+    marginTop: 8,
+  },
+  sub: { ...tokens.text.bodyMd, color: tokens.color.textMuted, flexShrink: 1 },
+  subStrong: { color: tokens.color.text, fontFamily: 'Manrope_700Bold' },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  editText: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: tokens.color.accent },
+
+  // mt-8 flex justify-between gap-2 — fixed-width cells so they always render
+  // in a clean row regardless of RN Web flex-gap support.
+  otpRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 32,
+  },
+  // h-14 w-12 rounded-2xl border bg-surface-raised text-center text-2xl font-bold
+  cell: {
+    width: 48,
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    backgroundColor: tokens.color.surface,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 22,
+    lineHeight: 26,
+    color: tokens.color.text,
+    ...tokens.shadow.xs,
+  },
+  cellEmpty: { borderColor: tokens.color.border, color: tokens.color.textMuted },
+  cellFilled: {
+    borderColor: tokens.color.accent,
+    color: tokens.color.text,
+    shadowColor: tokens.color.accent,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+
+  // mt-5 timer
+  timerRow: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  timerText: { ...tokens.text.bodySm, color: tokens.color.textMuted },
+  resendCta: { fontFamily: 'Manrope_700Bold', color: tokens.color.accent, fontSize: 14 },
+
+  // mt-8 name field
+  field: { marginTop: 32 },
+  fieldLabel: {
+    ...tokens.text.label,
+    color: tokens.color.textMuted,
+    marginBottom: 8,
+  },
+  nameInput: {
+    backgroundColor: tokens.color.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: tokens.color.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 16,
+    color: tokens.color.text,
+    ...tokens.shadow.xs,
+  },
+
+  // mt-6 h-14 rounded-2xl shadow-glow gradient cta
+  cta: {
+    marginTop: 24,
+    height: 56,
+    borderRadius: 24,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...tokens.shadow.glow,
+  },
+  ctaDisabled: { shadowOpacity: 0, elevation: 0 },
+  // Visually hint "fields incomplete" but keep the button tappable so validation
+  // can surface a helpful notify message instead of a silent dead button.
+  ctaDim: { opacity: 0.6 },
+  ctaText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16, color: '#FFFFFF', letterSpacing: 0.2 },
+
+  devChip: {
+    marginTop: 16,
+    alignSelf: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: radius.full,
+    borderRadius: 999,
+    backgroundColor: tokens.color.accentSoft,
+    borderWidth: 1,
+    borderColor: tokens.color.accentSoftStrong,
   },
-  devText: { ...type.labelSm, color: colors.primary, fontSize: 11 },
+  devText: { ...tokens.text.label, color: tokens.color.accentInk, fontSize: 11 },
+
+  // ===== verified state =====
+  verifiedWrap: {
+    marginTop: 96,
+    alignItems: 'center',
+  },
+  // 96x96 box that contains the centered disk + animated halos
+  haloBox: {
+    width: 96,
+    height: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  haloBase: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 48,
+    backgroundColor: 'rgba(39,176,125,0.20)',
+  },
+  haloPulse: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 48,
+    backgroundColor: 'rgba(39,176,125,0.30)',
+  },
+  haloMid: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 8,
+    bottom: 8,
+    borderRadius: 40,
+    backgroundColor: 'rgba(39,176,125,0.15)',
+  },
+  successDisk: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: tokens.color.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: tokens.color.success,
+    shadowOpacity: 0.45,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+  verifiedTitle: {
+    ...tokens.text.displayMd,
+    color: tokens.color.text,
+  },
+  verifiedSub: {
+    marginTop: 4,
+    ...tokens.text.bodyMd,
+    color: tokens.color.textMuted,
+  },
 });

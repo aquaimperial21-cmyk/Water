@@ -54,6 +54,9 @@ async function main() {
           '7-litre wall-mounted purifier with RO+UV+UF triple stage. Suitable for families up to 4 members. Includes installation, all maintenance, and filter replacements.',
         imageUrl: 'https://images.unsplash.com/photo-1559813353-d4d2c5dac17b?w=800',
         warrantyMonths: 24,
+        personasMin: 2,
+        personasMax: 4,
+        tag: 'BEST_SELLER',
       },
     }),
     prisma.product.create({
@@ -68,6 +71,8 @@ async function main() {
           '5-litre countertop purifier — perfect for bachelors and small families. Compact, energy-efficient, copper-infused tank.',
         imageUrl: 'https://images.unsplash.com/photo-1581636625402-29b2a704ef13?w=800',
         warrantyMonths: 12,
+        personasMin: 1,
+        personasMax: 2,
       },
     }),
     prisma.product.create({
@@ -82,6 +87,9 @@ async function main() {
           'Premium 10-litre under-sink purifier with mineraliser and zero-water-wastage technology. Ideal for large families.',
         imageUrl: 'https://images.unsplash.com/photo-1606744837616-56c9a5c6a6eb?w=800',
         warrantyMonths: 36,
+        personasMin: 4,
+        personasMax: 6,
+        tag: 'MOST_POPULAR',
       },
     }),
     prisma.product.create({
@@ -343,7 +351,18 @@ async function main() {
   const startedAt = new Date(Date.now() - 30 * 24 * 3600 * 1000);
   const expiresAt = new Date(startedAt.getTime() + 180 * 24 * 3600 * 1000);
   const lockInUntil = new Date(startedAt.getTime() + 180 * 24 * 3600 * 1000);
-  await prisma.device.update({ where: { id: dev1.id }, data: { status: 'INSTALLED' } });
+  // Seeded device pairing for Priya's subscription. The deviceToken is also
+  // pre-issued so the ESP32 endpoints can be smoke-tested with curl out-of-
+  // the-box (see SR-AP-000101 demo in STATUS.md).
+  await prisma.device.update({
+    where: { id: dev1.id },
+    data: {
+      status: 'INSTALLED',
+      deviceToken: 'devtok-demo-priya-aquapure-7l',
+      firmwareVersion: '1.4.2',
+      wifiSsid: 'PriyaHome_5G',
+    },
+  });
   const sub1 = await prisma.subscription.create({
     data: {
       userId: customer1.id,
@@ -440,6 +459,20 @@ async function main() {
       status: 'SCHEDULED',
     },
   });
+
+  // ── Rollups ──────────────────────────────────────────────
+  // lowestMonthlyPaise on Product is the cheapest active monthly across cities;
+  // we surface it as "starting at ₹X/mo" badges on product cards.
+  for (const product of products) {
+    const min = await prisma.planCityPrice.aggregate({
+      where: { productId: product.id },
+      _min: { monthlyPricePaise: true },
+    });
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { lowestMonthlyPaise: min._min.monthlyPricePaise ?? null },
+    });
+  }
 
   // ── Notifications ────────────────────────────────────────
   await prisma.notification.create({

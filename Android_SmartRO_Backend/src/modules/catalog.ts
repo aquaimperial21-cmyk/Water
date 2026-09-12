@@ -8,9 +8,11 @@ const router = Router();
 
 router.get(
   '/cities',
-  asyncHandler(async (_req, res) => {
+  validateQuery(z.object({ includeAll: z.enum(['true', 'false']).optional() })),
+  asyncHandler(async (req, res) => {
+    const includeAll = req.query.includeAll === 'true';
     const cities = await prisma.city.findMany({
-      where: { isServiceable: true },
+      where: includeAll ? {} : { isServiceable: true },
       orderBy: { name: 'asc' },
     });
     res.json({ data: cities });
@@ -84,5 +86,25 @@ router.get(
     res.json({ data: prices });
   })
 );
+
+// Recompute Product.lowestMonthlyPaise — cheapest active monthly across all
+// (city, plan) tuples. Called after any price upsert in admin.ts; also exposed
+// directly so seed-data scripts can prime the rollups.
+export async function refreshLowestMonthlyRollup(productId?: string) {
+  const productIds = productId
+    ? [productId]
+    : (await prisma.product.findMany({ select: { id: true } })).map((p) => p.id);
+  for (const id of productIds) {
+    const min = await prisma.planCityPrice.aggregate({
+      where: { productId: id },
+      _min: { monthlyPricePaise: true },
+    });
+    await prisma.product.update({
+      where: { id },
+      data: { lowestMonthlyPaise: min._min.monthlyPricePaise ?? null },
+    });
+  }
+  return productIds.length;
+}
 
 export default router;

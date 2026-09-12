@@ -3,11 +3,49 @@
 @tailwind utilities;
 
 html, body {
-  background: #F7F9FB;
-  color: #0F1B2D;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial;
+  background: #FAF8F5;
+  color: #151D28;
   -webkit-font-smoothing: antialiased;
 }
 
 /* simple table reset */
 table { border-collapse: separate; border-spacing: 0; }
+
+/* Scrollbar — subtle */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(101, 112, 129, 0.2);
+  border-radius: 999px;
+  border: 2px solid #FAF8F5;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(101, 112, 129, 0.35); }
+
+/* Aurora hero backdrop utility */
+.aurora-bg {
+  background:
+    radial-gradient(120% 80% at 0% 0%, hsl(198 100% 88% / 0.55), transparent 60%),
+    radial-gradient(100% 70% at 100% 0%, hsl(218 100% 90% / 0.55), transparent 55%),
+    radial-gradient(120% 100% at 50% 100%, hsl(40 60% 96% / 0.9), transparent 60%),
+    linear-gradient(180deg, #FAF8F5, #FAF8F5);
+}
+
+/* Animations ported from customer app */
+@keyframes drop-ripple {
+  0%   { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(2); opacity: 0; }
+}
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-up {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+
+.animate-ring-pulse { animation: drop-ripple 2s ease-out infinite; }
+.animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.animate-slide-up { animation: slide-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.animate-spin-slow { animation: spin-slow 1.2s linear infinite; }

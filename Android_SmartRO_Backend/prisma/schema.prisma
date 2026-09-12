@@ -1,16 +1,19 @@
-// SmartRO Prisma schema
-// SQLite for local prototype. To move to Postgres (per system-architecture doc):
-//   1. Change provider to "postgresql"
-//   2. Set DATABASE_URL to a postgres connection string
-//   3. Run: npx prisma migrate dev --name init
-// No application code changes required.
+// SmartRO Prisma schema — production (Postgres).
+//
+// To run locally against Postgres:
+//   1. Set DATABASE_URL=postgresql://USER:PASS@HOST/DB in .env
+//   2. npx prisma migrate dev --name init
+//   3. npx prisma generate
+//
+// To temporarily fall back to SQLite for offline dev: switch provider to
+// "sqlite" and DATABASE_URL to file:./dev.db, then `prisma migrate dev`.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -20,39 +23,43 @@ datasource db {
 // ───────────────────────────────────── Identity ──────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid())
-  kind         String   // CUSTOMER | ADMIN | TECHNICIAN
-  status       String   @default("ACTIVE") // ACTIVE | SUSPENDED | DELETED
-  phone        String   @unique
-  email        String?  @unique
-  passwordHash String?  // admins only
-  fullName     String?
-  referralCode String?  @unique
-  preferredLanguage String @default("en")
-  lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  kind                String // CUSTOMER | ADMIN | TECHNICIAN
+  status              String    @default("ACTIVE") // ACTIVE | SUSPENDED | DELETED
+  phone               String    @unique
+  email               String?   @unique
+  passwordHash        String? // admins only
+  fullName            String?
+  referralCode        String?   @unique // user's own code that they share
+  referredByCode      String? // code of the user who referred them
+  referralRewardPaise Int       @default(0) // credited at first paid booking
+  preferredLanguage   String    @default("en")
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  addresses    Address[]
-  inquiries    Inquiry[]
-  bookings     Booking[]
+  addresses     Address[]
+  inquiries     Inquiry[]
+  bookings      Booking[]
   subscriptions Subscription[]
-  tickets      Ticket[]
-  payments     Payment[]
-  kycRecords   KycRecord[]
+  tickets       Ticket[]
+  payments      Payment[]
+  kycRecords    KycRecord[]
   refreshTokens RefreshToken[]
   notifications Notification[]
-  technician   Technician?
+  pushTokens    PushToken[]
+  helpRequests  HelpRequest[]
+  technician    Technician?
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
   revokedAt DateTime?
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -69,18 +76,18 @@ model OtpAttempt {
 }
 
 model Address {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   label     String? // Home | Office
   line1     String
   line2     String?
   cityId    String
-  city      City    @relation(fields: [cityId], references: [id])
+  city      City     @relation(fields: [cityId], references: [id])
   pincode   String
   lat       Float?
   lng       Float?
-  isDefault Boolean @default(false)
+  isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([userId])
@@ -89,58 +96,66 @@ model Address {
 // ───────────────────────────────────── Catalog ──────────────────────────────────────
 
 model City {
-  id           String  @id @default(uuid())
-  name         String
-  state        String
-  isServiceable Boolean @default(true)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  name          String
+  state         String
+  isServiceable Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
-  addresses    Address[]
-  prices       PlanCityPrice[]
-  inquiries    Inquiry[]
-  bookings     Booking[]
+  addresses Address[]
+  prices    PlanCityPrice[]
+  inquiries Inquiry[]
+  bookings  Booking[]
 }
 
 model Product {
-  id              String  @id @default(uuid())
-  slug            String  @unique
-  name            String
-  kind            String  // HOME | COMMERCIAL
-  capacityLitres  Int
-  technology      String  // RO | RO+UV | RO+UV+UF | UV
-  mounting        String  // WALL | COUNTERTOP | UNDER_SINK
-  description     String
-  imageUrl        String?
-  warrantyMonths  Int     @default(12)
-  isActive        Boolean @default(true)
-  createdAt       DateTime @default(now())
+  id                 String   @id @default(uuid())
+  slug               String   @unique
+  name               String
+  kind               String // HOME | COMMERCIAL
+  capacityLitres     Int
+  technology         String // RO | RO+UV | RO+UV+UF | UV
+  mounting           String // WALL | COUNTERTOP | UNDER_SINK
+  description        String
+  imageUrl           String?
+  warrantyMonths     Int      @default(12)
+  // Household-size positioning surfaced on product cards (e.g. 1–2 / 2–4 / 4–6).
+  personasMin        Int?
+  personasMax        Int?
+  // Marketing tag — BEST_SELLER | MOST_POPULAR | NEW | TRIAL.
+  tag                String?
+  // Rollup of the cheapest active monthly price across all cities/plans.
+  // Refreshed by /admin/products/refresh-rollups or on price upsert.
+  lowestMonthlyPaise Int?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
 
-  prices          PlanCityPrice[]
-  bookings        Booking[]
-  subscriptions   Subscription[]
-  devices         Device[]
+  prices        PlanCityPrice[]
+  bookings      Booking[]
+  subscriptions Subscription[]
+  devices       Device[]
 }
 
 model Plan {
-  id           String  @id @default(uuid())
+  id           String   @id @default(uuid())
   name         String
   durationDays Int
-  isActive     Boolean @default(true)
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  prices       PlanCityPrice[]
-  bookings     Booking[]
+  prices        PlanCityPrice[]
+  bookings      Booking[]
   subscriptions Subscription[]
 }
 
 model PlanCityPrice {
-  id                String  @id @default(uuid())
+  id                String   @id @default(uuid())
   planId            String
-  plan              Plan    @relation(fields: [planId], references: [id])
+  plan              Plan     @relation(fields: [planId], references: [id])
   cityId            String
-  city              City    @relation(fields: [cityId], references: [id])
+  city              City     @relation(fields: [cityId], references: [id])
   productId         String
-  product           Product @relation(fields: [productId], references: [id])
+  product           Product  @relation(fields: [productId], references: [id])
   monthlyPricePaise Int
   depositPaise      Int
   effectiveFrom     DateTime @default(now())
@@ -168,7 +183,7 @@ model Inquiry {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  events        InquiryEvent[]
+  events InquiryEvent[]
 
   @@index([status, createdAt])
 }
@@ -178,34 +193,42 @@ model InquiryEvent {
   inquiryId   String
   inquiry     Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
   actorUserId String?
-  type        String   // STATUS_CHANGE | NOTE | CALL | MESSAGE
-  payload     String   // JSON string
+  type        String // STATUS_CHANGE | NOTE | CALL | MESSAGE
+  payload     String // JSON string
   createdAt   DateTime @default(now())
 
   @@index([inquiryId])
 }
 
 model Booking {
-  id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
-  productId         String
-  product           Product  @relation(fields: [productId], references: [id])
-  planId            String
-  plan              Plan     @relation(fields: [planId], references: [id])
-  cityId            String
-  city              City     @relation(fields: [cityId], references: [id])
-  addressId         String?
-  depositPaise      Int
-  firstPaymentPaise Int
-  status            String   @default("PENDING_KYC") // PENDING_KYC | PENDING_PAY | PAID | INSTALLED | CANCELLED
-  installationSlot  DateTime?
-  agreementSignedAt DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id])
+  productId           String
+  product             Product   @relation(fields: [productId], references: [id])
+  planId              String
+  plan                Plan      @relation(fields: [planId], references: [id])
+  cityId              String
+  city                City      @relation(fields: [cityId], references: [id])
+  addressId           String?
+  depositPaise        Int
+  firstPaymentPaise   Int
+  status              String    @default("PENDING_KYC") // PENDING_KYC | PENDING_PAY | PAID | INSTALLED | CANCELLED
+  installationSlot    DateTime?
+  agreementSignedAt   DateTime?
+  // 7-day risk-free trial — full refund if cancelled before trialEndsAt.
+  trialEndsAt         DateTime?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  // Referral code applied at signup or first booking (denormalised for invoice).
+  referralCode        String?
+  referralCreditPaise Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  payments          Payment[]
-  subscription      Subscription?
+  payments     Payment[]
+  subscription Subscription?
+  jobs         Job[]
 
   @@index([userId, status])
 }
@@ -213,20 +236,20 @@ model Booking {
 // ───────────────────────────────────── Payments / Subs ──────────────────────────────────────
 
 model Payment {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
   bookingId      String?
-  booking        Booking? @relation(fields: [bookingId], references: [id])
+  booking        Booking?      @relation(fields: [bookingId], references: [id])
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
-  kind           String   // DEPOSIT | RECHARGE | REFUND
+  kind           String // DEPOSIT | RECHARGE | REFUND
   amountPaise    Int
-  status         String   @default("INITIATED") // INITIATED | SUCCESS | FAILED
+  status         String        @default("INITIATED") // INITIATED | SUCCESS | FAILED
   gatewayRef     String?
   invoice        Invoice?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([userId, status])
 }
@@ -243,26 +266,39 @@ model Invoice {
 }
 
 model Subscription {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  bookingId    String   @unique
-  booking      Booking  @relation(fields: [bookingId], references: [id])
-  productId    String
-  product      Product  @relation(fields: [productId], references: [id])
-  planId       String
-  plan         Plan     @relation(fields: [planId], references: [id])
-  deviceId     String?  @unique
-  device       Device?  @relation(fields: [deviceId], references: [id])
-  status       String   @default("ACTIVE") // ACTIVE | GRACE | SUSPENDED | CLOSED
-  startedAt    DateTime @default(now())
-  expiresAt    DateTime
-  lockInUntil  DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  bookingId     String    @unique
+  booking       Booking   @relation(fields: [bookingId], references: [id])
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  planId        String
+  plan          Plan      @relation(fields: [planId], references: [id])
+  deviceId      String?   @unique
+  device        Device?   @relation(fields: [deviceId], references: [id])
+  status        String    @default("ACTIVE") // ACTIVE | TRIAL | PAUSED | GRACE | SUSPENDED | CLOSED
+  startedAt     DateTime  @default(now())
+  expiresAt     DateTime
+  lockInUntil   DateTime
+  // 7-day trial window — applies during the first week after install.
+  trialEndsAt   DateTime?
+  pausedAt      DateTime?
+  resumedAt     DateTime?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  // Autopay (Razorpay Subscriptions / UPI Autopay mandate) linkage.
+  // null   = no mandate, customer recharges manually
+  // CREATED = mandate created, awaiting first authorisation debit
+  // ACTIVE  = mandate authorised, future charges will auto-debit
+  // HALTED  = customer cancelled or bank declined; revert to manual
+  autopayId     String? // razorpay subscription id (sub_XXXX)
+  autopayStatus String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  payments     Payment[]
-  tickets      Ticket[]
+  payments Payment[]
+  tickets  Ticket[]
 
   @@index([userId, status])
 }
@@ -270,36 +306,65 @@ model Subscription {
 // ───────────────────────────────────── Devices ──────────────────────────────────────
 
 model Device {
-  id          String   @id @default(uuid())
-  serial      String   @unique
-  qr          String   @unique
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id])
-  status      String   @default("WAREHOUSE") // WAREHOUSE | ALLOCATED | INSTALLED | IN_SERVICE | RETURNED | RETIRED
-  warehouse   String   @default("Pune-W1")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default(uuid())
+  serial           String    @unique
+  qr               String    @unique
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id])
+  status           String    @default("WAREHOUSE") // WAREHOUSE | ALLOCATED | INSTALLED | IN_SERVICE | RETURNED | RETIRED
+  warehouse        String    @default("Pune-W1")
+  // ESP32 hardware integration
+  deviceToken      String?   @unique // 32-char random token issued at install
+  firmwareVersion  String?
+  wifiSsid         String?
+  lastHeartbeatAt  DateTime?
+  // Telemetry rollups (latest snapshot — see DeviceReading for time series)
+  lastTdsPpm       Int?
+  filterLifePct    Int? // 0–100, fall-off counter maintained by firmware
+  usageLitresTotal Int       @default(0)
+  leakDetectedAt   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   subscription Subscription?
-  tickets     Ticket[]
+  tickets      Ticket[]
+  readings     DeviceReading[]
 
   @@index([status])
+}
+
+// Append-only telemetry log. ESP32 posts batches; the `kind` discriminates the
+// event so a single table covers periodic TDS samples, cumulative usage ticks,
+// and one-off leak alerts without a wide column zoo.
+model DeviceReading {
+  id            String   @id @default(uuid())
+  deviceId      String
+  device        Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  kind          String // TDS | USAGE | LEAK | FILTER_LIFE | TEMP | HEARTBEAT
+  tdsPpm        Int?
+  usageLitres   Int? // cumulative or delta — interpret by kind
+  filterLifePct Int?
+  payload       String? // JSON for anything kind-specific
+  createdAt     DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([deviceId, kind, createdAt])
 }
 
 // ───────────────────────────────────── KYC ──────────────────────────────────────
 
 model KycRecord {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id])
-  aadhaarLast4   String
-  pan            String
-  selfieUrl      String?
-  status         String   @default("PENDING") // PENDING | IN_REVIEW | VERIFIED | REJECTED
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  aadhaarLast4    String
+  pan             String
+  selfieUrl       String?
+  status          String    @default("PENDING") // PENDING | IN_REVIEW | VERIFIED | REJECTED
   rejectionReason String?
-  verifiedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId, status])
 }
@@ -307,74 +372,192 @@ model KycRecord {
 // ───────────────────────────────────── Tickets / Jobs ──────────────────────────────────────
 
 model Ticket {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  subscriptionId  String?
-  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
-  deviceId        String?
-  device          Device?  @relation(fields: [deviceId], references: [id])
-  category        String   // INSTALL | REPAIR | FILTER | PICKUP | OTHER
-  description     String
-  status          String   @default("OPEN") // OPEN | ASSIGNED | IN_PROGRESS | RESOLVED | CLOSED | REOPENED
-  priority        String   @default("MEDIUM") // LOW | MEDIUM | HIGH
-  technicianId    String?
-  technician      Technician? @relation(fields: [technicianId], references: [id])
-  slaDueAt        DateTime?
-  rating          Int?
-  ratingComment   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  deviceId       String?
+  device         Device?       @relation(fields: [deviceId], references: [id])
+  category       String // INSTALL | REPAIR | FILTER | PICKUP | OTHER
+  description    String
+  status         String        @default("OPEN") // OPEN | ASSIGNED | IN_PROGRESS | RESOLVED | CLOSED | REOPENED
+  priority       String        @default("MEDIUM") // LOW | MEDIUM | HIGH
+  technicianId   String?
+  technician     Technician?   @relation(fields: [technicianId], references: [id])
+  slaDueAt       DateTime?
+  rating         Int?
+  ratingComment  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  jobs            Job[]
+  jobs Job[]
 
   @@index([status, createdAt])
   @@index([technicianId, status])
 }
 
 model Technician {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
-  employeeCode String   @unique
-  zone         String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                       String    @id @default(uuid())
+  userId                   String    @unique
+  user                     User      @relation(fields: [userId], references: [id])
+  employeeCode             String    @unique
+  zone                     String
+  // Replaces isActive with richer status; keep isActive column for back-compat
+  isActive                 Boolean   @default(true)
+  status                   String    @default("ACTIVE") // ACTIVE | ON_LEAVE | SUSPENDED | EXITED
+  // HR — dates
+  dateOfJoining            DateTime?
+  dateOfBirth              DateTime?
+  exitedAt                 DateTime?
+  exitReason               String?
+  // HR — employment
+  employmentType           String? // PROBATION | PERMANENT | CONTRACT
+  monthlySalaryPaise       Int?
+  whatsappNumber           String?
+  // PII — hashed; only last 4 visible to admin UI
+  aadhaarHash              String?
+  aadhaarLast4             String?
+  panHash                  String?
+  panLast4                 String?
+  bankAccountHash          String?
+  bankAccountLast4         String?
+  bankIfsc                 String?
+  bankName                 String?
+  accountHolderName        String?
+  // Residential
+  addressLine1             String?
+  addressLine2             String?
+  addressCity              String?
+  addressState             String?
+  addressPincode           String?
+  // Emergency contact
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+  // Documents — JSON array of { label, url, uploadedAt }
+  documentUrls             String? // JSON string
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @default(now()) @updatedAt
 
-  tickets      Ticket[]
-  jobs         Job[]
+  tickets Ticket[]
+  jobs    Job[]
+
+  @@index([status])
 }
 
 model Job {
-  id            String   @id @default(uuid())
-  ticketId      String?
-  ticket        Ticket?  @relation(fields: [ticketId], references: [id])
-  technicianId  String
-  technician    Technician @relation(fields: [technicianId], references: [id])
-  type          String   // INSTALL | SERVICE | FILTER | PICKUP
-  scheduledFor  DateTime
-  status        String   @default("SCHEDULED") // SCHEDULED | EN_ROUTE | IN_PROGRESS | DONE | CANCELLED
-  notes         String?
-  completedAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String     @id @default(uuid())
+  ticketId     String?
+  ticket       Ticket?    @relation(fields: [ticketId], references: [id])
+  // Bookings produce an INSTALL job at confirm-time; nullable so SERVICE/FILTER
+  // jobs raised from tickets continue to work without a bookingId.
+  bookingId    String?
+  booking      Booking?   @relation(fields: [bookingId], references: [id])
+  technicianId String
+  technician   Technician @relation(fields: [technicianId], references: [id])
+  type         String // INSTALL | SERVICE | FILTER | PICKUP
+  scheduledFor DateTime
+  status       String     @default("SCHEDULED") // SCHEDULED | EN_ROUTE | IN_PROGRESS | DONE | CANCELLED
+  notes        String?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([technicianId, status, scheduledFor])
+  @@index([bookingId])
 }
 
 // ───────────────────────────────────── Notifications / Audit ──────────────────────────────────────
 
 model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  channel   String   // PUSH | SMS | EMAIL | INAPP
-  title     String
-  body      String
-  readAt    DateTime?
-  createdAt DateTime @default(now())
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  channel           String // PUSH | SMS | EMAIL | INAPP | WHATSAPP
+  title             String
+  body              String
+  templateKey       String? // e.g. 'recharge.reminder.7d'
+  status            String    @default("PENDING") // PENDING | SENT | FAILED | DELIVERED | READ
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  attemptCount      Int       @default(0)
+  providerMessageId String?
+  payload           String? // JSON string of template vars
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
 
   @@index([userId, readAt])
+  @@index([templateKey, scheduledAt])
+}
+
+// ───────────────────────────────────── Banners / Campaigns ──────────────────────────────────────
+
+model Banner {
+  id        String   @id @default(uuid())
+  title     String
+  body      String?
+  imageUrl  String?
+  ctaLabel  String?
+  ctaTarget String? // 'product:<slug>' | 'plan:<id>' | 'url:<https://>'
+  audience  String   @default("ALL") // ALL | HOME | COMMERCIAL | CITY:<id> | EXPIRING
+  startsAt  DateTime
+  endsAt    DateTime
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+// Push notification tokens — one row per device per user. Sent via Expo Push
+// Service (Expo handles both FCM + APNs delivery for managed RN apps).
+model PushToken {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       String   @unique
+  platform    String // EXPO | FCM | APNS
+  deviceLabel String?
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// "Notify me when you launch in <city>" capture for non-serviceable cities.
+// Anonymous-friendly: phone + city are enough; userId is set if the visitor
+// is signed in.
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  phone     String
+  cityName  String
+  pincode   String?
+  productId String?
+  source    String   @default("APP") // APP | WEB | REFERRAL
+  createdAt DateTime @default(now())
+
+  @@index([cityName, createdAt])
+  @@index([phone])
+}
+
+// Customer-initiated support touchpoints (call-back, chat, WhatsApp, FAQ-feedback).
+// Distinct from Ticket — these are inbound asks, not service-jobs to be dispatched.
+model HelpRequest {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  channel   String // CALL | WHATSAPP | CHAT | FAQ
+  topic     String? // billing | tech | install | other
+  message   String?
+  status    String   @default("OPEN") // OPEN | HANDLED | CLOSED
+  handledBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model AuditLog {
@@ -383,8 +566,8 @@ model AuditLog {
   action      String
   entity      String
   entityId    String?
-  before      String?  // JSON string
-  after       String?  // JSON string
+  before      String? // JSON string
+  after       String? // JSON string
   ip          String?
   createdAt   DateTime @default(now())
 

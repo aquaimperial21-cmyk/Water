@@ -11,6 +11,7 @@ import {
 } from '../core/auth';
 import { BadRequest, NotFound, Unauthorized, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { getMessagingDriver } from '../services/messaging';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ const otpVerifySchema = z.object({
   otp: z.string().length(6),
   fullName: z.string().min(1).max(200).optional(),
   email: z.string().email().optional(),
+  referralCode: z.string().min(3).max(40).optional(),
 });
 const adminLoginSchema = z.object({
   email: z.string().email(),
@@ -60,7 +62,21 @@ router.post(
       },
     });
 
-    // TODO PROD: dispatch via MSG91 / Gupshup. Dev mode returns the OTP.
+    try {
+      await getMessagingDriver().send({
+        to: phone,
+        channel: 'SMS',
+        templateKey: 'auth.otp',
+        vars: { otp, ttlMinutes: String(Math.round(OTP_TTL_SEC / 60)) },
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[auth] OTP dispatch failed', err);
+      if (!OTP_DEV_RETURN) {
+        throw BadRequest('Could not send OTP right now. Please try again shortly.');
+      }
+    }
+
     res.json({
       data: {
         sent: true,
@@ -83,20 +99,39 @@ router.post(
 
     await prisma.otpAttempt.update({ where: { id: attempt.id }, data: { consumed: true } });
 
+    // Referral: validate the code refers to an existing user (and not the
+    // signing-in user themselves). Apply only on first signup, not relogin.
+    let referredByCode: string | null = null;
+    if (body.referralCode) {
+      const referrer = await prisma.user.findUnique({ where: { referralCode: body.referralCode } });
+      if (referrer && referrer.phone !== body.phone) {
+        referredByCode = referrer.referralCode;
+      }
+    }
+
     let user = await prisma.user.findUnique({ where: { phone: body.phone } });
     if (!user) {
+      // Auto-generate a sharable referralCode from name + 4 random digits.
+      const seed = (body.fullName ?? body.phone).replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
+      const ownReferral = `${seed || 'SMARTRO'}-${Math.floor(1000 + Math.random() * 9000)}`;
       user = await prisma.user.create({
         data: {
           kind: 'CUSTOMER',
           phone: body.phone,
           fullName: body.fullName ?? null,
           email: body.email ?? null,
+          referralCode: ownReferral,
+          referredByCode,
         },
       });
     } else if (body.fullName && !user.fullName) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { fullName: body.fullName, email: body.email ?? user.email },
+        data: {
+          fullName: body.fullName,
+          email: body.email ?? user.email,
+          referredByCode: user.referredByCode ?? referredByCode,
+        },
       });
     }
 

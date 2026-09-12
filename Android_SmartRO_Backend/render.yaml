@@ -1,0 +1,65 @@
+# Render.com blueprint for the SmartRO backend (free-tier testing).
+#
+# Deploy via:
+#   1. Push this repo to GitHub.
+#   2. Go to https://dashboard.render.com → New → Blueprint → pick repo.
+#   3. Render will read this file and prompt for the env-vars marked sync:false.
+#   4. Paste your Neon DATABASE_URL when prompted; the JWT secrets auto-generate.
+#
+# Free-tier notes:
+#   • Service sleeps after 15 min idle, ~30 s cold start on first request.
+#   • No persistent disk on free tier → /uploads files lost on redeploy
+#     (fine for testing; switch to S3/R2 for real).
+#   • `prisma db push` is used instead of `migrate deploy` because the repo
+#     has no migrations folder yet — db push syncs the schema directly.
+
+services:
+  - type: web
+    name: smartro-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: Android_SmartRO_Backend
+    buildCommand: npm install && npx prisma generate && npm run build && npx prisma db push --accept-data-loss
+    # ↑ db push syncs schema directly (no migration files needed for testing).
+    # After the first deploy succeeds, seed the database ONCE from your laptop:
+    #   cd Android_SmartRO_Backend
+    #   DATABASE_URL="<your-neon-url>" npx tsx prisma/seed.ts
+    # Re-running the seed wipes and recreates all test data.
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false                 # paste your Neon pooled connection string
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL_SECONDS
+        value: 900
+      - key: JWT_REFRESH_TTL_SECONDS
+        value: 2592000
+      - key: OTP_TTL_SECONDS
+        value: 300
+      - key: OTP_DEV_RETURN
+        value: "true"               # OTPs returned in API response — testing only
+      - key: MESSAGING_DRIVER
+        value: stub
+      - key: PAYMENT_DRIVER
+        value: stub
+      - key: PAYMENT_STUB_DELAY_MS
+        value: 1500
+      - key: PUSH_DRIVER
+        value: stub
+      - key: CORS_ORIGINS
+        value: "*"                  # tighten to your Vercel URL after first deploy
+      - key: TRIAL_DAYS
+        value: 7
+      - key: INSTALL_LEAD_HOURS
+        value: 6
+      - key: REFERRAL_REWARD_PAISE
+        value: 20000

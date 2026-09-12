@@ -14,3 +14,10 @@ ios/
 android/
 web-build/
 *.txt
+
+# Next.js build backups
+.next.bak-*/
+
+# Separate nested repos (not part of this monorepo)
+RO_MAHESH/
+smartro-water/

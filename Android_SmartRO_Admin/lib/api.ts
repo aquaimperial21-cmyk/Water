@@ -3,6 +3,15 @@
 import axios from 'axios';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+// Origin for static assets (`/uploads/...`). Strips the `/api/v1` suffix.
+export const ASSET_BASE = API_BASE.replace(/\/api\/v1\/?$/, '');
+
+/** Resolve a possibly-relative upload URL to an absolute one. */
+export function assetUrl(u?: string | null): string {
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  return `${ASSET_BASE}${u.startsWith('/') ? u : `/${u}`}`;
+}
 
 const ACCESS_KEY = 'smartro-admin.access';
 const REFRESH_KEY = 'smartro-admin.refresh';

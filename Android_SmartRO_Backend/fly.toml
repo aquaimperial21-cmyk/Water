@@ -1,0 +1,57 @@
+# Fly.io configuration for SmartRO backend.
+# Region: bom (Mumbai) — see deployment plan.
+#
+# First-time setup:
+#   1. flyctl auth login
+#   2. flyctl launch --no-deploy --copy-config --name smartro-api --region bom
+#      (answer "no" to Postgres — we use Neon)
+#   3. flyctl volumes create smartro_uploads --size 3 --region bom
+#   4. flyctl secrets set DATABASE_URL=... JWT_ACCESS_SECRET=... ... (see .env.production.example)
+#   5. flyctl deploy
+
+app = "smartro-api"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Run `prisma migrate deploy` before the new release goes live. Stops a bad
+# migration from taking the app down — if this command fails, Fly keeps the
+# previous machine serving traffic.
+[deploy]
+  release_command = "npx prisma migrate deploy"
+
+[env]
+  PORT = "4000"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  # Don't auto-stop while ESP32s are polling every 60s; they'd cold-start every
+  # request and burn battery. If the fleet grows past ~500 units this is still
+  # fine for one machine; scale via min_machines_running instead.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+# 3 GB volume for /uploads (PDF agreements/invoices + product images).
+# Migrate to Cloudflare R2 once usage > 2 GB.
+[mounts]
+  source = "smartro_uploads"
+  destination = "/uploads"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
+  # ↑ Bump to 512 MB if the app starts swapping under heartbeat load — symptom
+  # is /health p99 latency creeping above ~200ms.

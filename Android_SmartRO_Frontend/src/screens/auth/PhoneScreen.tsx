@@ -1,21 +1,23 @@
 import React from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowRight, ShieldCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MotiView } from 'moti';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button } from '../../components/Button';
-import { Input } from '../../components/Input';
-import { Bubbles } from '../../components/Bubbles';
 import { Auth } from '../../api/endpoints';
 import { apiErrorMessage } from '../../api/client';
-import { colors, spacing, type, radius, shadow } from '../../theme';
+import { tokens } from '@theme/tokens';
+import { Aurora, WaterDrop, WaterDropLogo } from '@ui/index';
+import { notify } from '../../utils/confirm';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Phone'>;
@@ -23,191 +25,311 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Phone'>;
 export function PhoneScreen({ navigation }: Props) {
   const [phone, setPhone] = React.useState('9876543210');
   const [loading, setLoading] = React.useState(false);
-  const [devOtp, setDevOtp] = React.useState<string | null>(null);
+  const [focused, setFocused] = React.useState(false);
+
+  const valid = phone.length === 10;
 
   async function onContinue() {
-    const e164 = phone.startsWith('+') ? phone : `+91${phone.replace(/\s+/g, '')}`;
+    const e164 = `+91${phone.replace(/\s+/g, '')}`;
     if (!/^\+\d{10,15}$/.test(e164)) {
-      Alert.alert('Invalid number', 'Enter a valid 10-digit Indian mobile number.');
+      notify('Invalid number', 'Enter a valid 10-digit Indian mobile number.');
       return;
     }
     setLoading(true);
     try {
-      const res = await Auth.requestOtp(e164);
-      if (res.devOtp) setDevOtp(res.devOtp);
+      await Auth.requestOtp(e164);
       navigation.navigate('Otp', { phone: e164 });
     } catch (e) {
-      Alert.alert('Error', apiErrorMessage(e));
+      notify('Could not send OTP', apiErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <View style={styles.root}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        {/* Hero with gradient + decorative bubbles */}
-        <LinearGradient
-          colors={['#0070ea', '#0059bb', '#004493']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.hero}
-        >
-          <Bubbles
-            bubbles={[
-              { size: 280, top: -80, right: -60, color: '#ffffff', opacity: 0.10 },
-              { size: 180, top: 40, left: -50, color: '#ffffff', opacity: 0.08 },
-              { size: 110, bottom: -20, right: 40, color: '#56f5f8', opacity: 0.18 },
-              { size: 60, top: 120, right: 70, color: '#ffffff', opacity: 0.22 },
-            ]}
-          />
-          <View style={styles.heroContent}>
-            <View style={styles.heroIconWrap}>
-              <View style={styles.heroIconRing} />
-              <View style={styles.heroIcon}>
-                <MaterialIcons name="opacity" size={36} color={colors.primary} />
-              </View>
-            </View>
-            <Text style={styles.brand}>SmartRO</Text>
-            <Text style={styles.tagline}>Clean water as a service.</Text>
-            <View style={styles.bullets}>
-              {['No upfront cost', 'Free install', 'All filters covered'].map((b) => (
-                <View key={b} style={styles.bullet}>
-                  <MaterialIcons name="check-circle" size={14} color={colors.secondaryContainer} />
-                  <Text style={styles.bulletText}>{b}</Text>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <Aurora height={460} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <View style={styles.body}>
+          {/* pt-6 flex justify-between */}
+          <View style={styles.topRow}>
+            <WaterDropLogo size={28} />
+            <Text style={styles.step}>Step 1 of 2</Text>
+          </View>
+
+          {/* mt-12 mb-8 — h-32 w-32 with two animated halos + 64 drop */}
+          <View style={styles.dropHero}>
+            <MotiView
+              from={{ scale: 1, opacity: 0.55 }}
+              animate={{ scale: 2, opacity: 0 }}
+              transition={{ type: 'timing', duration: 2000, loop: true, repeatReverse: false }}
+              style={styles.haloPulse}
+            />
+            <View style={styles.haloOuter} />
+            <View style={styles.haloInner} />
+            <WaterDrop size={64} />
+          </View>
+
+          {/* font-display text-display-lg text-center */}
+          <Text style={styles.headline}>
+            Clean water,{'\n'}
+            <Text style={{ color: tokens.color.accent }}>on tap.</Text>
+          </Text>
+
+          {/* mt-3 text-center text-body-md text-muted-foreground */}
+          <Text style={styles.lede}>
+            Rental purifiers across India. Filters, service & install — all included.
+          </Text>
+
+          {/* mt-10 space-y-4 (children gap 16) */}
+          <View style={styles.fieldStack}>
+            {/* label "Mobile number" + mt-2 input row */}
+            <View>
+              <Text style={styles.fieldLabel}>Mobile number</Text>
+              <View style={[styles.inputRow, focused && styles.inputRowFocus]}>
+                <View style={styles.cc}>
+                  <Text style={styles.flag}>🇮🇳</Text>
+                  <Text style={styles.ccText}>+91</Text>
                 </View>
-              ))}
-            </View>
-          </View>
-        </LinearGradient>
-
-        {/* Card pulled into hero */}
-        <View style={styles.cardWrap}>
-          <View style={styles.card}>
-            <View style={styles.cardHeadRow}>
-              <Text style={[type.headlineMd, { color: colors.onSurface }]}>Welcome</Text>
-              <View style={styles.welcomePill}>
-                <MaterialIcons name="bolt" size={11} color={colors.primary} />
-                <Text style={styles.welcomePillText}>10s sign-up</Text>
+                <TextInput
+                  value={phone}
+                  onChangeText={(t) => setPhone(t.replace(/\D/g, '').slice(0, 10))}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  keyboardType="phone-pad"
+                  placeholder="98XXX XXXXX"
+                  placeholderTextColor={tokens.color.textSubtle}
+                  style={styles.input}
+                  autoFocus
+                  selectionColor={tokens.color.accent}
+                  maxLength={10}
+                />
               </View>
             </View>
-            <Text style={styles.sub}>Enter your mobile number to begin.</Text>
-            <View style={{ height: spacing.lg }} />
-            <Input
-              label="Phone Number"
-              prefix="+91"
-              value={phone}
-              onChangeText={(t) => setPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
-              keyboardType="phone-pad"
-              placeholder="00000 00000"
-            />
-            <Button
-              title="Send OTP"
+
+            {/* rounded-xl bg-primary-tint border border-primary-soft px-3.5 py-2.5 */}
+            <View style={styles.notice}>
+              <ShieldCheck size={14} color={tokens.color.accent} />
+              <Text style={styles.noticeText}>
+                We'll text you a one-time code. Your number stays private.
+              </Text>
+            </View>
+
+            {/* h-14 rounded-2xl text-body-lg font-bold gradient-accent shadow-glow */}
+            <Pressable
+              disabled={!valid || loading}
               onPress={onContinue}
-              loading={loading}
-              iconRight="arrow-forward"
-              fullWidth
-              style={{ marginTop: spacing.md }}
-            />
-            {devOtp ? (
-              <View style={styles.devHint}>
-                <MaterialIcons name="info" size={14} color={colors.primary} />
-                <Text style={styles.devHintText}>Dev OTP shown on next screen.</Text>
-              </View>
-            ) : null}
+              style={({ pressed }) => [
+                styles.cta,
+                (!valid || loading) && styles.ctaDisabled,
+                pressed && valid && !loading && { opacity: 0.95 },
+              ]}
+            >
+              <LinearGradient
+                colors={
+                  valid && !loading
+                    ? [tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]
+                    : [tokens.color.surfaceMuted, tokens.color.surfaceMuted]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <Text
+                style={[
+                  styles.ctaText,
+                  (!valid || loading) && { color: tokens.color.textSubtle },
+                ]}
+              >
+                {loading ? 'Sending…' : 'Send code'}
+              </Text>
+              <ArrowRight
+                size={16}
+                color={valid && !loading ? '#FFFFFF' : tokens.color.textSubtle}
+                strokeWidth={2.4}
+              />
+            </Pressable>
           </View>
 
+          {/* mt-6 text-center text-xs text-muted-foreground leading-relaxed */}
           <Text style={styles.terms}>
-            By continuing you agree to our <Text style={styles.link}>Terms</Text>{' '}
-            &{' '}
-            <Text style={styles.link}>Privacy</Text>.
+            By continuing you agree to ImperialAqua's{' '}
+            <Text style={styles.link}>Terms</Text> and{' '}
+            <Text style={styles.link}>Privacy Policy</Text>.
           </Text>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.surfaceBright },
-  hero: {
-    height: 360,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  heroContent: { alignItems: 'center', paddingHorizontal: spacing.margin, marginTop: 24 },
-  heroIconWrap: {
-    width: 88,
-    height: 88,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  heroIconRing: {
-    position: 'absolute',
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  heroIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.md,
-  },
-  brand: { ...type.headlineXl, color: colors.onPrimary, fontSize: 44, letterSpacing: -1 },
-  tagline: { ...type.bodyLg, color: '#d8e2ff', marginTop: 4 },
-  bullets: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.md, justifyContent: 'center' },
-  bullet: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  bulletText: { ...type.caption, color: '#d8e2ff', fontSize: 11 },
+  root: { flex: 1, backgroundColor: tokens.color.bg },
+  // PhoneShell px-5 + content
+  body: { flex: 1, paddingHorizontal: 20 },
 
-  cardWrap: {
-    flex: 1,
-    paddingHorizontal: spacing.margin,
-    marginTop: -spacing.xl,
-    paddingBottom: spacing.margin,
-  },
-  card: {
-    backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(193,198,215,0.4)',
-    ...shadow.md,
-  },
-  cardHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  welcomePill: {
+  // pt-6
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(0,89,187,0.10)',
+    justifyContent: 'space-between',
+    paddingTop: 24,
   },
-  welcomePillText: { ...type.labelSm, color: colors.primary, fontSize: 9 },
-  sub: { ...type.bodyMd, color: colors.onSurfaceVariant, marginTop: 4 },
-  devHint: {
+  step: { ...tokens.text.label, color: tokens.color.textMuted, fontSize: 11 },
+
+  // mt-12 mb-8, h-32 w-32, grid place-items-center
+  dropHero: {
+    marginTop: 48,
+    marginBottom: 32,
+    alignSelf: 'center',
+    height: 128,
+    width: 128,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // bg-primary/15 animate-ring-pulse — outer pulse ring
+  haloPulse: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 64,
+    backgroundColor: 'rgba(35,186,251,0.55)',
+  },
+  // bg-primary/15 absolute inset-0
+  haloOuter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 64,
+    backgroundColor: 'rgba(35,186,251,0.15)',
+  },
+  // bg-primary/10 absolute inset-3 (12px inset)
+  haloInner: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 52,
+    backgroundColor: 'rgba(35,186,251,0.10)',
+  },
+
+  // text-display-lg text-center
+  headline: {
+    ...tokens.text.displayLg,
+    color: tokens.color.text,
+    textAlign: 'center',
+  },
+  // mt-3 text-center text-body-md text-muted-foreground
+  lede: {
+    marginTop: 12,
+    ...tokens.text.bodyMd,
+    color: tokens.color.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+  },
+
+  // mt-10 space-y-4 (children gap 16)
+  fieldStack: { marginTop: 40, gap: 16 },
+
+  // text-eyebrow uppercase text-muted-foreground
+  fieldLabel: {
+    ...tokens.text.label,
+    color: tokens.color.textMuted,
+    marginBottom: 8,
+  },
+  // rounded-2xl bg-surface-raised border, focus-within: border-primary + ring
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: tokens.color.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: tokens.color.border,
+    overflow: 'hidden',
+    ...tokens.shadow.xs,
+  },
+  inputRowFocus: {
+    borderColor: tokens.color.accent,
+    shadowColor: tokens.color.accent,
+    shadowOpacity: 0.2,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  // border-r border-border bg-surface-warm px-4
+  cc: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: spacing.md,
+    paddingHorizontal: 16,
+    backgroundColor: tokens.color.surfaceWarm,
+    borderRightWidth: 1,
+    borderRightColor: tokens.color.border,
+  },
+  flag: { fontSize: 16 },
+  ccText: { ...tokens.text.bodyLg, color: tokens.color.text, fontFamily: 'Manrope_700Bold' },
+  // px-4 py-4 text-title-md font-semibold tracking-wider
+  input: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 18,
+    letterSpacing: 1.4,
+    color: tokens.color.text,
+  },
+
+  // rounded-xl bg-primary-tint border-primary-soft px-3.5 py-2.5
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: tokens.color.accentTint,
+    borderWidth: 1,
+    borderColor: tokens.color.accentSoft,
+  },
+  noticeText: { flex: 1, ...tokens.text.bodySm, color: tokens.color.accentInk },
+
+  // h-14 rounded-2xl shadow-glow
+  cta: {
+    height: 56,
+    borderRadius: 24,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    ...tokens.shadow.glow,
   },
-  devHintText: { ...type.caption, color: colors.primary },
+  ctaDisabled: { shadowOpacity: 0, elevation: 0 },
+  ctaText: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+
+  // mt-6 text-center text-xs leading-relaxed
   terms: {
-    ...type.caption,
-    color: colors.onSurfaceVariant,
+    marginTop: 24,
     textAlign: 'center',
-    marginTop: spacing.xl,
+    fontSize: 12,
+    lineHeight: 18,
+    color: tokens.color.textMuted,
+    fontFamily: 'Manrope_400Regular',
   },
-  link: { color: colors.primary, fontFamily: 'Manrope_700Bold' },
+  link: {
+    color: tokens.color.text,
+    fontFamily: 'Manrope_700Bold',
+    textDecorationLine: 'underline',
+  },
 });

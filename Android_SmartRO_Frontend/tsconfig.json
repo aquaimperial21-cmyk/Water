@@ -5,7 +5,11 @@
     "jsx": "react-native",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "paths": {
+      "@ui/*": ["./src/components/ui/*"],
+      "@theme/*": ["./src/theme/*"]
+    }
   },
   "include": ["**/*.ts", "**/*.tsx"]
 }

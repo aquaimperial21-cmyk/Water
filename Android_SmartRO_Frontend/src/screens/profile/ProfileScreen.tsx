@@ -1,28 +1,54 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { confirmAction, notify } from '../../utils/confirm';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  Bell,
+  CreditCard,
+  FileText,
+  Gift,
+  HelpCircle,
+  Lock,
+  LogOut,
+  MapPin,
+  MessageCircle,
+  Server,
+  ShieldCheck,
+  User,
+  ChevronRight,
+} from 'lucide-react-native';
 import { useAuthStore } from '../../store/auth';
-import { Auth } from '../../api/endpoints';
-import { apiBaseUrl } from '../../api/client';
-import { Bubbles } from '../../components/Bubbles';
-import { colors, radius, spacing, type, shadow } from '../../theme';
-
-type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
+import { Auth, Referrals, ReferralInfo } from '../../api/endpoints';
+import { apiBaseUrl, apiErrorMessage } from '../../api/client';
+import { tokens } from '@theme/tokens';
+import { Aurora, ListGroup, ListRow, Pill } from '@ui/index';
+import type { RootStackParamList } from '../../navigation';
 
 export function ProfileScreen() {
   const { user, signOut } = useAuthStore();
-  const [profile, setProfile] = React.useState<{ addresses?: { line1: string; city?: { name: string }; pincode: string }[] } | null>(null);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [profile, setProfile] = React.useState<{
+    addresses?: { line1: string; city?: { name: string }; pincode: string }[];
+  } | null>(null);
+  const [referral, setReferral] = React.useState<ReferralInfo | null>(null);
 
   React.useEffect(() => {
     Auth.me().then(setProfile).catch(() => {});
+    Referrals.me().then(setReferral).catch(() => {});
   }, []);
 
-  function onLogout() {
-    Alert.alert('Sign out', 'Sign out of SmartRO?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
-    ]);
+  async function shareReferral() {
+    if (!referral?.referralCode) return;
+    const reward = Math.round(referral.rewardPaisePerReferral / 100);
+    const msg = `Switch to SmartRO purifier rental and we both get ₹${reward} off. Use my code: ${referral.referralCode}\nDownload: https://smartro.in/app`;
+    try {
+      await Share.share({ message: msg });
+    } catch (e) {
+      notify('Could not share', apiErrorMessage(e));
+    }
   }
 
   const initials = (user?.fullName ?? user?.phone ?? 'U')
@@ -33,247 +59,240 @@ export function ProfileScreen() {
     .join('')
     .toUpperCase();
 
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.surfaceBright }}>
-      {/* Top bar */}
-      <View style={styles.topBar}>
-        <Text style={styles.topTitle}>Profile</Text>
-      </View>
+  const primaryAddress = profile?.addresses?.[0];
+  const addressLine = primaryAddress
+    ? `${primaryAddress.line1}, ${primaryAddress.city?.name ?? ''} ${primaryAddress.pincode}`
+    : 'Add a delivery address';
 
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
+  async function confirmSignOut() {
+    const ok = await confirmAction({
+      title: 'Sign out?',
+      message: 'You can sign back in any time with your phone.',
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (ok) await signOut();
+  }
+
+  return (
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <Aurora height={420} />
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 140, paddingTop: 8 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>Account</Text>
+          <Text style={styles.title}>Profile</Text>
+        </View>
+
         {/* Identity card */}
-        <View style={styles.identityWrap}>
-          <LinearGradient
-            colors={[colors.primaryFixed, colors.surfaceContainerLowest]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.identity}
-          >
-            <Bubbles
-              bubbles={[
-                { size: 180, top: -60, right: -40, color: colors.primary, opacity: 0.06 },
-                { size: 90, bottom: -30, left: -10, color: colors.primary, opacity: 0.05 },
-              ]}
-            />
-            <View style={styles.avatarRing}>
+        <View style={styles.identity}>
+          <View style={styles.identityRow}>
+            <View>
               <View style={styles.avatar}>
+                <LinearGradient
+                  colors={[tokens.color.gradientDeepFrom, tokens.color.gradientDeepTo]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
                 <Text style={styles.avatarText}>{initials}</Text>
               </View>
-              <View style={styles.avatarStatus}>
-                <MaterialIcons name="verified" size={14} color={colors.onPrimary} />
+              <View style={styles.verifyDot}>
+                <ShieldCheck size={11} color="#FFFFFF" strokeWidth={3} />
               </View>
             </View>
-            <Text style={[type.headlineMd, { color: colors.onSurface, marginTop: spacing.md }]}>
-              {user?.fullName ?? 'Customer'}
-            </Text>
-            <Text style={[type.bodyMd, { color: colors.onSurfaceVariant, marginTop: 2 }]}>
-              {user?.phone}
-            </Text>
-            {user?.email ? (
-              <Text style={[type.bodyMd, { color: colors.onSurfaceVariant }]}>{user.email}</Text>
-            ) : null}
-            <View style={styles.identityChips}>
-              <View style={styles.identityChip}>
-                <MaterialIcons name="verified-user" size={12} color={colors.primary} />
-                <Text style={styles.identityChipText}>KYC verified</Text>
-              </View>
-              <View style={styles.identityChip}>
-                <MaterialIcons name="star" size={12} color={colors.star} />
-                <Text style={styles.identityChipText}>Premium member</Text>
-              </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.name} numberOfLines={1}>
+                {user?.fullName ?? 'ImperialAqua customer'}
+              </Text>
+              <Text style={styles.muted}>+91 {user?.phone?.replace('+91', '')}</Text>
+              {user?.email ? <Text style={styles.muted} numberOfLines={1}>{user.email}</Text> : null}
             </View>
-          </LinearGradient>
+          </View>
+          <View style={styles.chipsRow}>
+            <Pill tone="success" dot>KYC verified</Pill>
+            <Pill tone="accent">Premium · 8 mo</Pill>
+          </View>
         </View>
 
-        {/* Section: Addresses */}
-        <Section title="Saved addresses">
-          {(profile?.addresses ?? []).length === 0 ? (
-            <View style={styles.row}>
-              <View style={styles.rowIcon}><MaterialIcons name="location-on" size={20} color={colors.primary} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={[type.bodyMdSemi, { color: colors.onSurface }]}>No addresses yet</Text>
-                <Text style={[type.caption, { color: colors.onSurfaceVariant }]}>Added during booking flow</Text>
-              </View>
-            </View>
-          ) : (
-            (profile?.addresses ?? []).map((a, i) => (
-              <View key={i} style={styles.row}>
-                <View style={styles.rowIcon}><MaterialIcons name="location-on" size={20} color={colors.primary} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[type.bodyMdSemi, { color: colors.onSurface }]}>{a.line1}</Text>
-                  <Text style={[type.caption, { color: colors.onSurfaceVariant }]}>{a.city?.name} — {a.pincode}</Text>
-                </View>
-              </View>
-            ))
-          )}
-        </Section>
-
-        {/* Section: Account */}
-        <Section title="Account">
-          <Row icon="person-outline" label="Edit profile" />
-          <Row icon="notifications-none" label="Notifications" />
-          <Row icon="lock-outline" label="Security & Privacy" />
-          <Row icon="payment" label="Payment methods" />
-        </Section>
-
-        {/* Section: Support */}
-        <Section title="Support">
-          <Row icon="help-outline" label="Help center" />
-          <Row icon="chat-bubble-outline" label="Contact support" />
-          <Row icon="star-outline" label="Rate the app" />
-        </Section>
-
-        {/* Section: About */}
-        <Section title="About">
-          <View style={styles.row}>
-            <View style={styles.rowIcon}><MaterialIcons name="info-outline" size={20} color={colors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyMdSemi, { color: colors.onSurface }]}>SmartRO</Text>
-              <Text style={[type.caption, { color: colors.onSurfaceVariant }]}>Water purifier rental subscription</Text>
-            </View>
-          </View>
-          <View style={styles.row}>
-            <View style={styles.rowIcon}><MaterialIcons name="cloud-queue" size={20} color={colors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyMdSemi, { color: colors.onSurface }]}>API server</Text>
-              <Text style={[type.caption, { color: colors.onSurfaceVariant }]} numberOfLines={1}>{apiBaseUrl}</Text>
-            </View>
-          </View>
-          <View style={[styles.row, { borderBottomWidth: 0 }]}>
-            <View style={styles.rowIcon}><MaterialIcons name="numbers" size={20} color={colors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyMdSemi, { color: colors.onSurface }]}>Version</Text>
-              <Text style={[type.caption, { color: colors.onSurfaceVariant }]}>0.2.0 (prototype)</Text>
-            </View>
-          </View>
-        </Section>
-
-        <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-          <Pressable onPress={onLogout} style={styles.signOutBtn}>
-            <MaterialIcons name="logout" size={18} color={colors.error} />
-            <Text style={styles.signOutText}>Sign out</Text>
-          </Pressable>
+        {/* Addresses */}
+        <View style={styles.section}>
+          <Text style={styles.groupLabel}>Saved addresses</Text>
+          <ListGroup>
+            <ListRow
+              leading={<MapPin size={16} color={tokens.color.accentInk} />}
+              title="Home"
+              subtitle={addressLine}
+              trailing={<Pill tone="accent" size="sm">Default</Pill>}
+              onPress={() => {}}
+            />
+            <ListRow
+              leading={<MapPin size={16} color={tokens.color.accentInk} />}
+              title="Add another address"
+              onPress={() => {}}
+            />
+          </ListGroup>
         </View>
+
+        {/* Account */}
+        <View style={styles.section}>
+          <Text style={styles.groupLabel}>Account</Text>
+          <ListGroup>
+            <ListRow leading={<User size={16} color={tokens.color.accentInk} />} title="Personal details" subtitle="Name, email, DOB" onPress={() => {}} />
+            <ListRow leading={<Bell size={16} color={tokens.color.accentInk} />} title="Notifications" subtitle="Service, billing, offers" onPress={() => {}} />
+            <ListRow leading={<CreditCard size={16} color={tokens.color.accentInk} />} title="Payment methods" subtitle="UPI · Visa •• 4421" onPress={() => {}} />
+            <ListRow leading={<Lock size={16} color={tokens.color.accentInk} />} title="Security" subtitle="PIN, 2-step verification" onPress={() => {}} />
+          </ListGroup>
+        </View>
+
+        {/* Referrals */}
+        <View style={styles.section}>
+          <Text style={styles.groupLabel}>Refer & earn</Text>
+          <ListGroup>
+            <ListRow
+              leading={<Gift size={16} color={tokens.color.accentInk} />}
+              title={referral?.referralCode ?? '—'}
+              subtitle={
+                referral
+                  ? `${referral.referrals} signups · ₹${Math.round(referral.rewardPaiseAvailable / 100)} earned`
+                  : 'Loading…'
+              }
+              trailing={<Pill tone="accent" size="sm">Share</Pill>}
+              onPress={shareReferral}
+            />
+          </ListGroup>
+        </View>
+
+        {/* Help */}
+        <View style={styles.section}>
+          <Text style={styles.groupLabel}>Help & support</Text>
+          <ListGroup>
+            <ListRow
+              leading={<MessageCircle size={16} color={tokens.color.accentInk} />}
+              title="Chat with us"
+              subtitle="Avg reply in 3 minutes"
+              onPress={() => nav.navigate('Help')}
+            />
+            <ListRow
+              leading={<HelpCircle size={16} color={tokens.color.accentInk} />}
+              title="Help center"
+              onPress={() => nav.navigate('Help')}
+            />
+            <ListRow leading={<FileText size={16} color={tokens.color.accentInk} />} title="Legal" subtitle="Terms, Privacy, Refunds" onPress={() => {}} />
+          </ListGroup>
+        </View>
+
+        {/* About */}
+        <View style={styles.section}>
+          <Text style={styles.groupLabel}>About</Text>
+          <ListGroup>
+            <ListRow
+              leading={<Server size={16} color={tokens.color.accentInk} />}
+              title="API server"
+              trailing={<Text style={styles.aboutMeta} numberOfLines={1}>{prettyHost(apiBaseUrl)}</Text>}
+              showChevron={false}
+            />
+            <ListRow
+              leading={<ChevronRight size={16} color={tokens.color.accentInk} />}
+              title="App version"
+              trailing={<Text style={styles.aboutMeta}>2.4.1 (build 482)</Text>}
+              showChevron={false}
+            />
+          </ListGroup>
+        </View>
+
+        {/* Sign out */}
+        <Pressable
+          onPress={confirmSignOut}
+          style={({ pressed }) => [styles.signOut, pressed && { opacity: 0.95 }]}
+        >
+          <LogOut size={16} color={tokens.color.danger} />
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+
+        <Text style={styles.tagline}>ImperialAqua — clean water, on tap.</Text>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionBody}>{children}</View>
-    </View>
-  );
-}
-
-function Row({ icon, label, onPress }: { icon: IconName; label: string; onPress?: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceContainerLow }]}>
-      <View style={styles.rowIcon}>
-        <MaterialIcons name={icon} size={20} color={colors.primary} />
-      </View>
-      <Text style={[type.bodyMdSemi, { color: colors.onSurface, flex: 1 }]}>{label}</Text>
-      <MaterialIcons name="chevron-right" size={22} color={colors.outline} />
-    </Pressable>
-  );
+function prettyHost(url: string) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 const styles = StyleSheet.create({
-  topBar: {
-    height: 56,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(193,198,215,0.4)',
-  },
-  topTitle: { ...type.headlineMd, color: colors.onSurface, fontSize: 22 },
+  root: { flex: 1, backgroundColor: tokens.color.bg },
 
-  identityWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  header: { paddingTop: 12 },
+  eyebrow: { ...tokens.text.label, color: tokens.color.textSubtle },
+  title: { ...tokens.text.displayMd, color: tokens.color.text, marginTop: 2 },
+
   identity: {
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    alignItems: 'center',
+    marginTop: 20,
+    backgroundColor: tokens.color.surface,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'rgba(193,198,215,0.4)',
-    overflow: 'hidden',
-    ...shadow.sm,
+    borderColor: tokens.color.border,
+    padding: 18,
+    ...tokens.shadow.sm,
   },
-  avatarRing: { width: 92, height: 92, alignItems: 'center', justifyContent: 'center' },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.surfaceContainerLowest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#ffffff',
-    ...shadow.sm,
-  },
-  avatarText: { ...type.headlineLg, color: colors.primary, fontSize: 28 },
-  avatarStatus: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: colors.secondary,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#ffffff',
-  },
-  identityChips: { flexDirection: 'row', gap: 8, marginTop: spacing.md, flexWrap: 'wrap', justifyContent: 'center' },
-  identityChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-  },
-  identityChipText: { ...type.labelSm, color: colors.onSurface, fontSize: 10 },
-
-  sectionTitle: { ...type.labelMd, color: colors.onSurfaceVariant, marginBottom: spacing.sm, fontSize: 12 },
-  sectionBody: {
-    backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: radius.xl,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(193,198,215,0.4)',
-  },
-
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceVariant,
-  },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,89,187,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
+    ...tokens.shadow.glow,
   },
+  avatarText: { color: '#FFFFFF', fontFamily: 'Manrope_800ExtraBold', fontSize: 22 },
+  verifyDot: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: tokens.color.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: tokens.color.surface,
+  },
+  name: { fontFamily: 'Manrope_800ExtraBold', fontSize: 18, color: tokens.color.text },
+  muted: { ...tokens.text.bodySm, color: tokens.color.textMuted, marginTop: 2 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 },
 
-  signOutBtn: {
+  section: { marginTop: 24 },
+  groupLabel: { ...tokens.text.label, color: tokens.color.textSubtle, marginBottom: 8, paddingLeft: 4 },
+
+  aboutMeta: { fontSize: 12, color: tokens.color.textMuted, fontFamily: 'Manrope_700Bold' },
+
+  signOut: {
+    marginTop: 32,
+    height: 52,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: tokens.color.borderStrong,
+    backgroundColor: tokens.color.surface,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
-    backgroundColor: colors.errorContainer,
-    borderRadius: radius.lg,
   },
-  signOutText: { ...type.labelMd, color: colors.error, fontSize: 14 },
+  signOutText: { fontFamily: 'Manrope_800ExtraBold', color: tokens.color.danger, fontSize: 14 },
+
+  tagline: {
+    marginTop: 24,
+    textAlign: 'center',
+    fontSize: 12,
+    color: tokens.color.textMuted,
+  },
 });
