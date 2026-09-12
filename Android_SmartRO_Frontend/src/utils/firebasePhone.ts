@@ -51,13 +51,21 @@ const MESSAGES: Record<string, string> = {
   'auth/session-expired': 'That code has expired. Tap resend to get a new one.',
   'auth/quota-exceeded': 'SMS limit reached for today. Try again tomorrow or use your password.',
   'auth/network-request-failed': 'No connection. Check your network and try again.',
-  'auth/missing-client-identifier': 'This build isn’t registered with Firebase yet. Add the app’s SHA-1 fingerprint in the Firebase console.',
+  'auth/missing-client-identifier': 'This build isn’t verified by Firebase. Add the SHA-256 fingerprint in the Firebase console and enable the Play Integrity API.',
+  'auth/app-not-authorized': 'This app isn’t authorised for this Firebase project. Check the SHA-256 fingerprint and the API key restrictions.',
+  'auth/billing-not-enabled': 'Firebase phone auth needs billing enabled on the project (Blaze plan).',
+  'auth/internal-error': 'Firebase rejected the request. Usually a missing SHA-256 fingerprint or Play Integrity not enabled.',
   'auth/no-pending-code': 'That code request expired. Go back and request a new one.',
 };
 
 export function firebaseErrorMessage(e: unknown): string {
-  const code = (e as { code?: string; message?: string })?.code
-    ?? (e as { message?: string })?.message
-    ?? '';
-  return MESSAGES[code] ?? 'Could not verify that number. Please try again.';
+  const err = e as { code?: string; message?: string } | undefined;
+  const code = err?.code ?? err?.message ?? '';
+  const known = MESSAGES[code];
+  if (known) return known;
+  // Showing the raw code beats a generic apology — without it a failure here
+  // is undiagnosable from a screenshot.
+  return `Could not verify that number.
+
+${code || 'unknown error'}`;
 }
