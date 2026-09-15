@@ -14,6 +14,9 @@ import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 let pending: FirebaseAuthTypes.ConfirmationResult | null = null;
 
 export async function sendPhoneCode(e164: string, resend = false): Promise<void> {
+  // A session left over from an abandoned attempt (e.g. a different number)
+  // must not be mistaken for this one in confirmPhoneCode.
+  if (!resend) await auth().signOut().catch(() => undefined);
   pending = await auth().signInWithPhoneNumber(e164, resend);
 }
 
@@ -25,22 +28,34 @@ export function cancelPhoneCode(): void {
   pending = null;
 }
 
-/** Confirms the SMS code and returns a Firebase ID token to exchange with our API. */
-export async function confirmPhoneCode(code: string): Promise<string> {
-  if (!pending) throw new Error('auth/no-pending-code');
+/**
+ * Confirms the SMS code and returns a Firebase ID token to exchange with our API.
+ *
+ * The Firebase session is kept until finishPhoneSignIn(), so if the exchange
+ * fails (API down, timeout) tapping verify again re-sends a fresh token instead
+ * of dead-ending on a confirmation that was already used up.
+ */
+export async function confirmPhoneCode(code: string, e164: string): Promise<string> {
+  let user = auth().currentUser;
 
-  await pending.confirm(code);
-  const user = auth().currentUser;
+  // Already proven: an earlier tap whose API exchange failed, or Android
+  // auto-verifying the SMS in the background.
+  if (user?.phoneNumber !== e164) {
+    if (!pending) throw new Error('auth/no-pending-code');
+    await pending.confirm(code);
+    user = auth().currentUser;
+  }
   if (!user) throw new Error('auth/no-user');
 
-  const idToken = await user.getIdToken();
-  pending = null;
+  return user.getIdToken(true);
+}
 
+/** Call once SmartRO's own tokens are issued. */
+export async function finishPhoneSignIn(): Promise<void> {
+  pending = null;
   // The Firebase session has done its job. SmartRO's own tokens take over from
   // here, so don't leave a second session lying around.
   await auth().signOut().catch(() => undefined);
-
-  return idToken;
 }
 
 const MESSAGES: Record<string, string> = {

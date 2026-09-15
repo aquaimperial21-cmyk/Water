@@ -18,7 +18,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/auth';
 import { apiErrorMessage, setStoredUser, setTokens } from '../../api/client';
 import { Auth } from '../../api/endpoints';
-import { confirmPhoneCode, firebaseErrorMessage, sendPhoneCode } from '../../utils/firebasePhone';
+import {
+  confirmPhoneCode,
+  finishPhoneSignIn,
+  firebaseErrorMessage,
+  sendPhoneCode,
+} from '../../utils/firebasePhone';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
 import { notify } from '../../utils/confirm';
@@ -68,10 +73,11 @@ export function OtpScreen({ navigation, route }: Props) {
     setLoading(true);
     try {
       // Firebase proves the number; our API turns that into a SmartRO session.
-      const idToken = await confirmPhoneCode(otp);
+      const idToken = await confirmPhoneCode(otp, phone);
       // Call the API directly so we can play the success animation BEFORE
       // committing the user to the auth store (which swaps nav stacks).
       const data = await Auth.firebaseLogin(idToken, name.trim(), referralCode.trim() || undefined);
+      void finishPhoneSignIn();
       setVerified(true);
       // Let the success animation play, then commit session.
       setTimeout(async () => {
