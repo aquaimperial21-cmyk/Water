@@ -3,7 +3,16 @@
 // need; user-id is set automatically if the visitor is signed in.
 
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Bell } from 'lucide-react-native';
@@ -39,7 +48,18 @@ export function WaitlistScreen({ route, navigation }: Props) {
   return (
     <SafeAreaView style={styles.root}>
       <Aurora height={300} />
-      <View style={styles.body}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+      {/* Scrollable so the keyboard cannot sit on top of the number field. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         <View style={styles.iconWrap}>
           <Bell size={32} color={tokens.color.accent} />
         </View>
@@ -80,14 +100,15 @@ export function WaitlistScreen({ route, navigation }: Props) {
         >
           <Text style={styles.ctaText}>{busy ? 'Submitting…' : 'Notify me'}</Text>
         </Pressable>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: tokens.color.bg },
-  body: { paddingHorizontal: 20, paddingTop: 12 },
+  body: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
   iconWrap: {
     width: 64, height: 64, borderRadius: 32,
     backgroundColor: tokens.color.accentTint,

@@ -3,6 +3,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -54,7 +55,15 @@ export function PhoneScreen({ navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <View style={styles.body}>
+        {/* Scrollable: the hero pushes the field low, and with the keyboard up
+            on a short screen it would otherwise sit underneath it. */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
           {/* pt-6 flex justify-between */}
           <View style={styles.topRow}>
             <WaterDropLogo size={28} />
@@ -170,7 +179,7 @@ export function PhoneScreen({ navigation }: Props) {
             <Text style={styles.link}>Terms</Text> and{' '}
             <Text style={styles.link}>Privacy Policy</Text>.
           </Text>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -179,7 +188,7 @@ export function PhoneScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: tokens.color.bg },
   // PhoneShell px-5 + content
-  body: { flex: 1, paddingHorizontal: 20 },
+  body: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 32 },
 
   // pt-6
   topRow: {

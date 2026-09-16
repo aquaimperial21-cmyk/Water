@@ -3,6 +3,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -51,7 +52,14 @@ export function PasswordScreen({ navigation, route }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <View style={styles.body}>
+        {/* Scrollable so the keyboard can never cover the password fields. */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
           <View style={styles.topRow}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={styles.back}>
               <ArrowLeft size={20} color={tokens.color.text} />
@@ -159,7 +167,7 @@ export function PasswordScreen({ navigation, route }: Props) {
               </Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -167,7 +175,7 @@ export function PasswordScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: tokens.color.bg },
-  body: { flex: 1, paddingHorizontal: 20 },
+  body: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 32 },
 
   topRow: {
     flexDirection: 'row',
