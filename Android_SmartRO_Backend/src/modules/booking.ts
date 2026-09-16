@@ -5,7 +5,9 @@ import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { termPricePaise } from '../core/pricing';
+import { nextInvoiceNumber } from '../core/invoice';
 import { assertStubPaymentsAllowed } from '../core/payments';
+import { istSlotStart, formatIst } from '../core/time';
 import { applyReferralRewardOnFirstPayment, lookupReferralCreditForUser } from './referral';
 
 const router = Router();
@@ -120,18 +122,18 @@ router.get(
     const days = 6;
     const slots: { start: string; end: string; label: string }[] = [];
     for (let d = 0; d < days; d++) {
-      const day = new Date(earliest);
-      day.setDate(day.getDate() + d);
-      // Three 4-hour windows: 09–13, 13–17, 17–21
+      // Three 4-hour windows in IST: 09–13, 13–17, 17–21. Built as explicit
+      // Indian instants — the server's own clock is UTC in every container we
+      // deploy to, and "9:00" there is the middle of the afternoon here.
       for (const startHour of [9, 13, 17]) {
-        const start = new Date(day);
-        start.setHours(startHour, 0, 0, 0);
+        const start = istSlotStart(earliest, d, startHour);
         if (start.getTime() < earliest.getTime()) continue;
         const end = new Date(start.getTime() + INSTALL_WINDOW_HOURS * 3600 * 1000);
+        const day = formatIst(start, { weekday: 'short', day: 'numeric', month: 'short' });
         slots.push({
           start: start.toISOString(),
           end: end.toISOString(),
-          label: `${start.toDateString().slice(0, 10)} · ${startHour}:00–${startHour + INSTALL_WINDOW_HOURS}:00`,
+          label: `${day} · ${startHour}:00–${startHour + INSTALL_WINDOW_HOURS}:00`,
         });
       }
     }
@@ -199,7 +201,7 @@ router.post(
           userId: b.userId,
           channel: 'INAPP',
           title: 'Installation scheduled',
-          body: `Technician will arrive on ${start.toLocaleString('en-IN')}.`,
+          body: `Technician will arrive on ${formatIst(start, { dateStyle: 'medium', timeStyle: 'short' })}.`,
         },
       });
       return { booking, job, technicianId: tech.id };
@@ -226,13 +228,6 @@ router.post(
 
 const PAYMENT_STUB_DELAY_MS = Number(process.env.PAYMENT_STUB_DELAY_MS ?? 1500);
 
-let invoiceCounter = Date.now() % 100000;
-function nextInvoiceNumber(): string {
-  invoiceCounter += 1;
-  const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
-  return `SMR-${yyyymm}-${String(invoiceCounter).padStart(6, '0')}`;
-}
-
 router.post(
   '/:id/pay',
   authRequired(['CUSTOMER']),
@@ -243,6 +238,7 @@ router.post(
     if (!b || b.userId !== req.auth!.sub) throw NotFound('Booking not found');
     if (!b.agreementSignedAt) throw BadRequest('Agreement must be signed before payment');
     if (b.status === 'PAID' || b.status === 'INSTALLED') return res.json({ data: { booking: b } });
+    if (b.status === 'CANCELLED') throw BadRequest('This booking was cancelled; start a new one');
 
     const totalPaise = b.depositPaise + b.firstPaymentPaise;
     const payment = await prisma.payment.create({
@@ -268,7 +264,7 @@ router.post(
       await tx.invoice.create({
         data: {
           paymentId: updatedPay.id,
-          number: nextInvoiceNumber(),
+          number: await nextInvoiceNumber(tx),
           amountPaise: totalPaise,
           gstPaise,
         },

@@ -15,6 +15,7 @@ import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler, HttpError } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { termPricePaise } from '../core/pricing';
+import { nextInvoiceNumber } from '../core/invoice';
 import { applyReferralRewardOnFirstPayment } from './referral';
 import {
   cancelMandate,
@@ -29,13 +30,6 @@ import {
 } from '../services/razorpay';
 
 const router = Router();
-
-let invoiceCounter = Date.now() % 100000;
-function nextInvoiceNumber(): string {
-  invoiceCounter += 1;
-  const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
-  return `SMR-${yyyymm}-${String(invoiceCounter).padStart(6, '0')}`;
-}
 
 // ─────────────────────────── Create order: booking deposit ───────────────────────────
 
@@ -52,6 +46,7 @@ router.post(
     if (booking.status === 'PAID' || booking.status === 'INSTALLED') {
       throw BadRequest('Booking is already paid');
     }
+    if (booking.status === 'CANCELLED') throw BadRequest('This booking was cancelled; start a new one');
 
     const amountPaise = booking.depositPaise + booking.firstPaymentPaise;
 
@@ -100,6 +95,9 @@ router.post(
       include: { booking: true },
     });
     if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
+    // A closed plan has been refunded and its device collected; paying again
+    // would silently resurrect it.
+    if (sub.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
 
     const targetPlanId = req.body.planId ?? sub.planId;
     const price = await prisma.planCityPrice.findUnique({
@@ -124,6 +122,9 @@ router.post(
         kind: 'RECHARGE',
         amountPaise,
         status: 'INITIATED',
+        // Settlement reads this back: without it the customer pays the annual
+        // price and is granted the monthly term, still on the old plan.
+        targetPlanId,
       },
     });
 
@@ -339,16 +340,26 @@ webhookRouter.post(
     if (event.event === 'payment.captured' || event.event === 'order.paid') {
       const p = event.payload?.payment?.entity;
       if (!p) return res.json({ data: { ok: true, ignored: true } });
+      // Razorpay sends order_id: null for payments made outside an Order
+      // (payment links, QR, dashboard captures). Prisma reads a null filter as
+      // IS NULL, which matches any payment whose order id we never stored —
+      // settling a stranger's booking from an unrelated payment.
+      if (!p.order_id) return res.json({ data: { ok: true, ignored: true, reason: 'no order' } });
       const payment = await prisma.payment.findFirst({ where: { gatewayRef: p.order_id } });
       if (!payment) return res.json({ data: { ok: true, ignored: true, reason: 'unknown order' } });
       if (payment.status === 'SUCCESS') return res.json({ data: { ok: true, alreadyApplied: true } });
+      if (typeof p.amount === 'number' && p.amount !== payment.amountPaise) {
+        // eslint-disable-next-line no-console
+        console.error(`[webhook] amount mismatch on ${p.order_id}: charged ${p.amount}, expected ${payment.amountPaise}`);
+        return res.json({ data: { ok: true, ignored: true, reason: 'amount mismatch' } });
+      }
       await settlePayment(payment.id, p.id);
       return res.json({ data: { ok: true } });
     }
 
     if (event.event === 'payment.failed') {
       const p = event.payload?.payment?.entity;
-      if (!p) return res.json({ data: { ok: true, ignored: true } });
+      if (!p || !p.order_id) return res.json({ data: { ok: true, ignored: true } });
       const payment = await prisma.payment.findFirst({ where: { gatewayRef: p.order_id } });
       if (payment && payment.status === 'INITIATED') {
         await prisma.payment.update({ where: { id: payment.id }, data: { status: 'FAILED' } });
@@ -412,6 +423,12 @@ webhookRouter.post(
         return res.json({ data: { ok: true, ignored: true } });
       }
 
+      // Razorpay redelivers a webhook until it gets a 2xx, and retries after
+      // timeouts it already delivered. Without this the plan is extended twice
+      // and the customer is invoiced twice for one debit.
+      const already = await prisma.payment.findFirst({ where: { gatewayRef: `${s.id}:${p.id}` } });
+      if (already) return res.json({ data: { ok: true, alreadyApplied: true } });
+
       // Create a RECHARGE payment row + extend expiresAt the same way the
       // manual recharge path does.
       const payment = await prisma.payment.create({
@@ -422,12 +439,13 @@ webhookRouter.post(
           amountPaise: p.amount ?? 0,
           status: 'SUCCESS',
           gatewayRef: `${s.id}:${p.id}`,
+          gatewayPaymentId: p.id,
         },
       });
       await prisma.invoice.create({
         data: {
           paymentId: payment.id,
-          number: nextInvoiceNumber(),
+          number: await nextInvoiceNumber(prisma),
           amountPaise: payment.amountPaise,
           gstPaise: Math.round(payment.amountPaise * 0.18),
         },
@@ -452,18 +470,33 @@ webhookRouter.post(
     // ── Refunds ──────────────────────────────────────────────
     if (event.event === 'refund.processed' || event.event === 'refund.created') {
       const r = event.payload?.refund?.entity;
-      if (!r) return res.json({ data: { ok: true, ignored: true } });
-      // Mark any INITIATED refund payment as SUCCESS. Match by the linked
-      // payment_id when we recorded gatewayRef = "order:payment" earlier.
-      const refund = await prisma.payment.findFirst({
-        where: { kind: 'REFUND', status: 'INITIATED', gatewayRef: { contains: r.payment_id } },
-      });
-      if (refund) {
-        await prisma.payment.update({
-          where: { id: refund.id },
-          data: { status: 'SUCCESS', gatewayRef: `${refund.gatewayRef}:${r.id}` },
-        });
+      if (!r || !r.payment_id) return res.json({ data: { ok: true, ignored: true } });
+      // Money is only back with the customer once the refund is processed;
+      // refund.created just means it was queued at the gateway.
+      if (event.event === 'refund.created') {
+        return res.json({ data: { ok: true, ignored: true, reason: 'not processed yet' } });
       }
+      // Match on the payment being refunded, which cancel stores on the refund
+      // row. The old lookup searched gatewayRef for the Razorpay payment id,
+      // but that column holds "REFUND_PENDING_<timestamp>" — it never matched,
+      // so every refund sat INITIATED forever.
+      const refund = await prisma.payment.findFirst({
+        where: { kind: 'REFUND', status: 'INITIATED', gatewayPaymentId: r.payment_id },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!refund) {
+        // eslint-disable-next-line no-console
+        console.warn(`[webhook] refund ${r.id} for payment ${r.payment_id} matched no queued refund`);
+        return res.json({ data: { ok: true, ignored: true, reason: 'no queued refund' } });
+      }
+      if (typeof r.amount === 'number' && r.amount !== refund.amountPaise) {
+        // eslint-disable-next-line no-console
+        console.error(`[webhook] refund ${r.id} amount ${r.amount} != queued ${refund.amountPaise}`);
+      }
+      await prisma.payment.update({
+        where: { id: refund.id },
+        data: { status: 'SUCCESS', gatewayRef: r.id },
+      });
       return res.json({ data: { ok: true } });
     }
 
@@ -489,13 +522,15 @@ async function settlePayment(paymentId: string, gatewayPaymentId: string) {
 
     const updatedPay = await tx.payment.update({
       where: { id: payment.id },
-      data: { status: 'SUCCESS', gatewayRef: `${payment.gatewayRef}:${gatewayPaymentId}` },
+      // gatewayRef keeps holding the order id — both /payments/verify and the
+      // webhook find the row by it.
+      data: { status: 'SUCCESS', gatewayPaymentId },
     });
 
     await tx.invoice.create({
       data: {
         paymentId: payment.id,
-        number: nextInvoiceNumber(),
+        number: await nextInvoiceNumber(tx),
         amountPaise: payment.amountPaise,
         gstPaise: Math.round(payment.amountPaise * 0.18),
       },
@@ -537,12 +572,15 @@ async function settlePayment(paymentId: string, gatewayPaymentId: string) {
     if (payment.kind === 'RECHARGE' && payment.subscription) {
       const sub = payment.subscription;
       const base = sub.expiresAt > new Date() ? sub.expiresAt : new Date();
-      const plan = await tx.plan.findUnique({ where: { id: sub.planId } });
+      // The customer may have paid to switch plans. Grant the term they were
+      // charged for, and actually move them onto it.
+      const planId = payment.targetPlanId ?? sub.planId;
+      const plan = await tx.plan.findUnique({ where: { id: planId } });
       if (!plan) throw NotFound('Plan not found');
       const newExpiresAt = new Date(base.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
       const updatedSub = await tx.subscription.update({
         where: { id: sub.id },
-        data: { expiresAt: newExpiresAt, status: 'ACTIVE' },
+        data: { expiresAt: newExpiresAt, status: 'ACTIVE', planId },
       });
       await tx.notification.create({
         data: {

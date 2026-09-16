@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Auth } from '../api/endpoints';
-import { clearTokens, getStoredUser, setStoredUser, setTokens } from '../api/client';
+import { clearTokens, getRefreshToken, getStoredUser, setStoredUser, setTokens } from '../api/client';
 
 export interface AuthUser {
   id: string;
@@ -39,7 +39,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: data.user });
   },
   signOut: async () => {
-    try { await Auth.logout(); } catch { /* ignore */ }
+    // Send the refresh token so the server revokes this device's session.
+    // Without it the token stayed valid for its full 30 days.
+    try { await Auth.logout((await getRefreshToken()) ?? undefined); } catch { /* ignore */ }
     await clearTokens();
     set({ user: null });
   },

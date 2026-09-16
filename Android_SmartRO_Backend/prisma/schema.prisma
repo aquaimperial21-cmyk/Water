@@ -247,12 +247,21 @@ model Payment {
   kind           String // DEPOSIT | RECHARGE | REFUND
   amountPaise    Int
   status         String        @default("INITIATED") // INITIATED | SUCCESS | FAILED
+  // The gateway ORDER id, and nothing else: /payments/verify and the webhook
+  // both look a payment up by it, so it must never be rewritten.
   gatewayRef     String?
+  // The gateway PAYMENT id, filled in on settlement. On a REFUND row it holds
+  // the payment being refunded, which is how the refund webhook finds it.
+  gatewayPaymentId String?
+  // RECHARGE only: the plan the customer paid to move to, which can differ
+  // from the subscription's current plan.
+  targetPlanId   String?
   invoice        Invoice?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([userId, status])
+  @@index([gatewayPaymentId])
 }
 
 model Invoice {

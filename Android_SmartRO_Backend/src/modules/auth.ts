@@ -413,7 +413,18 @@ router.post(
   authRequired(),
   validateBody(z.object({ refreshToken: z.string().min(1).optional() })),
   asyncHandler(async (req, res) => {
-    if (req.body.refreshToken) await revokeRefreshToken(req.body.refreshToken);
+    // The app calls this with no body, so the old "revoke it if they send it"
+    // meant signing out revoked nothing: the refresh token stayed valid for 30
+    // days, and anyone holding it could mint new access tokens. Logging out is
+    // the server's job, not the client's.
+    if (req.body.refreshToken) {
+      await revokeRefreshToken(req.body.refreshToken);
+    } else {
+      await prisma.refreshToken.updateMany({
+        where: { userId: req.auth!.sub, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
     res.json({ data: { ok: true } });
   })
 );

@@ -46,7 +46,7 @@ services:
       - key: OTP_TTL_SECONDS
         value: 300
       - key: OTP_DEV_RETURN
-        value: "true"               # OTPs returned in API response — testing only
+        value: "false"              # true echoes OTPs to callers; env.ts refuses to boot on it
       - key: MESSAGING_DRIVER
         value: stub
       - key: PAYMENT_DRIVER
@@ -55,8 +55,11 @@ services:
         value: 1500
       - key: PUSH_DRIVER
         value: stub
+      # Phone login cannot verify tokens without this; env.ts refuses to boot.
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
       - key: CORS_ORIGINS
-        value: "*"                  # tighten to your Vercel URL after first deploy
+        sync: false                 # set to the admin console origin; "*" refuses to boot
       - key: TRIAL_DAYS
         value: 7
       - key: INSTALL_LEAD_HOURS

@@ -5,6 +5,7 @@ import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, Forbidden, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { termPricePaise } from '../core/pricing';
+import { nextInvoiceNumber } from '../core/invoice';
 import { assertStubPaymentsAllowed } from '../core/payments';
 import { cancelMandate } from '../services/razorpay';
 
@@ -61,6 +62,10 @@ router.post(
       include: { plan: true, booking: true },
     });
     if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
+    // A cancelled plan has been refunded and the device collected. Recharging
+    // it charged the customer and flipped it back to ACTIVE.
+    if (sub.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
+    if (sub.status === 'PAUSED') throw BadRequest('Resume the plan before recharging it');
 
     const targetPlanId = req.body.planId ?? sub.planId;
     const price = await prisma.planCityPrice.findUnique({
@@ -86,6 +91,7 @@ router.post(
         amountPaise,
         status: 'INITIATED',
         gatewayRef: `STUB_${Date.now()}`,
+        targetPlanId,
       },
     });
     await new Promise((r) => setTimeout(r, PAYMENT_STUB_DELAY_MS));
@@ -98,7 +104,7 @@ router.post(
       await tx.invoice.create({
         data: {
           paymentId: payment.id,
-          number: `SMR-${Date.now()}`,
+          number: await nextInvoiceNumber(tx),
           amountPaise,
           gstPaise: Math.round(amountPaise * 0.18),
         },
@@ -216,6 +222,19 @@ router.post(
     // Stop the mandate BEFORE closing the row. Left live, Razorpay keeps
     // debiting a cancelled, refunded customer every cycle, and the charge
     // webhook flips the subscription back to ACTIVE.
+    // The refund webhook arrives knowing only the gateway payment it reverses,
+    // so the queued refund has to carry that id or it can never be matched.
+    const originalPayment = await prisma.payment.findFirst({
+      where: {
+        userId: sub.userId,
+        bookingId: sub.bookingId,
+        kind: 'DEPOSIT',
+        status: 'SUCCESS',
+        gatewayPaymentId: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
     let mandateCancelled = false;
     if (sub.autopayId) {
       try {
@@ -241,6 +260,7 @@ router.post(
           // Razorpay refund webhook (see modules/payment.ts).
           status: 'INITIATED',
           gatewayRef: `REFUND_PENDING_${Date.now()}`,
+          gatewayPaymentId: originalPayment?.gatewayPaymentId ?? null,
         },
       });
       const updatedSub = await tx.subscription.update({
