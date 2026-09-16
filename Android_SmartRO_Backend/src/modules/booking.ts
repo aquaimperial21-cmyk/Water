@@ -4,6 +4,8 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { termPricePaise } from '../core/pricing';
+import { assertStubPaymentsAllowed } from '../core/payments';
 import { applyReferralRewardOnFirstPayment, lookupReferralCreditForUser } from './referral';
 
 const router = Router();
@@ -26,8 +28,12 @@ router.post(
       where: {
         planId_cityId_productId: { planId: body.planId, cityId: body.cityId, productId: body.productId },
       },
+      include: { plan: true },
     });
     if (!price) throw BadRequest('No pricing for that product/plan/city combination');
+
+    // The customer is buying the whole term, not one month of it.
+    const rentPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationDays);
 
     // Referral credit applies to first-month rent only (capped at the rent so
     // we never end up with negative invoices).
@@ -43,7 +49,7 @@ router.post(
         cityId: body.cityId,
         addressId: body.addressId,
         depositPaise: price.depositPaise,
-        firstPaymentPaise: Math.max(0, price.monthlyPricePaise - credit),
+        firstPaymentPaise: Math.max(0, rentPaise - credit),
         installationSlot: body.installationSlot ? new Date(body.installationSlot) : undefined,
         status: 'PENDING_KYC',
         referralCode: referee?.referredByCode ?? null,
@@ -231,6 +237,8 @@ router.post(
   '/:id/pay',
   authRequired(['CUSTOMER']),
   asyncHandler(async (req, res) => {
+    // No gateway is involved below, so this must never run where real money is.
+    assertStubPaymentsAllowed();
     const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { plan: true } });
     if (!b || b.userId !== req.auth!.sub) throw NotFound('Booking not found');
     if (!b.agreementSignedAt) throw BadRequest('Agreement must be signed before payment');
@@ -289,7 +297,9 @@ router.post(
           trialEndsAt,
         },
       });
-      await tx.booking.update({ where: { id: b.id }, data: { status: 'INSTALLED' } });
+      // The booking stays PAID: INSTALLED is the technician's word, set when the
+      // INSTALL job is marked DONE. Flagging it here blocked the install-slot
+      // screen the app opens on the very next tap.
       await tx.notification.create({
         data: {
           userId: b.userId,

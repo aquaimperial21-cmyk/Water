@@ -125,6 +125,18 @@ router.post(
   validateBody(otpVerifySchema),
   asyncHandler(async (req, res) => {
     const body = req.body as z.infer<typeof otpVerifySchema>;
+
+    // A 6-digit code with unlimited guesses is not a secret. Without this, an
+    // attacker walks the whole 000000-999999 space against any number —
+    // including staff — and the token below carries that account's role.
+    const limitKey = `otpverify:${body.phone}`;
+    const limit = rateLimitHit(limitKey, 5, 900);
+    if (!limit.allowed) {
+      throw Unauthorized(
+        `Too many incorrect codes. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.`
+      );
+    }
+
     const attempt = await prisma.otpAttempt.findFirst({
       where: { phone: body.phone, otp: body.otp, consumed: false, expiresAt: { gte: new Date() } },
       orderBy: { createdAt: 'desc' },
@@ -132,6 +144,7 @@ router.post(
     if (!attempt) throw Unauthorized('Invalid or expired OTP');
 
     await prisma.otpAttempt.update({ where: { id: attempt.id }, data: { consumed: true } });
+    clearRateLimit(limitKey);
 
     // Referral: validate the code refers to an existing user (and not the
     // signing-in user themselves). Apply only on first signup, not relogin.
@@ -168,6 +181,13 @@ router.post(
         },
       });
     }
+
+    // Customer sign-in only. Staff sign in at /auth/admin/login with a
+    // password; minting an ADMIN token here would make an SMS code the only
+    // thing between an attacker and the ops console. Same checks the other
+    // two login paths already make.
+    if (user.kind !== 'CUSTOMER') throw Unauthorized('Invalid or expired OTP');
+    if (user.status !== 'ACTIVE') throw Unauthorized('This account is not active');
 
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 

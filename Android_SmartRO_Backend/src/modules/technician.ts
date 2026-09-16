@@ -105,6 +105,15 @@ router.patch(
       },
     });
 
+    // A booking becomes INSTALLED when the install actually happened. Payment
+    // used to set this, which left every paying customer unable to book a slot.
+    if (job.type === 'INSTALL' && job.bookingId && req.body.status === 'DONE') {
+      await prisma.booking.update({
+        where: { id: job.bookingId },
+        data: { status: 'INSTALLED' },
+      });
+    }
+
     if (job.ticket) {
       const ticketStatus =
         req.body.status === 'IN_PROGRESS' ? 'IN_PROGRESS' :

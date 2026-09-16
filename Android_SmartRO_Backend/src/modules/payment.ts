@@ -14,6 +14,7 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler, HttpError } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { termPricePaise } from '../core/pricing';
 import { applyReferralRewardOnFirstPayment } from './referral';
 import {
   cancelMandate,
@@ -109,21 +110,25 @@ router.post(
           productId: sub.productId,
         },
       },
+      include: { plan: true },
     });
     if (!price) throw BadRequest('No pricing for this plan/city/product combination');
+
+    // Charge the term being granted below, not one month of it.
+    const amountPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationDays);
 
     const payment = await prisma.payment.create({
       data: {
         userId: sub.userId,
         subscriptionId: sub.id,
         kind: 'RECHARGE',
-        amountPaise: price.monthlyPricePaise,
+        amountPaise,
         status: 'INITIATED',
       },
     });
 
     const order = await createOrder({
-      amountPaise: price.monthlyPricePaise,
+      amountPaise,
       receipt: `pay_${payment.id}`,
       notes: {
         paymentId: payment.id,
@@ -399,6 +404,13 @@ webhookRouter.post(
         include: { plan: true },
       });
       if (!sub) return res.json({ data: { ok: true, ignored: true } });
+      // A cancelled plan must never be revived by a late mandate debit: the
+      // customer has already been refunded and their device collected.
+      if (sub.status === 'CLOSED') {
+        // eslint-disable-next-line no-console
+        console.warn(`[webhook] mandate ${s.id} charged a CLOSED subscription ${sub.id}; refund it`);
+        return res.json({ data: { ok: true, ignored: true } });
+      }
 
       // Create a RECHARGE payment row + extend expiresAt the same way the
       // manual recharge path does.
@@ -509,7 +521,8 @@ async function settlePayment(paymentId: string, gatewayPaymentId: string) {
           trialEndsAt,
         },
       });
-      await tx.booking.update({ where: { id: b.id }, data: { status: 'INSTALLED' } });
+      // Paid, not installed — the technician's INSTALL job sets INSTALLED, and
+      // the install-slot screen refuses a booking that is already INSTALLED.
       await tx.notification.create({
         data: {
           userId: b.userId,

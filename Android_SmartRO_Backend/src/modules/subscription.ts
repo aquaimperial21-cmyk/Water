@@ -4,6 +4,9 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, Forbidden, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { termPricePaise } from '../core/pricing';
+import { assertStubPaymentsAllowed } from '../core/payments';
+import { cancelMandate } from '../services/razorpay';
 
 const router = Router();
 
@@ -51,6 +54,8 @@ router.post(
   authRequired(['CUSTOMER']),
   validateBody(z.object({ planId: z.string().optional() }).default({})),
   asyncHandler(async (req, res) => {
+    // Extends the plan without charging anything — dev only.
+    assertStubPaymentsAllowed();
     const sub = await prisma.subscription.findUnique({
       where: { id: req.params.id },
       include: { plan: true, booking: true },
@@ -70,12 +75,15 @@ router.post(
     });
     if (!price) throw BadRequest('No pricing found for this plan/city/product combination');
 
+    // The recharge below grants a whole term, so charge for a whole term.
+    const amountPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationDays);
+
     const payment = await prisma.payment.create({
       data: {
         userId: sub.userId,
         subscriptionId: sub.id,
         kind: 'RECHARGE',
-        amountPaise: price.monthlyPricePaise,
+        amountPaise,
         status: 'INITIATED',
         gatewayRef: `STUB_${Date.now()}`,
       },
@@ -91,8 +99,8 @@ router.post(
         data: {
           paymentId: payment.id,
           number: `SMR-${Date.now()}`,
-          amountPaise: price.monthlyPricePaise,
-          gstPaise: Math.round(price.monthlyPricePaise * 0.18),
+          amountPaise,
+          gstPaise: Math.round(amountPaise * 0.18),
         },
       });
       const updated = await tx.subscription.update({
@@ -205,6 +213,22 @@ router.post(
     const totalFirstMonth = sub.booking.firstPaymentPaise;
     const refundPaise = inTrial ? totalDeposit + totalFirstMonth : totalDeposit;
 
+    // Stop the mandate BEFORE closing the row. Left live, Razorpay keeps
+    // debiting a cancelled, refunded customer every cycle, and the charge
+    // webhook flips the subscription back to ACTIVE.
+    let mandateCancelled = false;
+    if (sub.autopayId) {
+      try {
+        await cancelMandate(sub.autopayId, false);
+        mandateCancelled = true;
+      } catch (e) {
+        // Don't strand the cancellation: record it and let ops clear the
+        // mandate, but make the failure loud.
+        // eslint-disable-next-line no-console
+        console.error(`[cancel] could not cancel mandate ${sub.autopayId} for subscription ${sub.id}`, e);
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const refund = await tx.payment.create({
         data: {
@@ -225,6 +249,9 @@ router.post(
           status: 'CLOSED',
           cancelledAt: now,
           cancelReason: req.body.reason ?? (inTrial ? 'TRIAL_CANCEL' : 'POST_LOCKIN_CANCEL'),
+          ...(sub.autopayId
+            ? { autopayStatus: mandateCancelled ? 'CANCELLED' : 'CANCEL_FAILED' }
+            : {}),
         },
       });
       await tx.booking.update({
