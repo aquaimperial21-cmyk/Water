@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -80,12 +79,24 @@ export function OtpScreen({ navigation, route }: Props) {
   }, [seconds]);
 
   function setDigit(idx: number, value: string) {
-    const v = value.replace(/[^0-9]/g, '').slice(0, 1);
+    const clean = value.replace(/[^0-9]/g, '');
+    if (clean.length > 1) {
+      // A paste, or the keyboard's "from SMS" suggestion, delivers the whole
+      // code into one box. Spread it across the row instead of keeping the
+      // first digit and dropping the rest.
+      const next = [...digits];
+      clean.slice(0, 6 - idx).split('').forEach((ch, i) => { next[idx + i] = ch; });
+      setDigits(next);
+      const lastFilled = Math.min(idx + clean.length, 6) - 1;
+      if (lastFilled >= 5) inputs.current[5]?.blur();
+      else inputs.current[lastFilled + 1]?.focus();
+      return;
+    }
     const next = [...digits];
-    next[idx] = v;
+    next[idx] = clean;
     setDigits(next);
-    if (v && idx < 5) inputs.current[idx + 1]?.focus();
-    if (!v && idx > 0) inputs.current[idx - 1]?.focus();
+    if (clean && idx < 5) inputs.current[idx + 1]?.focus();
+    if (!clean && idx > 0) inputs.current[idx - 1]?.focus();
   }
 
   async function onVerify() {
@@ -145,7 +156,9 @@ export function OtpScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Aurora height={420} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Android too: this keyboard draws over the window instead of
+        // resizing it, so leaving this undefined leaves fields underneath it.
+        behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView
@@ -217,7 +230,11 @@ export function OtpScreen({ navigation, route }: Props) {
                       value={d}
                       onChangeText={(v) => setDigit(idx, v)}
                       keyboardType="number-pad"
-                      maxLength={1}
+                      // Six, not one: a suggested or pasted code must reach
+                      // setDigit whole, or the native input truncates it first.
+                      maxLength={6}
+                      autoComplete={idx === 0 ? 'sms-otp' : 'off'}
+                      textContentType={idx === 0 ? 'oneTimeCode' : 'none'}
                       autoFocus={idx === 0}
                       selectTextOnFocus
                       selectionColor={tokens.color.accent}

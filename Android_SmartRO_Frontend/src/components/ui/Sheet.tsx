@@ -2,7 +2,6 @@ import React from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -44,7 +43,9 @@ export function Sheet({ open, onClose, title, description, children }: Props) {
               <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
             </MotiView>
             <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              // Android too: this keyboard draws over the window instead of
+              // resizing it, so leaving this undefined leaves fields underneath it.
+              behavior="padding"
               style={styles.kav}
               pointerEvents="box-none"
             >

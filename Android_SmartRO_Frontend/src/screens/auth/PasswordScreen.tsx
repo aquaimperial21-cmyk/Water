@@ -1,7 +1,7 @@
 import React from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +29,17 @@ export function PasswordScreen({ navigation, route }: Props) {
   const [show, setShow] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [focused, setFocused] = React.useState<'phone' | 'password' | null>(null);
+  const scrollRef = React.useRef<ScrollView>(null);
+  const fieldsY = React.useRef(0);
+
+  // Without this the keyboard covers the password field and the Sign in button:
+  // the lock hero leaves them in the bottom half, and a plain View cannot scroll.
+  React.useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, fieldsY.current - 16), animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   const signInWithPassword = useAuthStore((s) => s.signInWithPassword);
   const valid = phone.length === 10 && password.length > 0;
@@ -49,11 +60,14 @@ export function PasswordScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Aurora height={400} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Android too: this keyboard draws over the window instead of
+        // resizing it, so leaving this undefined leaves fields underneath it.
+        behavior="padding"
         style={{ flex: 1 }}
       >
         {/* Scrollable so the keyboard can never cover the password fields. */}
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
@@ -79,7 +93,10 @@ export function PasswordScreen({ navigation, route }: Props) {
             Sign in with the password you set on this account.
           </Text>
 
-          <View style={styles.fieldStack}>
+          <View
+            style={styles.fieldStack}
+            onLayout={(e) => { fieldsY.current = e.nativeEvent.layout.y; }}
+          >
             <View>
               <Text style={styles.fieldLabel}>Mobile number</Text>
               <View style={[styles.inputRow, focused === 'phone' && styles.inputRowFocus]}>

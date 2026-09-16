@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -111,7 +110,9 @@ export function NewTicketScreen({ route, navigation }: Props) {
       </SafeAreaView>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Android too: this keyboard draws over the window instead of
+        // resizing it, so leaving this undefined leaves fields underneath it.
+        behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView

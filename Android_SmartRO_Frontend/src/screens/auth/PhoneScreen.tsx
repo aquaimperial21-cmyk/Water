@@ -1,7 +1,7 @@
 import React from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +28,18 @@ export function PhoneScreen({ navigation }: Props) {
   const [phone, setPhone] = React.useState(__DEV__ ? '9876543210' : '');
   const [loading, setLoading] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
+  const scrollRef = React.useRef<ScrollView>(null);
+  const fieldsY = React.useRef(0);
+
+  // The hero art pushes the number field into the bottom half of the screen,
+  // which is exactly where the keyboard opens. adjustResize alone does not save
+  // it: this screen has no scroll view, so the field stays under the keyboard.
+  React.useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, fieldsY.current - 16), animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   const valid = phone.length === 10;
 
@@ -52,12 +64,15 @@ export function PhoneScreen({ navigation }: Props) {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Aurora height={460} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Android too: this keyboard draws over the window instead of
+        // resizing it, so leaving this undefined leaves fields underneath it.
+        behavior="padding"
         style={{ flex: 1 }}
       >
         {/* Scrollable: the hero pushes the field low, and with the keyboard up
             on a short screen it would otherwise sit underneath it. */}
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
@@ -95,7 +110,10 @@ export function PhoneScreen({ navigation }: Props) {
           </Text>
 
           {/* mt-10 space-y-4 (children gap 16) */}
-          <View style={styles.fieldStack}>
+          <View
+            style={styles.fieldStack}
+            onLayout={(e) => { fieldsY.current = e.nativeEvent.layout.y; }}
+          >
             {/* label "Mobile number" + mt-2 input row */}
             <View>
               <Text style={styles.fieldLabel}>Mobile number</Text>
