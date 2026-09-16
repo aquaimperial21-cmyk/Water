@@ -116,6 +116,12 @@ api.interceptors.response.use(
   }
 );
 
+/** True when the request never reached the server: no connection, DNS/TLS, timeout. */
+export function isNetworkError(e: unknown): boolean {
+  const ax = e as AxiosError | undefined;
+  return Boolean(ax?.isAxiosError) && !ax?.response;
+}
+
 export function apiErrorMessage(e: unknown): string {
   const ax = e as AxiosError<{ error?: { message?: string } }>;
   return ax?.response?.data?.error?.message ?? (e as Error)?.message ?? 'Something went wrong';

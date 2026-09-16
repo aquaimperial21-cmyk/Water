@@ -50,6 +50,18 @@ export async function confirmPhoneCode(code: string, e164: string): Promise<stri
   return user.getIdToken(true);
 }
 
+/**
+ * Android can verify the number on its own (instant verification, or reading the
+ * SMS in the background). No code ever reaches the user then, so the code screen
+ * has to hear about it or it waits forever for six digits that never arrive.
+ * Returns an unsubscribe function.
+ */
+export function onAutoVerified(e164: string, cb: () => void): () => void {
+  return auth().onAuthStateChanged((user) => {
+    if (user?.phoneNumber === e164) cb();
+  });
+}
+
 /** Call once SmartRO's own tokens are issued. */
 export async function finishPhoneSignIn(): Promise<void> {
   pending = null;

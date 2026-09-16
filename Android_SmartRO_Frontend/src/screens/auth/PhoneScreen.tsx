@@ -22,7 +22,9 @@ import type { RootStackParamList } from '../../navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'Phone'>;
 
 export function PhoneScreen({ navigation }: Props) {
-  const [phone, setPhone] = React.useState('9876543210');
+  // Never pre-fill in a shipped build: the seeded demo number belongs to a real
+  // person in production, and the CTA lights up on it before the user types.
+  const [phone, setPhone] = React.useState(__DEV__ ? '9876543210' : '');
   const [loading, setLoading] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
 

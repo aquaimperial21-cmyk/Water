@@ -22,7 +22,7 @@ import {
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Subscription, Subscriptions, Tickets, Payments } from '../../api/endpoints';
+import { Invoice, Invoices, Subscription, Subscriptions, Ticket, Tickets, Payments } from '../../api/endpoints';
 import { Linking } from 'react-native';
 import { tokens } from '@theme/tokens';
 import { Aurora, EmptyState, Pill, ProgressRing, Skeleton, WaterDrop } from '@ui/index';
@@ -32,15 +32,6 @@ import type { RootStackParamList } from '../../navigation';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const BILLS = [
-  { month: 'Nov', amount: 69900, paid: true },
-  { month: 'Dec', amount: 69900, paid: true },
-  { month: 'Jan', amount: 69900, paid: true },
-  { month: 'Feb', amount: 69900, paid: true },
-  { month: 'Mar', amount: 69900, paid: true },
-  { month: 'Apr', amount: 69900, paid: true },
-];
-
 type TimelineItem = {
   id: string;
   date: string;
@@ -49,17 +40,32 @@ type TimelineItem = {
   state: 'done' | 'upcoming' | 'inProgress';
 };
 
-const TIMELINE: TimelineItem[] = [
-  { id: 't1', date: '2026-05-04', title: 'Quarterly filter check', meta: 'Technician: Ramesh K.', state: 'upcoming' },
-  { id: 't2', date: '2026-05-12', title: 'Plan renews', meta: 'Auto-debit ₹699', state: 'upcoming' },
-  { id: 't3', date: '2026-04-02', title: 'Pre-filter replaced', meta: 'Done in 22 min', state: 'done' },
-  { id: 't4', date: '2026-02-14', title: 'Annual deep service', meta: 'TDS post: 48 ppm', state: 'done' },
-  { id: 't5', date: '2025-08-12', title: 'Installation complete', meta: 'Welcome to ImperialAqua', state: 'done' },
-];
+const TICKET_TITLE: Record<string, string> = {
+  FILTER: 'Filter / water-quality check',
+  INSTALL: 'Installation',
+  SERVICE: 'Service visit',
+  REPAIR: 'Repair',
+  BILLING: 'Billing query',
+  DELIVERY: 'Delivery',
+  OTHER: 'Support request',
+};
+
+/** Real service history: the customer's own tickets, newest first. */
+function ticketsToTimeline(tickets: Ticket[]): TimelineItem[] {
+  return tickets.slice(0, 6).map((t) => ({
+    id: t.id,
+    date: t.createdAt,
+    title: TICKET_TITLE[t.category] ?? 'Service request',
+    meta: t.status.replace(/_/g, ' ').toLowerCase(),
+    state: t.status === 'RESOLVED' || t.status === 'CLOSED' ? 'done' : 'inProgress',
+  }));
+}
 
 export function MyPlanScreen() {
   const navigation = useNavigation<Nav>();
   const [subs, setSubs] = React.useState<Subscription[] | null>(null);
+  const [invoices, setInvoices] = React.useState<Invoice[]>([]);
+  const [timeline, setTimeline] = React.useState<TimelineItem[]>([]);
   const [refreshing, setRefreshing] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
@@ -72,12 +78,30 @@ export function MyPlanScreen() {
     } finally {
       setRefreshing(false);
     }
+    // Bills and history are secondary: a failure here hides those sections
+    // rather than blocking the plan itself.
+    Invoices.mine().then(setInvoices).catch(() => setInvoices([]));
+    Tickets.mine().then((t) => setTimeline(ticketsToTimeline(t))).catch(() => setTimeline([]));
   }, []);
 
   useFocusEffect(React.useCallback(() => { void load(); }, [load]));
   React.useEffect(() => { void load(); }, [load]);
 
   const sub = subs?.find((s) => s.status === 'ACTIVE') ?? subs?.[0];
+
+  // Oldest to newest, last six — the chart reads left to right.
+  const bills = React.useMemo(
+    () =>
+      [...invoices]
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .slice(-6)
+        .map((inv) => ({
+          id: inv.id,
+          amount: inv.amountPaise,
+          month: new Date(inv.createdAt).toLocaleDateString('en-IN', { month: 'short' }),
+        })),
+    [invoices]
+  );
 
   const onRecharge = React.useCallback(async () => {
     if (!sub) return;
@@ -259,7 +283,8 @@ export function MyPlanScreen() {
           </>
         )}
 
-        {/* Timeline */}
+        {/* Timeline — only what actually happened on this account */}
+        {timeline.length > 0 && (
         <View style={{ marginTop: 32 }}>
           <View style={styles.sectionHead}>
             <View style={{ flex: 1 }}>
@@ -270,7 +295,7 @@ export function MyPlanScreen() {
 
           <View style={styles.timelineWrap}>
             <View style={styles.timelineLine} />
-            {TIMELINE.map((t) => (
+            {timeline.map((t) => (
               <View key={t.id} style={styles.timelineItem}>
                 <View
                   style={[
@@ -311,26 +336,24 @@ export function MyPlanScreen() {
             ))}
           </View>
         </View>
+        )}
 
-        {/* Bills */}
+        {/* Bills — real invoices only; hidden until the account has one */}
+        {bills.length > 0 && (
         <View style={styles.billsCard}>
           <View style={styles.sectionHead}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrowMuted}>Last 6 months</Text>
+              <Text style={styles.eyebrowMuted}>Recent</Text>
               <Text style={styles.sectionTitle}>Bill history</Text>
             </View>
-            <Pressable style={styles.viewAll}>
-              <Text style={styles.viewAllText}>View all</Text>
-              <ChevronRight size={14} color={tokens.color.accent} />
-            </Pressable>
           </View>
 
           <View style={styles.billsRow}>
-            {BILLS.map((b) => {
-              const max = Math.max(...BILLS.map((x) => x.amount));
-              const h = (b.amount / max) * 100;
+            {bills.map((b) => {
+              const max = Math.max(...bills.map((x) => x.amount));
+              const h = max > 0 ? (b.amount / max) * 100 : 0;
               return (
-                <View key={b.month} style={styles.billCol}>
+                <View key={b.id} style={styles.billCol}>
                   <Text style={styles.billAmount}>{paiseToInr(b.amount)}</Text>
                   <View style={styles.billBarTrack}>
                     <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -348,6 +371,7 @@ export function MyPlanScreen() {
             })}
           </View>
         </View>
+        )}
 
         {/* Side door — water test */}
         <Pressable

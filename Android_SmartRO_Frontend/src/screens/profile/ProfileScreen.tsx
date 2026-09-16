@@ -21,7 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../store/auth';
-import { Auth, Referrals, ReferralInfo } from '../../api/endpoints';
+import { Auth, Kyc, Referrals, ReferralInfo } from '../../api/endpoints';
 import { apiBaseUrl, apiErrorMessage } from '../../api/client';
 import { tokens } from '@theme/tokens';
 import { Aurora, ListGroup, ListRow, Pill } from '@ui/index';
@@ -35,11 +35,27 @@ export function ProfileScreen() {
     hasPassword?: boolean;
   } | null>(null);
   const [referral, setReferral] = React.useState<ReferralInfo | null>(null);
+  // Real KYC state — the badge used to be hardcoded, so every account looked
+  // verified whether or not it had ever submitted anything.
+  const [kycStatus, setKycStatus] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     Auth.me().then(setProfile).catch(() => {});
     Referrals.me().then(setReferral).catch(() => {});
+    Kyc.mine()
+      .then((rec) => setKycStatus((rec as { status?: string } | null)?.status ?? null))
+      .catch(() => {});
   }, []);
+
+  const kycVerified = kycStatus === 'VERIFIED';
+  const kycPill: { tone: 'success' | 'accent' | 'danger'; label: string } | null =
+    kycVerified
+      ? { tone: 'success', label: 'KYC verified' }
+      : kycStatus === 'PENDING' || kycStatus === 'IN_REVIEW'
+        ? { tone: 'accent', label: 'KYC in review' }
+        : kycStatus === 'REJECTED'
+          ? { tone: 'danger', label: 'KYC rejected' }
+          : null;
 
   async function shareReferral() {
     if (!referral?.referralCode) return;
@@ -100,9 +116,11 @@ export function ProfileScreen() {
                 />
                 <Text style={styles.avatarText}>{initials}</Text>
               </View>
-              <View style={styles.verifyDot}>
-                <ShieldCheck size={11} color="#FFFFFF" strokeWidth={3} />
-              </View>
+              {kycVerified ? (
+                <View style={styles.verifyDot}>
+                  <ShieldCheck size={11} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              ) : null}
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name} numberOfLines={1}>
@@ -112,10 +130,13 @@ export function ProfileScreen() {
               {user?.email ? <Text style={styles.muted} numberOfLines={1}>{user.email}</Text> : null}
             </View>
           </View>
-          <View style={styles.chipsRow}>
-            <Pill tone="success" dot>KYC verified</Pill>
-            <Pill tone="accent">Premium · 8 mo</Pill>
-          </View>
+          {/* Only badges backed by real data — a hardcoded "KYC verified" and a
+              made-up tenure told every new account a flattering lie. */}
+          {kycPill ? (
+            <View style={styles.chipsRow}>
+              <Pill tone={kycPill.tone} dot>{kycPill.label}</Pill>
+            </View>
+          ) : null}
         </View>
 
         {/* Addresses */}
@@ -143,7 +164,7 @@ export function ProfileScreen() {
           <ListGroup>
             <ListRow leading={<User size={16} color={tokens.color.accentInk} />} title="Personal details" subtitle="Name, email, DOB" onPress={() => {}} />
             <ListRow leading={<Bell size={16} color={tokens.color.accentInk} />} title="Notifications" subtitle="Service, billing, offers" onPress={() => {}} />
-            <ListRow leading={<CreditCard size={16} color={tokens.color.accentInk} />} title="Payment methods" subtitle="UPI · Visa •• 4421" onPress={() => {}} />
+            <ListRow leading={<CreditCard size={16} color={tokens.color.accentInk} />} title="Payment methods" subtitle="UPI and cards" onPress={() => {}} />
             <ListRow
               leading={<Lock size={16} color={tokens.color.accentInk} />}
               title={profile?.hasPassword ? 'Change password' : 'Set a password'}

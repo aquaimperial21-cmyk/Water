@@ -16,12 +16,13 @@ import Svg, { Circle } from 'react-native-svg';
 import { MotiView } from 'moti';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/auth';
-import { apiErrorMessage, setStoredUser, setTokens } from '../../api/client';
+import { apiErrorMessage, isNetworkError, setStoredUser, setTokens } from '../../api/client';
 import { Auth } from '../../api/endpoints';
 import {
   confirmPhoneCode,
   finishPhoneSignIn,
   firebaseErrorMessage,
+  onAutoVerified,
   sendPhoneCode,
 } from '../../utils/firebasePhone';
 import { tokens } from '@theme/tokens';
@@ -38,6 +39,22 @@ function maskPhone(p: string) {
   return `+91 ••••• ${last4}`;
 }
 
+/**
+ * Name the system that actually failed. Calling a dead connection "could not
+ * verify that number" is what sent the last investigation after Firebase while
+ * the real fault was the API base URL.
+ */
+function verifyErrorMessage(e: unknown): string {
+  if ((e as { response?: unknown })?.response) return apiErrorMessage(e);
+  if (isNetworkError(e)) {
+    const code = (e as { code?: string })?.code;
+    return `Could not reach SmartRO.
+
+Check your internet connection and tap Verify again — your code is still valid.${code ? `\n\n${code}` : ''}`;
+  }
+  return firebaseErrorMessage(e);
+}
+
 export function OtpScreen({ navigation, route }: Props) {
   const { phone } = route.params;
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
@@ -45,11 +62,16 @@ export function OtpScreen({ navigation, route }: Props) {
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [verified, setVerified] = useState(false);
+  const [autoVerified, setAutoVerified] = useState(false);
   const [seconds, setSeconds] = useState(RESEND_SECONDS);
   const inputs = useRef<Array<TextInput | null>>([]);
 
   // The code was already sent by PhoneScreen — Firebase holds the pending
   // confirmation, so there is nothing to fetch here.
+
+  // Android sometimes verifies the number itself and never sends an SMS. Without
+  // this the user sits in front of six empty boxes waiting for a code.
+  useEffect(() => onAutoVerified(phone, () => setAutoVerified(true)), [phone]);
 
   useEffect(() => {
     if (seconds <= 0) return;
@@ -68,15 +90,24 @@ export function OtpScreen({ navigation, route }: Props) {
 
   async function onVerify() {
     const otp = digits.join('');
-    if (otp.length !== 6) return notify('Invalid OTP', 'Enter the 6-digit code.');
+    if (!autoVerified && otp.length !== 6) return notify('Invalid OTP', 'Enter the 6-digit code.');
     if (name.trim().length < 2) return notify('Name needed', 'Tell us your name to continue.');
+    const referral = referralCode.trim();
+    // Shorter than 3 characters, the API rejects the whole login with a bare
+    // "Invalid request" that names nothing — catch it where the field is.
+    if (referral && referral.length < 3) {
+      return notify(
+        'Check the referral code',
+        'A referral code is at least 3 characters. Clear the field if you don’t have one.'
+      );
+    }
     setLoading(true);
     try {
       // Firebase proves the number; our API turns that into a SmartRO session.
       const idToken = await confirmPhoneCode(otp, phone);
       // Call the API directly so we can play the success animation BEFORE
       // committing the user to the auth store (which swaps nav stacks).
-      const data = await Auth.firebaseLogin(idToken, name.trim(), referralCode.trim() || undefined);
+      const data = await Auth.firebaseLogin(idToken, name.trim(), referral || undefined);
       void finishPhoneSignIn();
       setVerified(true);
       // Let the success animation play, then commit session.
@@ -86,8 +117,7 @@ export function OtpScreen({ navigation, route }: Props) {
         useAuthStore.setState({ user: data.user });
       }, 900);
     } catch (e) {
-      const isApiError = Boolean((e as { response?: unknown })?.response);
-      notify('Verification failed', isApiError ? apiErrorMessage(e) : firebaseErrorMessage(e));
+      notify('Verification failed', verifyErrorMessage(e));
       setLoading(false);
     }
   }
@@ -104,7 +134,7 @@ export function OtpScreen({ navigation, route }: Props) {
 
   const code = digits.join('');
   // Visual hint only — the button is always tappable and validates inside.
-  const looksReady = code.length === 6 && name.trim().length >= 2 && !loading;
+  const looksReady = (autoVerified || code.length === 6) && name.trim().length >= 2 && !loading;
 
   // Timer ring math
   const r = 14;
@@ -200,9 +230,20 @@ export function OtpScreen({ navigation, route }: Props) {
                 })}
               </View>
 
+              {/* Android verified the number itself — say so, or the user waits
+                  for an SMS that is never coming. */}
+              {autoVerified && (
+                <View style={styles.autoVerifiedChip}>
+                  <Check size={14} color={tokens.color.success} strokeWidth={3} />
+                  <Text style={styles.autoVerifiedText}>
+                    Number verified automatically — no code needed. Just add your name below.
+                  </Text>
+                </View>
+              )}
+
               {/* mt-5 timer / resend */}
               <View style={styles.timerRow}>
-                {seconds > 0 ? (
+                {autoVerified ? null : seconds > 0 ? (
                   <>
                     <Svg width={32} height={32}>
                       <Circle
@@ -377,6 +418,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timerText: { ...tokens.text.bodySm, color: tokens.color.textMuted },
+  autoVerifiedChip: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: 'rgba(39,176,125,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(39,176,125,0.35)',
+  },
+  autoVerifiedText: {
+    ...tokens.text.bodySm,
+    color: tokens.color.text,
+    flexShrink: 1,
+  },
   resendCta: { fontFamily: 'Manrope_700Bold', color: tokens.color.accent, fontSize: 14 },
 
   // mt-8 name field
