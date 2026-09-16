@@ -362,13 +362,27 @@ router.post(
   validateBody(adminLoginSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body as z.infer<typeof adminLoginSchema>;
+
+    // The console runs the whole business. Unlimited guesses against a known
+    // staff address is the one door left wide open; /auth/password/login has
+    // had this cap since it was written.
+    const limitKey = `adminlogin:${email.toLowerCase()}`;
+    const limit = rateLimitHit(limitKey, 5, 900);
+    if (!limit.allowed) {
+      throw Unauthorized(
+        `Too many failed attempts. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.`
+      );
+    }
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash || (user.kind !== 'ADMIN' && user.kind !== 'TECHNICIAN')) {
       throw Unauthorized('Invalid credentials');
     }
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw Unauthorized('Invalid credentials');
+    if (user.status !== 'ACTIVE') throw Unauthorized('This account is not active');
 
+    clearRateLimit(limitKey);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     const accessToken = signAccessToken({ sub: user.id, kind: user.kind as 'ADMIN' | 'TECHNICIAN' });

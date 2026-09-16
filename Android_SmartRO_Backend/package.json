@@ -16,6 +16,7 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:reset": "prisma migrate reset --force",
     "prisma:seed": "tsx prisma/seed.ts",
+    "admin:create": "tsx prisma/create-admin.ts",
     "prisma:studio": "prisma studio",
     "setup": "prisma migrate dev --name init && tsx prisma/seed.ts"
   },
