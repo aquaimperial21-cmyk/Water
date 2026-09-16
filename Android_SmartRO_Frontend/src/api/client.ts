@@ -3,13 +3,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+// Where a shipped build talks to when nothing else is configured.
+const PRODUCTION_API_URL = 'https://water-production-278c.up.railway.app/api/v1';
+
 // On Android emulator, localhost on the host machine is reachable as 10.0.2.2
 // On iOS simulator + web, localhost works.
 // For physical devices, set EXPO_PUBLIC_API_URL or edit app.json -> extra.apiBaseUrl to your LAN IP.
 function resolveBaseUrl(): string {
-  const fromEnv = (process.env as Record<string, string | undefined>).EXPO_PUBLIC_API_URL;
+  // Must be read as a literal `process.env.EXPO_PUBLIC_API_URL`: babel-preset-expo
+  // inlines that exact expression at build time. A TS cast around process.env
+  // hides it from the transform, so a release build saw undefined and fell back
+  // to the dev address — every request then failed with ERR_NETWORK.
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
   if (fromEnv) return fromEnv;
+
   const fromExtra = (Constants?.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl;
+  const loopback = !fromExtra || /localhost|127\.0\.0\.1|10\.0\.2\.2/.test(fromExtra);
+
+  // A shipped build must never fall back to a dev-machine address: on a real
+  // phone there is nothing there to answer.
+  if (!__DEV__) return loopback ? PRODUCTION_API_URL : (fromExtra as string);
+
   if (Platform.OS === 'android') {
     return (fromExtra ?? 'http://localhost:4000/api/v1').replace('localhost', '10.0.2.2');
   }
