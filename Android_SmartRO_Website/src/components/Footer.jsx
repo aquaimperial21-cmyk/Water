@@ -1,13 +1,20 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import useSectionNav from '../useSectionNav';
+import { BUSINESS, EMAIL, PHONE, PHONE_DISPLAY, WHATSAPP } from '../siteInfo';
 
-const PHONE = '+919595190024';
-const EMAIL = 'aquaimperial21@gmail.com';
-const WHATSAPP = '+919595190024';
+const policyLinks = [
+  { label: 'Privacy Policy', to: '/privacy' },
+  { label: 'Terms of Service', to: '/terms' },
+  { label: 'Cancellation & Refund', to: '/refund-policy' },
+  { label: 'Delivery & Installation', to: '/shipping-policy' },
+  { label: 'Warranty', to: '/warranty' },
+  { label: 'Delete Account', to: '/delete-account' },
+  { label: 'Contact Us', to: '/contact' },
+];
 
 export default function Footer() {
-  const handleNav = (href) => {
-    document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const handleNav = useSectionNav();
 
   return (
     <footer style={{
@@ -174,7 +181,7 @@ export default function Footer() {
               {[
                 {
                   icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="#22D3EE"><path d="M4.41 7.19c.98 1.93 2.56 3.5 4.49 4.49l1.5-1.5c.18-.18.45-.24.69-.16.76.25 1.59.39 2.43.39.37 0 .67.3.67.67v2.38c0 .37-.3.67-.67.67C6.35 14.13 1.87 9.65 1.87 4.09c0-.37.3-.67.67-.67h2.39c.37 0 .67.3.67.67 0 .85.14 1.67.39 2.43.07.24.01.5-.16.68L4.41 7.19z"/></svg>,
-                  text: '+91 95951 90024',
+                  text: PHONE_DISPLAY,
                   href: `tel:${PHONE}`,
                 },
                 {
@@ -242,9 +249,9 @@ export default function Footer() {
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)' }}>
             © 2025 Aqua Imperial. All rights reserved.
           </p>
-          <div style={{ display: 'flex', gap: '24px' }}>
-            {['Privacy Policy', 'Terms of Service', 'Warranty'].map((item) => (
-              <a key={item} href="#"
+          <nav aria-label="Policies" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 24px' }}>
+            {policyLinks.map((item) => (
+              <Link key={item.to} to={item.to}
                 style={{
                   color: 'rgba(255,255,255,0.35)',
                   textDecoration: 'none', fontSize: '13px',
@@ -253,11 +260,17 @@ export default function Footer() {
                 onMouseEnter={e => e.currentTarget.style.color = '#22D3EE'}
                 onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.35)'}
               >
-                {item}
-              </a>
+                {item.label}
+              </Link>
             ))}
-          </div>
+          </nav>
         </div>
+
+        {/* Legal operator (Razorpay checks the business name and address) */}
+        <p style={{ fontSize: '12px', lineHeight: 1.7, color: 'rgba(255,255,255,0.35)', marginTop: '20px', paddingBottom: '52px' }}>
+          Aqua Imperial is operated by {BUSINESS.legalName} (sole proprietorship, proprietor {BUSINESS.proprietor})
+          {' '}· Udyam Registration No. {BUSINESS.udyam} · {BUSINESS.address}
+        </p>
       </div>
 
       <style>{`

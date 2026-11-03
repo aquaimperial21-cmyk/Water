@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
+import useSectionNav from '../useSectionNav';
 
 const navLinks = [
   { label: 'Home', href: '#home' },
@@ -13,7 +15,11 @@ const navLinks = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeLink, setActiveLink] = useState('#home');
+  const { pathname, hash } = useLocation();
+  const goToSection = useSectionNav();
+  const [activeLink, setActiveLink] = useState(() => hash || '#home');
+  // On the policy pages none of the home-page sections is "current".
+  const current = pathname === '/' ? activeLink : null;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -24,8 +30,7 @@ export default function Navbar() {
   const handleNavClick = (href) => {
     setActiveLink(href);
     setMenuOpen(false);
-    const el = document.querySelector(href);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    goToSection(href);
   };
 
   return (
@@ -119,15 +124,15 @@ export default function Navbar() {
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    color: activeLink === link.href
+                    color: current === link.href
                       ? '#0891B2'
                       : scrolled ? '#334155' : 'rgba(255,255,255,0.9)',
                     fontFamily: "'DM Sans', sans-serif",
                     fontSize: '14px',
-                    fontWeight: activeLink === link.href ? 600 : 500,
+                    fontWeight: current === link.href ? 600 : 500,
                     padding: '8px 14px',
                     borderRadius: '8px',
-                    background: activeLink === link.href
+                    background: current === link.href
                       ? (scrolled ? 'rgba(8,145,178,0.08)' : 'rgba(255,255,255,0.12)')
                       : 'transparent',
                     transition: 'all 0.2s',
@@ -137,10 +142,10 @@ export default function Navbar() {
                     e.currentTarget.style.background = scrolled ? 'rgba(8,145,178,0.06)' : 'rgba(255,255,255,0.1)';
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.color = activeLink === link.href
+                    e.currentTarget.style.color = current === link.href
                       ? '#0891B2'
                       : scrolled ? '#334155' : 'rgba(255,255,255,0.9)';
-                    e.currentTarget.style.background = activeLink === link.href
+                    e.currentTarget.style.background = current === link.href
                       ? (scrolled ? 'rgba(8,145,178,0.08)' : 'rgba(255,255,255,0.12)')
                       : 'transparent';
                   }}
@@ -246,7 +251,7 @@ export default function Navbar() {
                     textAlign: 'left',
                     background: 'none',
                     border: 'none',
-                    color: activeLink === link.href ? '#0891B2' : '#334155',
+                    color: current === link.href ? '#0891B2' : '#334155',
                     fontFamily: "'DM Sans', sans-serif",
                     fontSize: '16px',
                     fontWeight: 500,
