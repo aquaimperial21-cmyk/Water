@@ -1,0 +1,19 @@
+{
+	# Let's Encrypt only. Caddy would otherwise fall back to ZeroSSL, and the
+	# ESP32 firmware (Android_SmartRO_Firmware/smartro_valve/src/certs.h)
+	# trusts only the Let's Encrypt roots, so purifiers would stop connecting.
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+{$PUBLIC_HOST} {
+	encode zstd gzip
+
+	@api path /api/* /health /uploads/*
+	handle @api {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy admin:3000
+	}
+}

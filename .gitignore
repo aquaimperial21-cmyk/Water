@@ -29,8 +29,15 @@ firebase-service-account.json
 # Next.js local env
 .env*.local
 
-# Generated Railway variable block (contains secrets)
-.env.railway
-
 # Rotated production credentials (never commit)
 CREDENTIALS.local.md
+
+# Hostinger deploy: server secrets and database dumps (customer data)
+deploy/hostinger/secrets/
+deploy/hostinger/backups/
+*.dump
+
+# Owner ID documents (Aadhaar, PAN, bank, registrations) and raw photos.
+# The repo is public: never commit these.
+SmartRO_Doc/
+SmartRO_Photos/

@@ -1,5 +1,9 @@
 # SmartRO — Free-Tier Testing Deploy Guide
 
+> **Production now runs on a Hostinger VPS.** Follow
+> [deploy/hostinger/README.md](deploy/hostinger/README.md). This page is the
+> older free-tier setup (Neon + Render + Vercel), kept for reference.
+
 Get all three apps online for testing in ~45 minutes. Zero cost, no credit
 card needed for the basic flow.
 
@@ -190,8 +194,12 @@ Seeded cities: **Pune**, **Mumbai** (active), **Bangalore** (waitlist-only).
 
 ## Troubleshooting
 
-**Render build fails on `prisma db push`**
+**Render build fails on `prisma migrate deploy`**
 → Check the `DATABASE_URL` you pasted has `?sslmode=require` at the end.
+→ `P3005` ("the database schema is not empty"): the database was created by
+the old `prisma db push` build. Baseline it once — see the note at the top of
+`render.yaml` (`npx prisma migrate resolve --applied …` for `0_init` and
+`20260916190000_payment_refs_and_invoice_sequence`) — then redeploy.
 
 **Admin login returns "Network Error"**
 → `NEXT_PUBLIC_API_URL` is baked in at build time. After changing it in
@@ -211,19 +219,27 @@ Redeploy).
 for testing).
 
 **Re-deploying the backend wipes my seed data**
-→ `prisma db push` keeps data across deploys, but if the schema changed
-incompatibly Render will fail with a destructive-change error. To force-reset
-on testing only, the build command already passes `--accept-data-loss`. To
-re-seed afterwards, run the seed command from Step 2 again.
+→ It shouldn't: the build runs `prisma migrate deploy`, which only applies new
+migrations and keeps existing data. To start over on a testing database, reset
+it (`DATABASE_URL="…" npx prisma migrate reset --skip-seed`, which drops everything) and
+run the seed command from Step 2 again.
 
 ---
 
 ## What's NOT included in this testing setup
 
-These are intentionally stubbed because they need paid third-party accounts.
-Don't enable them until you're going to real production.
+These are stubbed because they need third-party accounts. Leave SMS and push
+stubbed until you're going to real production. Payments are the exception.
 
-- **Razorpay payments** — `PAYMENT_DRIVER=stub` simulates payment success/failure.
+- **Razorpay payments**: `render.yaml` sets `PAYMENT_DRIVER=stub`, but it also
+  sets `NODE_ENV=production`, and in production the stub payment routes refuse
+  to run (503). Booking payment and recharge therefore fail on this deploy until
+  you add Razorpay **test-mode** keys, which are free and move no real money.
+  On Render, set `PAYMENT_DRIVER=razorpay`, `RAZORPAY_KEY_ID`,
+  `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, then add the webhook.
+  On a phone, Checkout needs an EAS build; it doesn't run in Expo Go. Full
+  steps:
+  [Android_SmartRO_Backend/README.md → Razorpay payments](Android_SmartRO_Backend/README.md#razorpay-payments).
 - **Real SMS via MSG91** — `MESSAGING_DRIVER=stub` logs OTPs to the API
   response instead of sending SMS.
 - **Expo Push notifications** — `PUSH_DRIVER=stub` logs to console only.

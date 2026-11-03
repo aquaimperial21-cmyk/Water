@@ -1,0 +1,97 @@
+# SmartRO on one Hostinger VPS: Postgres + API + admin console + Caddy (HTTPS).
+#
+# Everything is reached through one hostname (PUBLIC_HOST in .env):
+#   https://PUBLIC_HOST/api/v1/...   -> api   (also /health and /uploads/...)
+#   https://PUBLIC_HOST/             -> admin
+#   (the marketing website is hosted separately, on Vercel)
+#
+# Run it through the `smartro` command that server-up.sh installs, e.g.
+#   smartro ps            smartro logs -f api          smartro restart api
+#
+# State that survives redeploys lives outside the code folder:
+#   ${SMARTRO_HOME}/.env       settings + secrets (created by server-up.sh)
+#   ${SMARTRO_HOME}/secrets/   firebase-service-account.json
+#   volumes pgdata / uploads / caddy_data
+
+name: smartro
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smartro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: smartro
+    # Postgres 18 images keep data under /var/lib/postgresql/18/docker,
+    # so the volume goes on the parent folder.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartro -d smartro"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No ports: Postgres is reachable only by the api container.
+    # From your laptop use an SSH tunnel (see README.md).
+
+  api:
+    build: ../../Android_SmartRO_Backend
+    restart: unless-stopped
+    env_file:
+      - ${SMARTRO_HOME:-/opt/smartro}/.env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://smartro:${POSTGRES_PASSWORD}@db:5432/smartro
+      UPLOAD_DIR: /app/uploads
+      # Used only when FIREBASE_SERVICE_ACCOUNT_JSON is empty in .env.
+      FIREBASE_SERVICE_ACCOUNT_PATH: /app/secrets/firebase-service-account.json
+    # Apply new prisma/migrations, then start. If a migration fails the
+    # container stops here and the old data is untouched.
+    command: ["sh", "-c", "npx prisma migrate deploy && exec node dist/server.js"]
+    volumes:
+      - uploads:/app/uploads
+      - ${SMARTRO_HOME:-/opt/smartro}/secrets:/app/secrets:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  admin:
+    build:
+      context: ../../Android_SmartRO_Admin
+      args:
+        NEXT_PUBLIC_API_URL: https://${PUBLIC_HOST:?set PUBLIC_HOST in .env}/api/v1
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - admin
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
