@@ -4,6 +4,7 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { hideToken } from '../core/device-token';
 
 const router = Router();
 
@@ -58,7 +59,7 @@ router.get(
       include: { device: true, technician: { include: { user: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ data: items });
+    res.json({ data: items.map((t) => ({ ...t, device: hideToken(t.device) })) });
   })
 );
 
@@ -77,7 +78,7 @@ router.get(
     });
     if (!t) throw NotFound('Ticket not found');
     if (req.auth!.kind === 'CUSTOMER' && t.userId !== req.auth!.sub) throw NotFound('Ticket not found');
-    res.json({ data: t });
+    res.json({ data: { ...t, device: hideToken(t.device) } });
   })
 );
 
@@ -101,7 +102,7 @@ router.get(
       },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ data: items });
+    res.json({ data: items.map((t) => ({ ...t, device: hideToken(t.device) })) });
   })
 );
 

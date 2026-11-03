@@ -5,6 +5,7 @@ import { prisma } from '../core/prisma';
 import {
   authRequired,
   issueRefreshToken,
+  revokeAccessTokensFor,
   rotateRefreshToken,
   revokeRefreshToken,
   signAccessToken,
@@ -14,6 +15,7 @@ import { validateBody } from '../core/validate';
 import { verifyFirebasePhoneToken } from '../core/firebase';
 import { clear as clearRateLimit, hit as rateLimitHit } from '../core/ratelimit';
 import { getMessagingDriver } from '../services/messaging';
+import { deleteCustomerAccount } from '../services/account-deletion';
 
 const router = Router();
 
@@ -449,6 +451,27 @@ router.get(
         addresses: user.addresses,
       },
     });
+  })
+);
+
+// In-app account deletion (a Google Play requirement). Rules and what is kept
+// live in services/account-deletion.ts; the body is a typed-out "yes, really"
+// so a stray request can't erase anyone.
+router.post(
+  '/account/delete',
+  authRequired(['CUSTOMER']),
+  validateBody(
+    z.object({
+      confirm: z.literal('DELETE', { errorMap: () => ({ message: 'Send confirm: "DELETE" to delete your account' }) }),
+    })
+  ),
+  asyncHandler(async (req, res) => {
+    const userId = req.auth!.sub;
+    await deleteCustomerAccount(userId);
+    // The row is gone from every login path and refresh; this kills the
+    // access token the app is still holding.
+    revokeAccessTokensFor(userId);
+    res.json({ data: { deleted: true } });
   })
 );
 

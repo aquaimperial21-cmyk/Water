@@ -44,6 +44,9 @@ export async function rotateRefreshToken(token: string): Promise<{ userId: strin
   }
   const user = await prisma.user.findUnique({ where: { id: existing.userId } });
   if (!user) throw Unauthorized('User not found');
+  // Same rule as every login path: a deleted or suspended account gets no
+  // new access tokens, so the app is signed out within ACCESS_TTL.
+  if (user.status !== 'ACTIVE') throw Unauthorized('This account is not active');
   await prisma.refreshToken.update({ where: { id: existing.id }, data: { revokedAt: new Date() } });
   const newToken = await issueRefreshToken(user.id);
   return { userId: user.id, kind: user.kind as AuthKind, newToken };
@@ -56,12 +59,38 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   });
 }
 
+// Access tokens are stateless: a deleted account's token would keep working
+// until it expires. Accounts closed by this process are refused at once (the
+// API runs as one process); refresh refuses any non-ACTIVE user, so nothing
+// outlives ACCESS_TTL anywhere. An entry is only needed until every token
+// signed before the deletion has expired.
+const revokedSubjects = new Map<string, number>(); // userId -> forget after (ms)
+
+export function revokeAccessTokensFor(userId: string): void {
+  const now = Date.now();
+  for (const [id, until] of revokedSubjects) if (until < now) revokedSubjects.delete(id);
+  revokedSubjects.set(userId, now + ACCESS_TTL * 1000);
+}
+
+function isRevokedSubject(userId: string): boolean {
+  const until = revokedSubjects.get(userId);
+  if (until === undefined) return false;
+  if (until < Date.now()) {
+    revokedSubjects.delete(userId);
+    return false;
+  }
+  return true;
+}
+
 export function verifyAccessToken(token: string): AuthPayload {
+  let payload: AuthPayload;
   try {
-    return jwt.verify(token, ACCESS_SECRET) as AuthPayload;
+    payload = jwt.verify(token, ACCESS_SECRET) as AuthPayload;
   } catch {
     throw Unauthorized('Invalid or expired access token');
   }
+  if (isRevokedSubject(payload.sub)) throw Unauthorized('This account is not active');
+  return payload;
 }
 
 export function authRequired(kinds?: AuthKind[]) {

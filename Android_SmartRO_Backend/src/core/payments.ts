@@ -23,3 +23,28 @@ export function assertStubPaymentsAllowed(): void {
     'Online payment is not available on this server. Use the Razorpay checkout flow (/payments/.../order then /payments/verify).'
   );
 }
+
+const RAZORPAY_ENV = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] as const;
+
+/**
+ * Guard for the Razorpay routes. Without it, stub mode or a missing key
+ * surfaced as a bare 500 from deep inside the SDK, after a Payment row had
+ * already been written.
+ */
+export function assertRazorpayEnabled(): void {
+  if (getPaymentDriver() !== 'razorpay') {
+    throw new HttpError(
+      409,
+      'RAZORPAY_DISABLED',
+      'Razorpay is switched off on this server (PAYMENT_DRIVER=stub). Use the stub payment routes, or set PAYMENT_DRIVER=razorpay.'
+    );
+  }
+  const missing = RAZORPAY_ENV.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      'PAYMENTS_MISCONFIGURED',
+      `Razorpay is on but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not set on the server.`
+    );
+  }
+}

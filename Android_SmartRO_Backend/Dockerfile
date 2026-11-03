@@ -1,7 +1,9 @@
-# SmartRO backend — single-stage image for Railway / Fly.io.
+# SmartRO backend — single-stage image for the Hostinger VPS
+# (deploy/hostinger/docker-compose.yml) and Fly.io.
 #
-# We keep `prisma` CLI in the final image so the release_command in fly.toml
-# (`npx prisma migrate deploy`) works without an extra builder stage.
+# We keep `prisma` CLI in the final image so `npx prisma migrate deploy` can
+# run before the server starts (the compose command, or fly.toml's
+# release_command) without an extra builder stage.
 
 FROM node:20-bookworm-slim
 
@@ -28,7 +30,7 @@ RUN npx prisma generate \
 RUN mkdir -p /app/uploads
 
 ENV NODE_ENV=production
-# No EXPOSE: Railway injects PORT and the app binds it. A fixed EXPOSE makes
-# the platform route to the wrong port.
+# No EXPOSE: the app binds PORT, which the host sets (4000 in
+# deploy/hostinger/docker-compose.yml).
 
 CMD ["node", "dist/server.js"]

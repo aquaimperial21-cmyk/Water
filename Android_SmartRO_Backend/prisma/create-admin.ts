@@ -4,7 +4,8 @@
 //
 // Unlike `npm run prisma:seed`, this touches nothing else: no wiping, no demo
 // data. Safe to run against production, which is the point — the password is
-// typed into the shell (or Railway's run command) and never lands in git.
+// typed into the shell and never lands in git. On the Hostinger VPS:
+//   smartro exec -e ADMIN_EMAIL=... -e ADMIN_PASSWORD='...' api npm run admin:create
 //
 // An existing account with that email keeps its id, name and history; only the
 // password, role and status are set.

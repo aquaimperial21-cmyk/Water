@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { addMonthsIst } from '../src/core/time';
+import { termPricePaise } from '../src/core/pricing';
 
 const prisma = new PrismaClient();
 
@@ -54,10 +56,12 @@ async function main() {
   });
 
   // ── Plans (durations) ────────────────────────────────────
-  const plan1 = await prisma.plan.create({ data: { name: 'Monthly', durationDays: 30 } });
-  const plan3 = await prisma.plan.create({ data: { name: 'Quarterly', durationDays: 90 } });
-  const plan6 = await prisma.plan.create({ data: { name: 'Half-yearly', durationDays: 180 } });
-  const plan12 = await prisma.plan.create({ data: { name: 'Annual', durationDays: 365 } });
+  // Calendar months on the Indian calendar (core/time.ts addMonthsIst): Monthly
+  // runs to the same date next month, whether that month has 28, 29, 30 or 31 days.
+  const plan1 = await prisma.plan.create({ data: { name: 'Monthly', durationMonths: 1 } });
+  const plan3 = await prisma.plan.create({ data: { name: 'Quarterly', durationMonths: 3 } });
+  const plan6 = await prisma.plan.create({ data: { name: 'Half-yearly', durationMonths: 6 } });
+  const plan12 = await prisma.plan.create({ data: { name: 'Annual', durationMonths: 12 } });
 
   // ── Products ─────────────────────────────────────────────
   const products = await Promise.all([
@@ -151,13 +155,15 @@ async function main() {
     [4, 3499, 4499, 10000],
   ];
   const planList = [plan1, plan3, plan6, plan12];
+  // Discount tiers by term length: 1mo full price; 3mo 5% off; 6mo 10%; 12mo 15%.
+  // The discounted figure is still a per-month rate (core/pricing.ts).
+  const discountByMonths: Record<number, number> = { 1: 0, 3: 0.05, 6: 0.1, 12: 0.15 };
 
   for (const [pi, pune_m, mum_m, dep] of pricingMatrix) {
     for (const plan of planList) {
-      // Discount tiers: 1mo full price; 3mo 5% off; 6mo 10%; 12mo 15%
-      const discount = plan.durationDays === 30 ? 0 : plan.durationDays === 90 ? 0.05 : plan.durationDays === 180 ? 0.1 : 0.15;
-      const puneMonthly = Math.round(pune_m * (1 - discount));
-      const mumMonthly = Math.round(mum_m * (1 - discount));
+      const factor = 1 - (discountByMonths[plan.durationMonths] ?? 0);
+      const puneMonthly = Math.round(pune_m * factor);
+      const mumMonthly = Math.round(mum_m * factor);
       await prisma.planCityPrice.create({
         data: {
           planId: plan.id,
@@ -357,6 +363,7 @@ async function main() {
   const booking1Price = await prisma.planCityPrice.findFirstOrThrow({
     where: { productId: products[0]!.id, cityId: pune.id, planId: plan6.id },
   });
+  const startedAt = new Date(Date.now() - 30 * 24 * 3600 * 1000);
   const booking1 = await prisma.booking.create({
     data: {
       userId: customer1.id,
@@ -364,15 +371,16 @@ async function main() {
       planId: plan6.id,
       cityId: pune.id,
       depositPaise: booking1Price.depositPaise,
-      firstPaymentPaise: booking1Price.monthlyPricePaise,
+      // The whole term up front, as the booking flow charges it.
+      firstPaymentPaise: termPricePaise(booking1Price.monthlyPricePaise, plan6.durationMonths),
       status: 'INSTALLED',
-      installationSlot: new Date(Date.now() - 30 * 24 * 3600 * 1000),
-      agreementSignedAt: new Date(Date.now() - 30 * 24 * 3600 * 1000),
+      installationSlot: startedAt,
+      agreementSignedAt: startedAt,
     },
   });
-  const startedAt = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-  const expiresAt = new Date(startedAt.getTime() + 180 * 24 * 3600 * 1000);
-  const lockInUntil = new Date(startedAt.getTime() + 180 * 24 * 3600 * 1000);
+  // One term of calendar months; lock-in is that same term.
+  const expiresAt = addMonthsIst(startedAt, plan6.durationMonths);
+  const lockInUntil = expiresAt;
   // Seeded device pairing for Priya's subscription. The deviceToken is also
   // pre-issued so the ESP32 endpoints can be smoke-tested with curl out-of-
   // the-box (see SR-AP-000101 demo in STATUS.md).
@@ -403,7 +411,7 @@ async function main() {
       userId: customer1.id,
       bookingId: booking1.id,
       kind: 'DEPOSIT',
-      amountPaise: booking1Price.depositPaise + booking1Price.monthlyPricePaise,
+      amountPaise: booking1.depositPaise + booking1.firstPaymentPaise,
       status: 'SUCCESS',
       gatewayRef: 'STUB_SEED_1',
     },
@@ -428,7 +436,7 @@ async function main() {
       planId: plan12.id,
       cityId: mumbai.id,
       depositPaise: booking2Price.depositPaise,
-      firstPaymentPaise: booking2Price.monthlyPricePaise,
+      firstPaymentPaise: termPricePaise(booking2Price.monthlyPricePaise, plan12.durationMonths),
       status: 'PENDING_KYC',
     },
   });

@@ -30,8 +30,8 @@ describe('Catalog', () => {
   it('GET /api/v1/plans returns plans sorted by duration', async () => {
     const r = await request(app).get('/api/v1/plans');
     expect(r.status).toBe(200);
-    const days = r.body.data.map((p: { durationDays: number }) => p.durationDays);
-    expect([...days].sort((a, b) => a - b)).toEqual(days);
+    const months = r.body.data.map((p: { durationMonths: number }) => p.durationMonths);
+    expect([...months].sort((a, b) => a - b)).toEqual(months);
   });
 });
 

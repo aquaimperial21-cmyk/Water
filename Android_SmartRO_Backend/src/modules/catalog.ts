@@ -38,12 +38,13 @@ router.get(
       include: cityId
         ? {
             prices: {
-              where: { cityId },
+              // A switched-off plan stays on existing subscriptions but is not sold.
+              where: { cityId, plan: { isActive: true } },
               include: { plan: true },
-              orderBy: { plan: { durationDays: 'asc' } },
+              orderBy: { plan: { durationMonths: 'asc' } },
             },
           }
-        : { prices: { include: { plan: true, city: true } } },
+        : { prices: { where: { plan: { isActive: true } }, include: { plan: true, city: true } } },
       orderBy: { name: 'asc' },
     });
     res.json({ data: products });
@@ -55,7 +56,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const product = await prisma.product.findUnique({
       where: { slug: req.params.slug },
-      include: { prices: { include: { plan: true, city: true } } },
+      include: { prices: { where: { plan: { isActive: true } }, include: { plan: true, city: true } } },
     });
     if (!product) throw NotFound('Product not found');
     res.json({ data: product });
@@ -67,7 +68,7 @@ router.get(
   asyncHandler(async (_req, res) => {
     const plans = await prisma.plan.findMany({
       where: { isActive: true },
-      orderBy: { durationDays: 'asc' },
+      orderBy: { durationMonths: 'asc' },
     });
     res.json({ data: plans });
   })
@@ -79,9 +80,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const { productId, cityId } = req.query as { productId: string; cityId: string };
     const prices = await prisma.planCityPrice.findMany({
-      where: { productId, cityId },
+      where: { productId, cityId, plan: { isActive: true } },
       include: { plan: true },
-      orderBy: { plan: { durationDays: 'asc' } },
+      orderBy: { plan: { durationMonths: 'asc' } },
     });
     res.json({ data: prices });
   })
@@ -95,8 +96,9 @@ export async function refreshLowestMonthlyRollup(productId?: string) {
     ? [productId]
     : (await prisma.product.findMany({ select: { id: true } })).map((p) => p.id);
   for (const id of productIds) {
+    // Plans on sale only: a switched-off plan's price is not on offer.
     const min = await prisma.planCityPrice.aggregate({
-      where: { productId: id },
+      where: { productId: id, plan: { isActive: true } },
       _min: { monthlyPricePaise: true },
     });
     await prisma.product.update({

@@ -10,8 +10,16 @@
 #   • Service sleeps after 15 min idle, ~30 s cold start on first request.
 #   • No persistent disk on free tier → /uploads files lost on redeploy
 #     (fine for testing; switch to S3/R2 for real).
-#   • `prisma db push` is used instead of `migrate deploy` because the repo
-#     has no migrations folder yet — db push syncs the schema directly.
+#   • The schema is applied with `prisma migrate deploy` from prisma/migrations.
+#     It runs only migrations the database has not had yet and never drops
+#     data on its own. (`db push` was used before the migrations folder existed;
+#     it can't add the required Plan.durationMonths column to a filled table.)
+#   • DB first created by `db push`? Baseline it ONCE from your laptop, marking
+#     only the migrations it already has as applied, then redeploy:
+#       DATABASE_URL="<your-neon-url>" npx prisma migrate resolve --applied 0_init
+#       DATABASE_URL="<your-neon-url>" npx prisma migrate resolve --applied 20260916190000_payment_refs_and_invoice_sequence
+#     Leave 20261102160000_plan_duration_months (and anything newer) for
+#     `migrate deploy` to run.
 
 services:
   - type: web
@@ -20,8 +28,9 @@ services:
     plan: free
     region: singapore
     rootDir: Android_SmartRO_Backend
-    buildCommand: npm install && npx prisma generate && npm run build && npx prisma db push --accept-data-loss
-    # ↑ db push syncs schema directly (no migration files needed for testing).
+    buildCommand: npm install && npx prisma generate && npm run build && npx prisma migrate deploy
+    # ↑ applies pending prisma/migrations; fails the build (keeping the old
+    #   version live) if a migration fails. See the baseline note above.
     # After the first deploy succeeds, seed the database ONCE from your laptop:
     #   cd Android_SmartRO_Backend
     #   DATABASE_URL="<your-neon-url>" npx tsx prisma/seed.ts

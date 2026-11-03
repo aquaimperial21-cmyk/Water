@@ -2,12 +2,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
-import { BadRequest, NotFound, Forbidden, asyncHandler } from '../core/errors';
+import { BadRequest, NotFound, Forbidden, Conflict, HttpError, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
-import { termPricePaise } from '../core/pricing';
+import { applyPaidTerm, termPricePaise } from '../core/pricing';
 import { nextInvoiceNumber } from '../core/invoice';
 import { assertStubPaymentsAllowed } from '../core/payments';
-import { cancelMandate } from '../services/razorpay';
+import { formatIstDate } from '../core/time';
+import { hideToken } from '../core/device-token';
+import { cancelMandate, pauseMandate, resumeMandate } from '../services/razorpay';
 
 const router = Router();
 
@@ -27,7 +29,42 @@ router.get(
       include: { product: true, plan: true, device: true, booking: { include: { city: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ data: subs });
+
+    // My Plan shows a pending refund after a cancel, and the next technician
+    // visit (install, service, filter) whether it hangs off the booking or a
+    // ticket. A visit stays listed for a day past its slot so a late
+    // technician doesn't make it vanish.
+    const subIds = subs.map((s) => s.id);
+    const bookingIds = subs.map((s) => s.bookingId);
+    const [refunds, jobs] = await Promise.all([
+      prisma.payment.findMany({
+        where: { subscriptionId: { in: subIds }, kind: 'REFUND' },
+        orderBy: { createdAt: 'desc' },
+        select: { subscriptionId: true, amountPaise: true, status: true, createdAt: true },
+      }),
+      prisma.job.findMany({
+        where: {
+          status: { in: ['SCHEDULED', 'EN_ROUTE', 'IN_PROGRESS'] },
+          scheduledFor: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          OR: [{ bookingId: { in: bookingIds } }, { ticket: { subscriptionId: { in: subIds } } }],
+        },
+        orderBy: { scheduledFor: 'asc' },
+        select: { scheduledFor: true, type: true, bookingId: true, ticket: { select: { subscriptionId: true } } },
+      }),
+    ]);
+
+    const data = subs.map((s) => {
+      // Both lists are sorted, so the first match is the latest refund / soonest visit.
+      const r = refunds.find((p) => p.subscriptionId === s.id);
+      const j = jobs.find((job) => job.bookingId === s.bookingId || job.ticket?.subscriptionId === s.id);
+      return {
+        ...s,
+        device: hideToken(s.device),
+        refund: r ? { amountPaise: r.amountPaise, status: r.status, createdAt: r.createdAt } : null,
+        nextVisit: j ? { scheduledFor: j.scheduledFor, type: j.type } : null,
+      };
+    });
+    res.json({ data });
   })
 );
 
@@ -44,7 +81,7 @@ router.get(
       },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ data: subs });
+    res.json({ data: subs.map((s) => ({ ...s, device: hideToken(s.device) })) });
   })
 );
 
@@ -66,6 +103,11 @@ router.post(
     // it charged the customer and flipped it back to ACTIVE.
     if (sub.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
     if (sub.status === 'PAUSED') throw BadRequest('Resume the plan before recharging it');
+    // The mandate's amount is fixed to the plan it was set up on; switching
+    // plans under it would debit the old price for the new term.
+    if (req.body.planId && req.body.planId !== sub.planId && sub.autopayStatus === 'ACTIVE') {
+      throw Conflict('Turn off autopay before switching plans');
+    }
 
     const targetPlanId = req.body.planId ?? sub.planId;
     const price = await prisma.planCityPrice.findUnique({
@@ -79,9 +121,12 @@ router.post(
       include: { plan: true },
     });
     if (!price) throw BadRequest('No pricing found for this plan/city/product combination');
+    // Renewing the plan you are on is fine after it is switched off; moving
+    // onto a switched-off plan is not.
+    if (targetPlanId !== sub.planId && !price.plan.isActive) throw BadRequest('That plan is no longer available');
 
     // The recharge below grants a whole term, so charge for a whole term.
-    const amountPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationDays);
+    const amountPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationMonths);
 
     const payment = await prisma.payment.create({
       data: {
@@ -96,10 +141,12 @@ router.post(
     });
     await new Promise((r) => setTimeout(r, PAYMENT_STUB_DELAY_MS));
 
-    const baseFromExpiry = sub.expiresAt > new Date() ? sub.expiresAt : new Date();
-    const newExpiresAt = new Date(baseFromExpiry.getTime() + price.plan.durationDays * 24 * 60 * 60 * 1000);
-
     const result = await prisma.$transaction(async (tx) => {
+      // Re-read: the plan may have been paused during the "gateway" delay,
+      // and a paid term must not unpause it.
+      const current = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+      if (current.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
+      const { expiresAt: newExpiresAt, status } = applyPaidTerm(current, price.plan.durationMonths);
       await tx.payment.update({ where: { id: payment.id }, data: { status: 'SUCCESS' } });
       await tx.invoice.create({
         data: {
@@ -113,7 +160,7 @@ router.post(
         where: { id: sub.id },
         data: {
           expiresAt: newExpiresAt,
-          status: 'ACTIVE',
+          status,
           planId: targetPlanId,
         },
       });
@@ -122,7 +169,7 @@ router.post(
           userId: sub.userId,
           channel: 'INAPP',
           title: 'Recharge successful',
-          body: `Your plan is extended to ${newExpiresAt.toDateString()}.`,
+          body: `Your plan is extended to ${formatIstDate(newExpiresAt)}.`,
         },
       });
       return updated;
@@ -134,8 +181,10 @@ router.post(
 
 // ─────────────────────────── Pause / Resume ───────────────────────────
 //
-// Pause stops billing forward (autopay debits suspended at the gateway too if
-// linked) and freezes `expiresAt` advancement. Resume restores ACTIVE.
+// Pause freezes the plan's clock: the time left at `pausedAt` is handed back
+// on resume (expiresAt moves out by however long it was paused). A live
+// autopay mandate is paused at the gateway first — the plan is never frozen
+// while debits carry on. Resume restores ACTIVE.
 
 router.post(
   '/:id/pause',
@@ -146,11 +195,31 @@ router.post(
     if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
     if (sub.status === 'CLOSED' || sub.status === 'CANCELLED' as any)
       throw BadRequest('Subscription is closed');
+    // Before the expiry check: a paused plan's expiresAt can pass while it is
+    // paused, and its remaining time is still owed.
     if (sub.status === 'PAUSED') return res.json({ data: sub });
+    // Nothing left to freeze; resuming would hand back time that was never there.
+    if (sub.expiresAt <= new Date()) throw BadRequest('Your plan has ended. Recharge to restart it.');
+
+    let autopayPaused = false;
+    if (sub.autopayStatus === 'ACTIVE' && sub.autopayId) {
+      try {
+        await pauseMandate(sub.autopayId);
+        autopayPaused = true;
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(`[pause] could not pause mandate ${sub.autopayId} for subscription ${sub.id}`, e);
+        throw new HttpError(
+          502,
+          'AUTOPAY_PAUSE_FAILED',
+          "We couldn't pause your autopay with the bank, so your plan has not been paused. Please try again in a few minutes."
+        );
+      }
+    }
 
     const updated = await prisma.subscription.update({
       where: { id: sub.id },
-      data: { status: 'PAUSED', pausedAt: new Date() },
+      data: { status: 'PAUSED', pausedAt: new Date(), ...(autopayPaused ? { autopayStatus: 'PAUSED' } : {}) },
     });
     await prisma.notification.create({
       data: {
@@ -171,16 +240,47 @@ router.post(
     const sub = await prisma.subscription.findUnique({ where: { id: req.params.id } });
     if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
     if (sub.status !== 'PAUSED') throw BadRequest('Subscription is not paused');
+
+    // Hand back the paused time. Lock-in moves with it only if it was still
+    // running when the plan was paused.
+    const now = new Date();
+    const pausedAt = sub.pausedAt ?? now;
+    const pausedMs = Math.max(0, now.getTime() - pausedAt.getTime());
+    const expiresAt = new Date(sub.expiresAt.getTime() + pausedMs);
+    const lockInUntil =
+      sub.lockInUntil > pausedAt ? new Date(sub.lockInUntil.getTime() + pausedMs) : sub.lockInUntil;
+
+    // A failed mandate resume must not keep the customer's water off: the plan
+    // resumes regardless, autopay stays PAUSED, and the app offers a retry
+    // (POST /payments/subscriptions/:id/autopay/resume).
+    let autopayResumed = false;
+    if (sub.autopayStatus === 'PAUSED' && sub.autopayId) {
+      try {
+        await resumeMandate(sub.autopayId);
+        autopayResumed = true;
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(`[resume] could not resume mandate ${sub.autopayId} for subscription ${sub.id}`, e);
+      }
+    }
+
     const updated = await prisma.subscription.update({
       where: { id: sub.id },
-      data: { status: 'ACTIVE', resumedAt: new Date() },
+      data: {
+        status: 'ACTIVE',
+        resumedAt: now,
+        pausedAt: null,
+        expiresAt,
+        lockInUntil,
+        ...(autopayResumed ? { autopayStatus: 'ACTIVE' } : {}),
+      },
     });
     await prisma.notification.create({
       data: {
         userId: sub.userId,
         channel: 'INAPP',
         title: 'Subscription resumed',
-        body: 'Welcome back — flow is on.',
+        body: `Welcome back — flow is on. Your plan now runs until ${formatIstDate(expiresAt)}.`,
       },
     });
     res.json({ data: updated });
@@ -277,6 +377,12 @@ router.post(
       await tx.booking.update({
         where: { id: sub.bookingId },
         data: { status: 'CANCELLED', cancelledAt: now, cancelReason: updatedSub.cancelReason },
+      });
+      // A technician must not turn up to install a purifier for a plan that
+      // was just cancelled and refunded.
+      await tx.job.updateMany({
+        where: { bookingId: sub.bookingId, type: 'INSTALL', status: { in: ['SCHEDULED', 'EN_ROUTE'] } },
+        data: { status: 'CANCELLED' },
       });
       // Release device back to warehouse-pickup state
       if (sub.deviceId) {

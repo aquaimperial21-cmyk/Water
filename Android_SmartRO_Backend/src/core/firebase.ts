@@ -17,8 +17,8 @@ export interface FirebasePhoneIdentity {
 }
 
 function loadServiceAccount(): ServiceAccount {
-  // Deployed: the whole key JSON pasted into one env var. Railway and Render
-  // cannot mount a secret file, so this is the production path.
+  // The whole key JSON pasted into one env var, for hosts that cannot mount
+  // a secret file. The Hostinger VPS uses the key file below instead.
   const inline = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (inline) {
     try {
@@ -28,7 +28,8 @@ function loadServiceAccount(): ServiceAccount {
     }
   }
 
-  // Local dev: the key file downloaded from the Firebase console. Gitignored.
+  // Local dev and the Hostinger VPS: the key file downloaded from the Firebase
+  // console. Gitignored.
   const file = process.env.FIREBASE_SERVICE_ACCOUNT_PATH ?? 'firebase-service-account.json';
   const resolved = path.resolve(process.cwd(), file);
   if (!fs.existsSync(resolved)) {

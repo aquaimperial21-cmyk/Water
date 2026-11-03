@@ -4,8 +4,10 @@ import { createHash, randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
-import { asyncHandler, NotFound, BadRequest } from '../core/errors';
+import { asyncHandler, NotFound, BadRequest, Conflict } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { refreshLowestMonthlyRollup } from './catalog';
+import { hideToken } from '../core/device-token';
 
 const router = Router();
 
@@ -124,11 +126,12 @@ router.get(
         const isOnline =
           s.device?.lastHeartbeatAt &&
           Date.now() - new Date(s.device.lastHeartbeatAt).getTime() < 90 * 60 * 1000;
-        return { ...s, installAddress, deviceOnline: !!isOnline };
+        return { ...s, device: hideToken(s.device), installAddress, deviceOnline: !!isOnline };
       })
     );
+    const tickets = customer.tickets.map((t) => ({ ...t, device: hideToken(t.device) }));
 
-    res.json({ data: { ...customer, subscriptions: subscriptionsWithAddress } });
+    res.json({ data: { ...customer, subscriptions: subscriptionsWithAddress, tickets } });
   })
 );
 
@@ -140,7 +143,7 @@ router.get(
       include: { product: true, subscription: { include: { user: { select: { id: true, fullName: true, phone: true } } } } },
       orderBy: { serial: 'asc' },
     });
-    res.json({ data: items });
+    res.json({ data: items.map((d) => hideToken(d)) });
   })
 );
 
@@ -270,7 +273,7 @@ router.patch(
         after: JSON.stringify(body),
       },
     });
-    res.json({ data: updated });
+    res.json({ data: hideToken(updated) });
   })
 );
 
@@ -326,6 +329,88 @@ const productSchema = z.object({
 });
 
 const productPatchSchema = productSchema.partial();
+
+// ─────────────────────────── Plans ───────────────────────────
+//
+// Plans used to exist only in the seed script. Length is fixed once created:
+// every subscription's expiry and every renewal is computed from it, so a new
+// length is a new plan and the old one is switched off. Customers already on
+// a switched-off plan keep it until it expires.
+
+const planCreateSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  // Calendar months: Monthly is 1, Annual is 12.
+  durationMonths: z.number().int().min(1).max(36),
+});
+const planPatchSchema = z
+  .object({ name: z.string().trim().min(1).max(60).optional(), isActive: z.boolean().optional() })
+  .strict();
+
+router.get(
+  '/plans',
+  authRequired(['ADMIN']),
+  asyncHandler(async (_req, res) => {
+    const plans = await prisma.plan.findMany({
+      orderBy: [{ durationMonths: 'asc' }, { createdAt: 'asc' }],
+      include: { _count: { select: { prices: true, subscriptions: true } } },
+    });
+    res.json({ data: plans });
+  })
+);
+
+router.post(
+  '/plans',
+  authRequired(['ADMIN']),
+  validateBody(planCreateSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as z.infer<typeof planCreateSchema>;
+    // Two live plans of the same length would show customers duplicate tabs.
+    const clash = await prisma.plan.findFirst({ where: { durationMonths: body.durationMonths, isActive: true } });
+    if (clash) throw Conflict(`An active ${body.durationMonths}-month plan already exists ("${clash.name}")`);
+    const plan = await prisma.plan.create({ data: body });
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.auth!.sub,
+        action: 'PLAN_CREATE',
+        entity: 'Plan',
+        entityId: plan.id,
+        after: JSON.stringify(body),
+      },
+    });
+    res.status(201).json({ data: plan });
+  })
+);
+
+router.patch(
+  '/plans/:id',
+  authRequired(['ADMIN']),
+  validateBody(planPatchSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as z.infer<typeof planPatchSchema>;
+    const before = await prisma.plan.findUnique({ where: { id: req.params.id } });
+    if (!before) throw NotFound('Plan not found');
+    if (body.isActive === true && !before.isActive) {
+      const clash = await prisma.plan.findFirst({
+        where: { durationMonths: before.durationMonths, isActive: true, id: { not: before.id } },
+      });
+      if (clash) throw Conflict(`Switch off "${clash.name}" first: it is also ${before.durationMonths} months`);
+    }
+    const plan = await prisma.plan.update({ where: { id: before.id }, data: body });
+    // Switching a plan on or off changes which prices are on sale.
+    if (body.isActive !== undefined && body.isActive !== before.isActive) await refreshLowestMonthlyRollup();
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.auth!.sub,
+        action: 'PLAN_UPDATE',
+        entity: 'Plan',
+        entityId: plan.id,
+        before: JSON.stringify({ name: before.name, isActive: before.isActive }),
+        after: JSON.stringify(body),
+      },
+    });
+    res.json({ data: plan });
+  })
+);
 
 const pricingSchema = z.object({
   planId: z.string().uuid(),
@@ -457,6 +542,9 @@ router.post(
       create: { planId, cityId, productId, monthlyPricePaise, depositPaise },
       include: { plan: true, city: true },
     });
+    // Keeps the catalog's 'Starting at' price in step. It was documented as
+    // called here but never was, so admin price edits never reached it.
+    await refreshLowestMonthlyRollup(productId);
     res.status(201).json({ data: price });
   })
 );
@@ -470,6 +558,7 @@ router.delete(
     const price = await prisma.planCityPrice.findUnique({ where: { id: priceId } });
     if (!price || price.productId !== id) throw NotFound('Price not found');
     await prisma.planCityPrice.delete({ where: { id: priceId } });
+    await refreshLowestMonthlyRollup(id);
     res.json({ data: { ok: true } });
   })
 );

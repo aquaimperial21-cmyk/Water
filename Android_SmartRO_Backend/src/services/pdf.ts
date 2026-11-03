@@ -69,7 +69,7 @@ export async function generateAgreementPdf(args: {
 
     doc.font('Helvetica-Bold').text('Plan & charges');
     doc.font('Helvetica')
-      .text(`Plan: ${booking.plan.name} (${booking.plan.durationDays} days)`)
+      .text(`Plan: ${booking.plan.name} (${booking.plan.durationMonths} ${booking.plan.durationMonths === 1 ? "month" : "months"})`)
       .text(`Security deposit (refundable): ${rupees(booking.depositPaise)}`)
       .text(`First-cycle rent: ${rupees(booking.firstPaymentPaise)}`);
     if (booking.referralCreditPaise > 0) {

@@ -4,8 +4,14 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { Forbidden, NotFound, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { hideToken } from '../core/device-token';
 
 const router = Router();
+
+// Jobs carry the ticket's device; technicians don't get its token.
+function withoutDeviceToken<J extends { ticket: { device: { deviceToken: string | null } | null } | null }>(job: J) {
+  return job.ticket ? { ...job, ticket: { ...job.ticket, device: hideToken(job.ticket.device) } } : job;
+}
 
 router.get(
   '/me',
@@ -37,7 +43,7 @@ router.get(
       },
       orderBy: { scheduledFor: 'asc' },
     });
-    res.json({ data: jobs });
+    res.json({ data: jobs.map(withoutDeviceToken) });
   })
 );
 
@@ -56,7 +62,7 @@ router.get(
       },
       orderBy: { scheduledFor: 'desc' },
     });
-    res.json({ data: jobs });
+    res.json({ data: jobs.map(withoutDeviceToken) });
   })
 );
 
@@ -76,7 +82,7 @@ router.get(
     });
     if (!job) throw NotFound('Job not found');
     if (job.technicianId !== tech.id) throw Forbidden('Not your job');
-    res.json({ data: job });
+    res.json({ data: withoutDeviceToken(job) });
   })
 );
 

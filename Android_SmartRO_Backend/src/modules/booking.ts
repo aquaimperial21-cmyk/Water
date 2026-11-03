@@ -4,10 +4,10 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
-import { termPricePaise } from '../core/pricing';
+import { firstTermDates, termPricePaise } from '../core/pricing';
 import { nextInvoiceNumber } from '../core/invoice';
 import { assertStubPaymentsAllowed } from '../core/payments';
-import { istSlotStart, formatIst } from '../core/time';
+import { istSlotStart, formatIst, formatIstDate } from '../core/time';
 import { applyReferralRewardOnFirstPayment, lookupReferralCreditForUser } from './referral';
 
 const router = Router();
@@ -33,9 +33,11 @@ router.post(
       include: { plan: true },
     });
     if (!price) throw BadRequest('No pricing for that product/plan/city combination');
+    // Switched off by an admin: existing customers keep it, new ones can't buy it.
+    if (!price.plan.isActive) throw BadRequest('This plan is no longer available; pick another one');
 
     // The customer is buying the whole term, not one month of it.
-    const rentPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationDays);
+    const rentPaise = termPricePaise(price.monthlyPricePaise, price.plan.durationMonths);
 
     // Referral credit applies to first-month rent only (capped at the rent so
     // we never end up with negative invoices).
@@ -275,11 +277,7 @@ router.post(
       });
 
       // Auto-create active subscription on payment success (matches doc: subscription created on installation; we treat paid → installed in prototype)
-      const startedAt = new Date();
-      const expiresAt = new Date(startedAt.getTime() + b.plan.durationDays * 24 * 60 * 60 * 1000);
-      const lockInUntil = new Date(startedAt.getTime() + 180 * 24 * 60 * 60 * 1000); // default 6-month lock-in
-      const trialDays = Number(process.env.TRIAL_DAYS ?? 7);
-      const trialEndsAt = new Date(startedAt.getTime() + trialDays * 24 * 60 * 60 * 1000);
+      const { startedAt, expiresAt, lockInUntil, trialEndsAt } = firstTermDates(new Date(), b.plan.durationMonths);
       const sub = await tx.subscription.create({
         data: {
           userId: b.userId,
@@ -301,7 +299,7 @@ router.post(
           userId: b.userId,
           channel: 'INAPP',
           title: 'Payment received',
-          body: `Your subscription is now active until ${expiresAt.toDateString()}.`,
+          body: `Your subscription is now active until ${formatIstDate(expiresAt)}.`,
         },
       });
       return { payment: updatedPay, subscription: sub };

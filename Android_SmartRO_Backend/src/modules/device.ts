@@ -11,6 +11,7 @@ import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { asyncHandler, BadRequest, Conflict, NotFound, Unauthorized } from '../core/errors';
 import { validateBody } from '../core/validate';
+import { hideToken, localKeyFor } from '../core/device-token';
 
 const router = Router();
 
@@ -87,6 +88,8 @@ router.get(
 const heartbeatSchema = z.object({
   firmwareVersion: z.string().max(40).optional(),
   wifiSsid: z.string().max(80).optional(),
+  // Home-LAN address, so the customer app can reach the ESP32 over Wi-Fi.
+  localIp: z.string().ip({ version: 'v4' }).optional(),
   // Live telemetry — all optional so legacy firmware that only sends presence
   // continues to work without payload changes.
   tdsPpm: z.number().int().min(0).max(5000).optional(),
@@ -111,6 +114,7 @@ router.post(
           lastHeartbeatAt: new Date(),
           firmwareVersion: body.firmwareVersion ?? device.firmwareVersion,
           wifiSsid: body.wifiSsid ?? device.wifiSsid,
+          localIp: body.localIp ?? device.localIp,
           lastTdsPpm: body.tdsPpm ?? device.lastTdsPpm,
           filterLifePct: body.filterLifePct ?? device.filterLifePct,
           usageLitresTotal: body.usageLitresDelta
@@ -119,7 +123,7 @@ router.post(
           leakDetectedAt: body.leak ? new Date() : device.leakDetectedAt,
         },
         select: {
-          id: true, lastHeartbeatAt: true, firmwareVersion: true, wifiSsid: true,
+          id: true, lastHeartbeatAt: true, firmwareVersion: true, wifiSsid: true, localIp: true,
           lastTdsPpm: true, filterLifePct: true, usageLitresTotal: true, leakDetectedAt: true,
         },
       });
@@ -300,6 +304,38 @@ router.get(
   })
 );
 
+// What the customer app needs to switch the water on/off over the home Wi-Fi:
+// the ESP32's LAN address and the key to sign commands with. The key is derived
+// from the device token; the token itself never leaves the server. Any
+// subscription status counts — turning the water OFF must keep working on an
+// unpaid plan, and the ESP32 refuses ON by itself.
+router.get(
+  '/me/local-access',
+  authRequired(['CUSTOMER']),
+  asyncHandler(async (req, res) => {
+    const sub = await prisma.subscription.findFirst({
+      where: { userId: req.auth!.sub, deviceId: { not: null } },
+      include: { device: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.set('Cache-Control', 'no-store');
+    const dev = sub?.device;
+    if (!dev) return res.json({ data: null });
+    const isOnline = dev.lastHeartbeatAt
+      ? Date.now() - dev.lastHeartbeatAt.getTime() < 90 * 60 * 1000
+      : false;
+    res.json({
+      data: {
+        serial: dev.serial,
+        localIp: dev.localIp,
+        localKey: dev.deviceToken ? localKeyFor(dev.deviceToken) : null,
+        lastHeartbeatAt: dev.lastHeartbeatAt,
+        isOnline,
+      },
+    });
+  })
+);
+
 // ───────────────────────────────────── Device ↔ Subscription pairing ───────────────────────
 //
 // Allocation is the atomic step that turns a warehouse Device into a unit
@@ -448,7 +484,7 @@ router.post(
           after: JSON.stringify({ reason: req.body.reason ?? null }),
         },
       });
-      return { device: d, subscriptionId: subId };
+      return { device: hideToken(d), subscriptionId: subId };
     });
     res.json({ data: result });
   })
@@ -504,6 +540,7 @@ router.get(
 // install flow. Prefer /allocate which does this atomically with subscription
 // binding.
 
+// Replaces the token, so the purifier is cut off until the new one is flashed.
 router.post(
   '/admin/:serial/issue-token',
   authRequired(['ADMIN']),
@@ -511,12 +548,52 @@ router.post(
     const device = await prisma.device.findUnique({ where: { serial: req.params.serial } });
     if (!device) throw NotFound('Device not found');
     const token = randomBytes(24).toString('base64url');
-    const updated = await prisma.device.update({
-      where: { id: device.id },
-      data: { deviceToken: token },
+    const updated = await prisma.$transaction(async (tx) => {
+      const d = await tx.device.update({
+        where: { id: device.id },
+        data: { deviceToken: token },
+        select: { id: true, serial: true, deviceToken: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.auth!.sub,
+          action: 'DEVICE_TOKEN_ISSUE',
+          entity: 'Device',
+          entityId: d.id,
+          after: JSON.stringify({ serial: d.serial, hadToken: Boolean(device.deviceToken) }),
+        },
+      });
+      return d;
+    });
+    res.set('Cache-Control', 'no-store');
+    // `deviceToken` stays for older callers.
+    res.json({ data: { ...updated, token } });
+  })
+);
+
+// Shows the current token so a technician can flash it onto the ESP32.
+// Every view is audited.
+router.get(
+  '/admin/:serial/token',
+  authRequired(['ADMIN']),
+  asyncHandler(async (req, res) => {
+    const device = await prisma.device.findUnique({
+      where: { serial: req.params.serial },
       select: { id: true, serial: true, deviceToken: true },
     });
-    res.json({ data: updated });
+    if (!device) throw NotFound('Device not found');
+    if (!device.deviceToken) throw NotFound('Device has no token');
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.auth!.sub,
+        action: 'DEVICE_TOKEN_VIEW',
+        entity: 'Device',
+        entityId: device.id,
+        after: JSON.stringify({ serial: device.serial }),
+      },
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ data: { serial: device.serial, token: device.deviceToken } });
   })
 );
 
@@ -533,7 +610,7 @@ router.get(
     const isOnline = device.lastHeartbeatAt
       ? Date.now() - new Date(device.lastHeartbeatAt).getTime() < 90 * 60 * 1000
       : false;
-    res.json({ data: { ...device, isOnline } });
+    res.json({ data: { ...hideToken(device), isOnline } });
   })
 );
 

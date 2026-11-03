@@ -3,20 +3,21 @@
 // day) combination only fires once.
 
 import { prisma } from '../core/prisma';
+import { formatIst, istSlotStart } from '../core/time';
 import { dispatch } from '../services/notifications';
 import type { TemplateKey } from '../services/messaging';
 
 function fmt(d: Date) {
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatIst(d, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function dayWindow(daysFromNow: number): { start: Date; end: Date } {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() + daysFromNow);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
+/**
+ * The IST calendar day `daysFromNow` days ahead, as [IST midnight, next IST
+ * midnight). Host midnight is 05:30 IST on a UTC container, so a plan ending
+ * before 05:30 was reminded a day off and "1 day left" could mean today.
+ */
+export function istDayWindow(daysFromNow: number, now = new Date()): { start: Date; end: Date } {
+  return { start: istSlotStart(now, daysFromNow, 0), end: istSlotStart(now, daysFromNow + 1, 0) };
 }
 
 const TIERS: { days: 7 | 3 | 1; key: TemplateKey }[] = [
@@ -31,11 +32,15 @@ export async function runExpiryReminders(): Promise<{ checked: number; sent: num
   let skipped = 0;
 
   for (const tier of TIERS) {
-    const { start, end } = dayWindow(tier.days);
+    const { start, end } = istDayWindow(tier.days);
     const subs = await prisma.subscription.findMany({
       where: {
         status: 'ACTIVE',
         expiresAt: { gte: start, lt: end },
+        // Autopay renews these on its own; "recharge now" would invite a
+        // second payment for the same term. Spelled out because SQL's
+        // `<> 'ACTIVE'` drops the NULL (no mandate) rows too.
+        OR: [{ autopayStatus: null }, { autopayStatus: { not: 'ACTIVE' } }],
       },
       include: { user: true, product: true },
     });

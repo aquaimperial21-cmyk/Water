@@ -48,8 +48,16 @@ export interface RazorpaySubscription {
   notes?: Record<string, string>;
 }
 
+export interface RazorpayPayment {
+  id: string;
+  order_id: string | null;
+  status: string; // created | authorized | captured | refunded | failed
+  amount: number; // paise
+}
+
 interface RazorpayClient {
   orders: {
+    fetchPayments(orderId: string): Promise<{ items: RazorpayPayment[] }>;
     create(opts: {
       amount: number;
       currency: string;
@@ -113,6 +121,12 @@ export async function createOrder(args: {
     notes: args.notes,
     payment_capture: 1,
   });
+}
+
+/** Every payment attempt made against an order, as Razorpay sees it. */
+export async function fetchOrderPayments(orderId: string): Promise<RazorpayPayment[]> {
+  const res = await getClient().orders.fetchPayments(orderId);
+  return res.items ?? [];
 }
 
 // Verify the signature returned by Razorpay Checkout to the client.
