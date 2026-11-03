@@ -71,19 +71,24 @@ export async function generateAgreementPdf(args: {
     doc.font('Helvetica')
       .text(`Plan: ${booking.plan.name} (${booking.plan.durationMonths} ${booking.plan.durationMonths === 1 ? "month" : "months"})`)
       .text(`Security deposit (refundable): ${rupees(booking.depositPaise)}`)
-      .text(`First-cycle rent: ${rupees(booking.firstPaymentPaise)}`);
+      .text(`Rent for the full plan term: ${rupees(booking.firstPaymentPaise)}`);
     if (booking.referralCreditPaise > 0) {
       doc.text(`Referral credit applied: -${rupees(booking.referralCreditPaise)} (code ${booking.referralCode ?? ''})`);
     }
     doc.text(`Total payable at signup: ${rupees(booking.depositPaise + booking.firstPaymentPaise)}`);
     doc.moveDown();
 
+    // Must match what the server enforces (subscription.ts cancel, core/pricing.ts
+    // firstTermDates) and the public refund policy. It used to promise a flat
+    // 6-month lock-in, a first-month-only refund and a free yearly relocation.
+    const termMonths = booking.plan.durationMonths;
+    const termText = `${termMonths} ${termMonths === 1 ? 'month' : 'months'}`;
     doc.font('Helvetica-Bold').text('Trial & cancellation');
     doc.font('Helvetica')
-      .text('• 7-day risk-free trial. Cancel within this window for a 100% refund (deposit + first month rent).')
-      .text('• After trial, a 6-month minimum lock-in applies. Early cancellation forfeits the deposit subject to ops policy.')
-      .text('• Post lock-in, cancel anytime; deposit refunded within 7 working days after quality inspection.')
-      .text('• SmartRO maintains the device end-to-end. All filters, service visits, and one relocation per year included.');
+      .text('• 7-day trial: cancel within 7 days of payment for a full refund of everything paid (deposit + rent).')
+      .text(`• Lock-in: the first plan term (${termText}). After the trial and before the lock-in ends, the rental cannot be cancelled; contact support for exceptions.`)
+      .text('• After the lock-in, cancel any time from the app. We collect the purifier within 72 hours and refund the deposit after a quality inspection; deductions only for damage beyond normal wear. Rent already paid for the current term is not refunded.')
+      .text('• We maintain the purifier for the whole rental: filters, service visits and repairs are included.');
     doc.moveDown();
 
     doc.font('Helvetica-Bold').text('Signed');
