@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Shell } from '../../components/Shell';
 import { Button, Card, Drawer, EmptyState, FormField, Input, Pill, Select, Textarea } from '../../components/UI';
+import { confirmDialog, toast } from '../../components/Feedback';
 import { api, apiErrorMessage, formatDate } from '../../lib/api';
 
 interface Banner {
@@ -121,9 +122,19 @@ export default function BannersPage() {
   }
 
   async function archive(b: Banner) {
-    if (!confirm(`Archive banner "${b.title}"?`)) return;
-    await api.delete(`/banners/admin/${b.id}`);
-    await reload();
+    const ok = await confirmDialog({
+      title: `Archive "${b.title}"?`,
+      message: 'It stops showing in the customer app. You can switch it back on later by editing it.',
+      confirmLabel: 'Archive',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/banners/admin/${b.id}`);
+      await reload();
+    } catch (e) {
+      toast.error(apiErrorMessage(e), 'Could not archive banner');
+    }
   }
 
   const open = creating || !!editing;

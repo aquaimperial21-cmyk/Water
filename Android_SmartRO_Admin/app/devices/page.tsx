@@ -7,6 +7,7 @@
 //   • Edit warehouse + firmware + retire from the row's drawer
 //   • Telemetry preview for INSTALLED units (TDS, filter life, usage, leak)
 //   • Deallocate an INSTALLED unit → returns it to warehouse (token nulled)
+//   • Show a unit's token for flashing, or generate a new one
 //
 // Pairs with /dispatch (assignment queue). Together these are the operations
 // surfaces for the device-↔-user binding the rental product depends on.
@@ -24,6 +25,8 @@ import {
   Stat,
   Table,
 } from '../../components/UI';
+import { confirmDialog, toast } from '../../components/Feedback';
+import { DeviceTokenDialog } from '../../components/DeviceTokenDialog';
 import { api, apiErrorMessage, formatDateTime } from '../../lib/api';
 
 interface Product {
@@ -46,7 +49,7 @@ interface Device {
   filterLifePct?: number | null;
   usageLitresTotal: number;
   leakDetectedAt?: string | null;
-  deviceToken?: string | null;
+  hasToken?: boolean;
   subscription?: {
     id: string;
     user?: { id: string; fullName?: string | null; phone?: string };
@@ -66,9 +69,10 @@ export default function DevicesPage() {
   const [filter, setFilter] = useState<StatusFilter>('ALL');
   const [query, setQuery] = useState('');
   const [busySerial, setBusySerial] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Device | null>(null);
+  const [tokenView, setTokenView] = useState<{ serial: string; token: string } | null>(null);
+  const [revealing, setRevealing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,23 +96,52 @@ export default function DevicesPage() {
   }, [load]);
 
   async function deallocate(serial: string) {
-    const ok = window.confirm(
-      `Deallocate ${serial}? This nulls the device token and releases the unit to the warehouse. The customer's subscription stays active but unpaired until a replacement is assigned.`
-    );
+    const ok = await confirmDialog({
+      title: `Deallocate ${serial}?`,
+      message:
+        "This nulls the device token and releases the unit to the warehouse. The customer's subscription stays active but unpaired until a replacement is assigned.",
+      confirmLabel: 'Deallocate',
+      destructive: true,
+    });
     if (!ok) return;
     setBusySerial(serial);
-    setToast(null);
     try {
       await api.post(`/devices/admin/${encodeURIComponent(serial)}/deallocate`, {
         reason: 'Ops UI deallocate',
       });
-      setToast({ tone: 'success', text: `${serial} returned to warehouse` });
+      toast.success(`${serial} returned to warehouse`);
       await load();
     } catch (e) {
-      setToast({ tone: 'danger', text: apiErrorMessage(e) });
+      toast.error(apiErrorMessage(e), `Could not deallocate ${serial}`);
     } finally {
       setBusySerial(null);
     }
+  }
+
+  // Each view is audited server-side.
+  async function showToken(serial: string) {
+    if (revealing) return;
+    setRevealing(serial);
+    try {
+      const r = await api.get<{ data: { serial: string; token: string } }>(
+        `/devices/admin/${encodeURIComponent(serial)}/token`
+      );
+      setTokenView(r.data.data);
+    } catch (e) {
+      toast.error(apiErrorMessage(e), `Could not load the token for ${serial}`);
+    } finally {
+      setRevealing(null);
+    }
+  }
+
+  // The dialog confirms first and reports errors.
+  async function regenerateToken(serial: string) {
+    const r = await api.post<{ data: { serial: string; token: string } }>(
+      `/devices/admin/${encodeURIComponent(serial)}/issue-token`
+    );
+    setTokenView({ serial: r.data.data.serial, token: r.data.data.token });
+    toast.success(`Flash the new token onto ${serial} to bring it back online.`, 'New token generated');
+    void load();
   }
 
   const filtered = useMemo(() => {
@@ -158,18 +191,6 @@ export default function DevicesPage() {
         <Stat label="Returned" value={counts.RETURNED ?? 0} sub="Awaiting inspection" />
         <Stat label="Retired" value={counts.RETIRED ?? 0} sub="End-of-life" />
       </div>
-
-      {toast ? (
-        <div
-          className="mb-4 px-4 py-3 rounded-xl text-sm font-semibold"
-          style={{
-            backgroundColor: toast.tone === 'success' ? '#E7F9F2' : '#FCE9E9',
-            color: toast.tone === 'success' ? '#0F7A4F' : '#9B2C2C',
-          }}
-        >
-          {toast.text}
-        </div>
-      ) : null}
 
       <Card>
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -277,6 +298,11 @@ export default function DevicesPage() {
                   <Button size="sm" variant="ghost" onClick={() => setEditing(d)}>
                     Edit
                   </Button>
+                  {d.hasToken ? (
+                    <Button size="sm" variant="ghost" onClick={() => void showToken(d.serial)}>
+                      {revealing === d.serial ? '…' : 'Token'}
+                    </Button>
+                  ) : null}
                   {d.status === 'INSTALLED' ? (
                     <Button
                       size="sm"
@@ -300,20 +326,28 @@ export default function DevicesPage() {
         products={products}
         onSaved={async (created) => {
           setShowAdd(false);
-          setToast({ tone: 'success', text: `${created} device${created === 1 ? '' : 's'} added to warehouse` });
+          toast.success(`${created} device${created === 1 ? '' : 's'} added to warehouse`);
           await load();
         }}
       />
+
+      {tokenView ? (
+        <DeviceTokenDialog
+          serial={tokenView.serial}
+          token={tokenView.token}
+          onClose={() => setTokenView(null)}
+          onRegenerate={() => regenerateToken(tokenView.serial)}
+        />
+      ) : null}
 
       <EditDeviceDrawer
         device={editing}
         onClose={() => setEditing(null)}
         onSaved={async (msg) => {
           setEditing(null);
-          setToast({ tone: 'success', text: msg });
+          toast.success(msg);
           await load();
         }}
-        onError={(text) => setToast({ tone: 'danger', text })}
       />
     </Shell>
   );
@@ -456,12 +490,10 @@ function EditDeviceDrawer({
   device,
   onClose,
   onSaved,
-  onError,
 }: {
   device: Device | null;
   onClose: () => void;
   onSaved: (msg: string) => Promise<void>;
-  onError: (msg: string) => void;
 }) {
   const [warehouse, setWarehouse] = useState('');
   const [firmwareVersion, setFirmwareVersion] = useState('');
@@ -493,7 +525,7 @@ function EditDeviceDrawer({
       await api.patch(`/admin/devices/${encodeURIComponent(device.serial)}`, patch);
       await onSaved(`${device.serial} updated`);
     } catch (e) {
-      onError(apiErrorMessage(e));
+      toast.error(apiErrorMessage(e), `Could not update ${device.serial}`);
     } finally {
       setBusy(false);
     }
@@ -502,16 +534,22 @@ function EditDeviceDrawer({
   async function retire() {
     if (!device) return;
     if (device.subscription) {
-      onError('Deallocate the device before retiring it.');
+      toast.warning('Deallocate the device before retiring it.');
       return;
     }
-    if (!window.confirm(`Retire ${device.serial}? This is terminal — the unit can no longer be allocated.`)) return;
+    const ok = await confirmDialog({
+      title: `Retire ${device.serial}?`,
+      message: 'This is terminal — the unit can no longer be allocated.',
+      confirmLabel: 'Retire',
+      destructive: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api.patch(`/admin/devices/${encodeURIComponent(device.serial)}`, { status: 'RETIRED' });
       await onSaved(`${device.serial} retired`);
     } catch (e) {
-      onError(apiErrorMessage(e));
+      toast.error(apiErrorMessage(e), `Could not retire ${device.serial}`);
     } finally {
       setBusy(false);
     }

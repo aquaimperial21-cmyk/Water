@@ -4,11 +4,13 @@
 // physical purifier, paired against warehouse devices of the matching
 // product. One-click allocate calls POST /devices/admin/:serial/allocate
 // which atomically binds the device to the subscription, issues a token,
-// closes the open INSTALL job, and notifies the customer.
+// closes the open INSTALL job, and notifies the customer. The new token is
+// shown right away so it can be flashed onto the purifier.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Shell } from '../../components/Shell';
 import { Badge, Button, Card, Select, Stat, Table } from '../../components/UI';
+import { DeviceTokenDialog } from '../../components/DeviceTokenDialog';
 import { api, apiErrorMessage, formatDate } from '../../lib/api';
 
 interface DispatchSub {
@@ -28,6 +30,9 @@ interface WarehouseDevice {
   productId: string;
   warehouse: string;
 }
+interface AllocateResponse {
+  device: { serial: string; deviceToken: string | null };
+}
 interface DispatchResponse {
   byProduct: Record<string, { subs: DispatchSub[]; devices: WarehouseDevice[] }>;
   subsAwaiting: number;
@@ -42,6 +47,7 @@ export default function DispatchPage() {
   const [pick, setPick] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const [tokenView, setTokenView] = useState<{ serial: string; token: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,11 +75,13 @@ export default function DispatchPage() {
     setBusyId(sub.id);
     setToast(null);
     try {
-      await api.post(`/devices/admin/${encodeURIComponent(serial)}/allocate`, {
+      const r = await api.post<{ data: AllocateResponse }>(`/devices/admin/${encodeURIComponent(serial)}/allocate`, {
         subscriptionId: sub.id,
         issueToken: true,
       });
       setToast({ tone: 'success', text: `Allocated ${serial} → ${sub.user?.fullName ?? sub.user?.phone ?? sub.id.slice(0, 8)}` });
+      const { device } = r.data.data;
+      if (device.deviceToken) setTokenView({ serial: device.serial, token: device.deviceToken });
       await load();
     } catch (e) {
       setToast({ tone: 'danger', text: apiErrorMessage(e) });
@@ -232,6 +240,15 @@ export default function DispatchPage() {
           {loading ? 'Refreshing…' : 'Refresh queue'}
         </Button>
       </div>
+
+      {tokenView ? (
+        <DeviceTokenDialog
+          title={`${tokenView.serial} allocated`}
+          serial={tokenView.serial}
+          token={tokenView.token}
+          onClose={() => setTokenView(null)}
+        />
+      ) : null}
     </Shell>
   );
 }

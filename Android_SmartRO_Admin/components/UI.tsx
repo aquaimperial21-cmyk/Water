@@ -139,6 +139,7 @@ export function Button({
   className = '',
   leadingIcon,
   trailingIcon,
+  autoFocus,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -149,6 +150,7 @@ export function Button({
   className?: string;
   leadingIcon?: React.ReactNode;
   trailingIcon?: React.ReactNode;
+  autoFocus?: boolean;
 }) {
   const v: Record<string, string> = {
     primary: 'bg-gradient-accent text-white shadow-glow hover:opacity-95',
@@ -167,6 +169,7 @@ export function Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      autoFocus={autoFocus}
       className={`inline-flex items-center justify-center rounded-xl font-bold tracking-tight disabled:opacity-50 disabled:cursor-not-allowed transition-all ${v[variant]} ${sz[size]} ${className}`}
     >
       {leadingIcon}

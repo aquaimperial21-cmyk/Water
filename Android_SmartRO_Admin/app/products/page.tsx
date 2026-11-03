@@ -13,12 +13,15 @@ import {
   Select,
   Textarea,
 } from '../../components/UI';
+import { confirmDialog, toast } from '../../components/Feedback';
 import { api, apiErrorMessage, assetUrl, paiseToInr } from '../../lib/api';
 
 type Kind = 'HOME' | 'COMMERCIAL';
 type Mounting = 'WALL' | 'COUNTERTOP' | 'UNDER_SINK';
 
-interface Plan { id: string; name: string; durationDays: number }
+// Plans are calendar months; prices are a per-month rate (a term costs monthly × durationMonths).
+interface Plan { id: string; name: string; durationMonths: number }
+const monthsShort = (m: number | undefined) => (m == null ? '—' : `${m} mo`);
 interface City { id: string; name: string; state: string; isServiceable: boolean }
 interface PlanCityPrice {
   id: string;
@@ -228,7 +231,21 @@ export default function ProductsPage() {
   }
 
   async function toggleActive(p: Product) {
-    if (!confirm(p.isActive ? `Disable "${p.name}"?` : `Enable "${p.name}"?`)) return;
+    const ok = await confirmDialog(
+      p.isActive
+        ? {
+            title: `Disable "${p.name}"?`,
+            message: 'It is hidden from the customer catalog. You can enable it again at any time.',
+            confirmLabel: 'Disable',
+            destructive: true,
+          }
+        : {
+            title: `Enable "${p.name}"?`,
+            message: 'It becomes visible in the customer catalog again.',
+            confirmLabel: 'Enable',
+          }
+    );
+    if (!ok) return;
     setBusy(true); setErr(null);
     try {
       if (p.isActive) {
@@ -260,7 +277,13 @@ export default function ProductsPage() {
   }
 
   async function removePrice(productId: string, priceId: string) {
-    if (!confirm('Remove this price?')) return;
+    const ok = await confirmDialog({
+      title: 'Remove this price?',
+      message: 'This plan and city combination will no longer have a price for this product.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!ok) return;
     setBusy(true); setErr(null);
     try {
       await api.delete(`/admin/products/${productId}/pricing/${priceId}`);
@@ -589,12 +612,12 @@ export default function ProductsPage() {
                   <option value="">Select a plan…</option>
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — {p.durationDays}d
+                      {p.name} — {monthsShort(p.durationMonths)}
                     </option>
                   ))}
                 </Select>
               </FormField>
-              <FormField label="Monthly price (₹)" hint="Billed every cycle">
+              <FormField label="Monthly price (₹)" hint="Per month · the plan's term costs this × its months">
                 <Input
                   type="number"
                   value={form.priceMonthly}
@@ -874,7 +897,7 @@ function PricingManager({
                     <td className="px-4 py-3 font-bold">{p.city?.name}</td>
                     <td className="px-4 py-3">
                       {p.plan?.name}{' '}
-                      <span className="text-ink-muted text-[11px]">({p.plan?.durationDays}d)</span>
+                      <span className="text-ink-muted text-[11px]">({monthsShort(p.plan?.durationMonths)})</span>
                     </td>
                     <td className="px-4 py-3">
                       {isEditing ? (
@@ -939,7 +962,7 @@ function PricingManager({
         <FormField label="Plan">
           <Select value={draftPlan} onChange={(e) => setDraftPlan(e.target.value)}>
             {plans.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} ({p.durationDays}d)</option>
+              <option key={p.id} value={p.id}>{p.name} ({monthsShort(p.durationMonths)})</option>
             ))}
           </Select>
         </FormField>
@@ -1011,7 +1034,7 @@ function PricingMatrix({
     setCells(seed);
   }, [seed]);
 
-  const sortedPlans = useMemo(() => [...plans].sort((a, b) => a.durationDays - b.durationDays), [plans]);
+  const sortedPlans = useMemo(() => [...plans].sort((a, b) => a.durationMonths - b.durationMonths), [plans]);
   const sortedCities = useMemo(() => [...cities].sort((a, b) => a.name.localeCompare(b.name)), [cities]);
 
   function setCell(planId: string, cityId: string, patch: Partial<CellState>) {
@@ -1081,7 +1104,10 @@ function PricingMatrix({
   async function saveAll() {
     const invalid = dirtyKeys.filter(({ planId, cityId }) => !cellValid(cells[cellKey(planId, cityId)]));
     if (invalid.length > 0) {
-      alert(`${invalid.length} dirty cell(s) have invalid values. Both monthly and deposit must be ≥ 0.`);
+      toast.warning(
+        'Both monthly and deposit must be numbers ≥ 0.',
+        `${invalid.length} edited cell${invalid.length === 1 ? ' has an invalid value' : 's have invalid values'}`
+      );
       return;
     }
     if (dirtyKeys.length === 0) return;
@@ -1158,7 +1184,7 @@ function PricingMatrix({
               >
                 <td className="px-3 py-2 sticky left-0 bg-inherit">
                   <div className="font-bold">{plan.name}</div>
-                  <div className="text-[11px] text-ink-muted">{plan.durationDays}d</div>
+                  <div className="text-[11px] text-ink-muted">{monthsShort(plan.durationMonths)}</div>
                 </td>
                 {sortedCities.map((city) => {
                   const k = cellKey(plan.id, city.id);

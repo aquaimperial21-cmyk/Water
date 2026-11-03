@@ -21,7 +21,7 @@ interface Detail {
     expiresAt: string;
     lockInUntil: string;
     product?: { name: string; technology: string; capacityLitres: number };
-    plan?: { name: string; durationDays: number };
+    plan?: { name: string; durationMonths: number };
     device?: { id: string; serial: string; status: string; lastHeartbeatAt?: string | null; firmwareVersion?: string | null; wifiSsid?: string | null };
     booking?: { addressId?: string | null; city?: { name: string } };
     installAddress?: { line1: string; line2?: string | null; pincode: string; city?: { name: string }; lat?: number | null; lng?: number | null } | null;
@@ -243,7 +243,7 @@ export default function CustomerDetail() {
                 {data.subscriptions.map((s) => (
                   <tr key={s.id} className="border-t border-line/70">
                     <Td>{s.product?.name ?? '—'}</Td>
-                    <Td>{s.plan?.name ?? '—'} <span className="text-ink-muted text-[11px]">· {s.plan?.durationDays}d</span></Td>
+                    <Td>{s.plan?.name ?? '—'}{s.plan ? <span className="text-ink-muted text-[11px]"> · {s.plan.durationMonths} mo</span> : null}</Td>
                     <Td><Pill tone={s.status === 'ACTIVE' ? 'success' : 'warning'} size="sm" dot>{s.status}</Pill></Td>
                     <Td>{formatDate(s.startedAt)}</Td>
                     <Td>{formatDate(s.expiresAt)}</Td>

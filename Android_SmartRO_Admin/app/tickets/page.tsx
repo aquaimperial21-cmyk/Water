@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Shell } from '../../components/Shell';
 import { Badge, Table, Button, Card } from '../../components/UI';
+import { toast } from '../../components/Feedback';
 import { api, apiErrorMessage, formatDateTime } from '../../lib/api';
 
 interface Tech { id: string; employeeCode: string; zone: string; user: { fullName: string } }
@@ -43,14 +44,14 @@ export default function Tickets() {
         scheduledFor: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
       });
       await load();
-    } catch (e) { alert(apiErrorMessage(e)); }
+    } catch (e) { toast.error(apiErrorMessage(e), 'Could not assign technician'); }
   }
 
   async function changeStatus(ticketId: string, status: string) {
     try {
       await api.patch(`/tickets/${ticketId}`, { status });
       await load();
-    } catch (e) { alert(apiErrorMessage(e)); }
+    } catch (e) { toast.error(apiErrorMessage(e), 'Could not update ticket status'); }
   }
 
   const tone = (s: string) =>

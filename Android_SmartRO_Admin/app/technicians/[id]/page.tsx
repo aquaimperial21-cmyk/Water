@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Shell } from '../../../components/Shell';
 import { Button, Card, EmptyState, FormField, Input, Pill, Select } from '../../../components/UI';
+import { confirmDialog, toast } from '../../../components/Feedback';
 import { api, apiErrorMessage, formatDate } from '../../../lib/api';
 
 interface TechFull {
@@ -97,13 +98,25 @@ export default function TechnicianDetail() {
 
   async function setStatus(status: 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'EXITED') {
     if (!tech) return;
-    if (!confirm(`Set status to ${status}?`)) return;
+    const label = { ACTIVE: 'Active', ON_LEAVE: 'On leave', SUSPENDED: 'Suspended', EXITED: 'Exited' }[status];
+    const ok = await confirmDialog({
+      title: `Mark ${tech.user.fullName ?? tech.employeeCode} as ${label}?`,
+      message:
+        status === 'ACTIVE'
+          ? undefined
+          : status === 'EXITED'
+          ? 'This marks the employee inactive and records today as their exit date.'
+          : 'This marks the employee inactive until they are set back to Active.',
+      confirmLabel: `Mark ${label.toLowerCase()}`,
+      destructive: status === 'SUSPENDED' || status === 'EXITED',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api.patch(`/admin/technicians/${tech.id}`, { status });
       await reload();
     } catch (e) {
-      alert(apiErrorMessage(e));
+      toast.error(apiErrorMessage(e), 'Could not change status');
     } finally {
       setBusy(false);
     }
@@ -118,7 +131,7 @@ export default function TechnicianDetail() {
       setDocUrl('');
       await reload();
     } catch (e) {
-      alert(apiErrorMessage(e));
+      toast.error(apiErrorMessage(e), 'Could not add document');
     } finally {
       setBusy(false);
     }

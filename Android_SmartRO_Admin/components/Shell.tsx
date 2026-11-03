@@ -14,6 +14,7 @@ const NAV: Array<{ href: string; label: string; icon: string; group?: string }> 
   { href: '/dispatch', label: 'Device dispatch', icon: 'M16 3h5v5M8 21H3v-5M21 3l-7.5 7.5M3 21l7.5-7.5' },
   { href: '/devices', label: 'Paired devices', icon: 'M9 3h6l1 4H8zM5 7h14l-1 13H6zM10 11v6M14 11v6' },
   { href: '/products', label: 'Products', icon: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z' },
+  { href: '/plans', label: 'Plans', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
   { href: '/customers', label: 'Customers', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' },
   { href: '/tickets', label: 'Service tickets', icon: 'M21 16V8.5a2.5 2.5 0 0 0-5 0V16M3 16h18M5 9h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z' },
   { href: '/technicians', label: 'Employees', icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM18 7v6M21 10h-6' },

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Shell } from '../../components/Shell';
 import { Badge, Table, Button, Card } from '../../components/UI';
+import { toast } from '../../components/Feedback';
 import { api, apiErrorMessage, formatDateTime } from '../../lib/api';
 
 interface Inquiry {
@@ -37,7 +38,7 @@ export default function Inquiries() {
       await api.patch(`/inquiries/${id}/status`, { status });
       await load();
     } catch (e) {
-      alert(apiErrorMessage(e));
+      toast.error(apiErrorMessage(e), 'Could not update inquiry');
     }
   }
 
