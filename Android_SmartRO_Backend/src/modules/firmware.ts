@@ -27,11 +27,10 @@ import {
   releaseCounts,
   updateFirmwareRelease,
 } from '../core/firmware';
+import { presenceOf } from '../core/device-online';
 import { UPLOAD_ROOT } from './upload';
 
 const router = Router();
-
-const ONLINE_WINDOW_MS = 90 * 60 * 1000;
 
 // Kept in memory: the image is hashed and signature-checked before it is
 // written anywhere, and it is at most one app slot (under 2 MB).
@@ -123,6 +122,7 @@ const deviceSelect = {
   otaAttempts: true,
   otaUpdatedAt: true,
   lastHeartbeatAt: true,
+  lastSeenAt: true,
   otaRelease: { select: { version: true } },
 } as const;
 
@@ -135,6 +135,7 @@ type DeviceRow = {
   otaAttempts: number;
   otaUpdatedAt: Date | null;
   lastHeartbeatAt: Date | null;
+  lastSeenAt: Date | null;
   otaRelease: { version: string } | null;
 };
 
@@ -143,7 +144,7 @@ function deviceView(d: DeviceRow) {
   return {
     ...rest,
     otaReleaseVersion: otaRelease?.version ?? null,
-    isOnline: d.lastHeartbeatAt ? Date.now() - d.lastHeartbeatAt.getTime() < ONLINE_WINDOW_MS : false,
+    ...presenceOf(d), // lastSeenAt = latest contact, isOnline = within 25 h
   };
 }
 

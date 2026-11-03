@@ -84,8 +84,6 @@ interface RazorpayClient {
       addons?: Array<{ item: { name: string; amount: number; currency: string } }>;
     }): Promise<RazorpaySubscription>;
     cancel(id: string, opts?: { cancel_at_cycle_end?: 0 | 1 }): Promise<RazorpaySubscription>;
-    pause(id: string, opts?: { pause_at?: 'now' }): Promise<RazorpaySubscription>;
-    resume(id: string, opts?: { resume_at?: 'now' }): Promise<RazorpaySubscription>;
   };
 }
 
@@ -209,12 +207,4 @@ export async function createMandateSubscription(args: {
 
 export async function cancelMandate(subscriptionId: string, atCycleEnd = false): Promise<RazorpaySubscription> {
   return getClient().subscriptions.cancel(subscriptionId, { cancel_at_cycle_end: atCycleEnd ? 1 : 0 });
-}
-
-export async function pauseMandate(subscriptionId: string): Promise<RazorpaySubscription> {
-  return getClient().subscriptions.pause(subscriptionId, { pause_at: 'now' });
-}
-
-export async function resumeMandate(subscriptionId: string): Promise<RazorpaySubscription> {
-  return getClient().subscriptions.resume(subscriptionId, { resume_at: 'now' });
 }

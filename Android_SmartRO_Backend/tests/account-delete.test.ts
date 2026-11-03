@@ -116,10 +116,10 @@ describe('Account deletion', () => {
     expect(msg).toMatch(/cancel/i);
     await prisma.subscription.update({ where: { id: active.id }, data: { status: 'CLOSED' } });
 
-    // Ended and paused is still a purifier on the wall.
-    const paused = await plan('PAUSED', { expiresAt: new Date(Date.now() - DAY), pausedAt: new Date(Date.now() - 2 * DAY) });
+    // Ended and suspended is still a purifier on the wall.
+    const suspended = await plan('SUSPENDED', { expiresAt: new Date(Date.now() - DAY) });
     await expectRefused('ACCOUNT_HAS_ACTIVE_PLAN');
-    await prisma.subscription.update({ where: { id: paused.id }, data: { status: 'CLOSED' } });
+    await prisma.subscription.update({ where: { id: suspended.id }, data: { status: 'CLOSED' } });
 
     // Paid, but no plan made yet.
     const paid = await booking('PAID');

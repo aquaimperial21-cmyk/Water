@@ -8,12 +8,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { randomBytes } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { asyncHandler, BadRequest, Conflict, NotFound, Unauthorized } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { hideToken, localKeyFor } from '../core/device-token';
-import { parseGraceDays, pollIntervalSec as computePollIntervalSec } from '../core/poll-schedule';
+import { parseGraceDays, pollIntervalSec as computePollIntervalSec, TEST_PRODUCT_TAG } from '../core/poll-schedule';
+import { presenceOf } from '../core/device-online';
 import {
   FIRMWARE_VERSION_RE,
   OTA_REPORT_STATUSES,
@@ -33,11 +35,30 @@ async function authorizeDevice(serial: string, token: string | undefined) {
   if (!token) throw Unauthorized('Missing device token');
   const device = await prisma.device.findUnique({
     where: { serial },
-    include: { subscription: { include: { user: true } } },
+    include: { subscription: { include: { user: true, product: { select: { tag: true } } } } },
   });
   if (!device) throw NotFound('Device not found');
   if (!device.deviceToken || device.deviceToken !== token) throw Unauthorized('Invalid device token');
   return device;
+}
+
+// lastSeenAt is written at most this often, so a chip polling every minute
+// (test plans, just after a plan ends) doesn't write the row on every poll.
+const SEEN_WRITE_EVERY_MS = 60 * 1000;
+
+/**
+ * A home-LAN IPv4 address (10.x, 172.16–31.x, 192.168.x) in plain dotted form,
+ * or null for anything else: missing, public, malformed, leading zeros.
+ */
+function privateLanIpv4(raw: string | undefined): string | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec((raw ?? '').trim());
+  if (!m) return null;
+  const parts = m.slice(1);
+  if (parts.some((p) => p.length > 1 && p.startsWith('0'))) return null;
+  const [a, b, c, d] = parts.map(Number) as [number, number, number, number];
+  if ([a, b, c, d].some((n) => n > 255)) return null;
+  const isPrivate = a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  return isPrivate ? `${a}.${b}.${c}.${d}` : null;
 }
 
 // ESP32 polls this to decide flow on/off.
@@ -71,14 +92,15 @@ router.get(
       message = 'No active subscription';
     }
 
-    // Polling hint: hourly while a plan is comfortably paid, faster near and
-    // just after the end so a recharge turns the water back on quickly.
-    // The schedule lives in core/poll-schedule.ts.
+    // Polling hint: daily while a plan is comfortably paid, hourly in the last
+    // 3 days, fast just after the end so a recharge turns the water back on
+    // quickly. The schedule lives in core/poll-schedule.ts.
     const pollIntervalSec = computePollIntervalSec({
       subscription: sub,
       allowFlow,
       graceDays: GRACE_DAYS,
       now: Date.now(),
+      fastPoll: sub?.product?.tag === TEST_PRODUCT_TAG,
     });
 
     // Remote update: the chip sends the version it runs; `firmware` is present
@@ -86,7 +108,21 @@ router.get(
     // malformed header is ignored rather than failing the poll.
     const fwHeader = req.header('x-firmware-version');
     const runningVersion = fwHeader && FIRMWARE_VERSION_RE.test(fwHeader) ? fwHeader : undefined;
-    const firmware = await syncDeviceFirmware(device, runningVersion);
+
+    // Presence: when the chip was last heard from (drives "online"), and its
+    // home-LAN address from the optional X-Local-Ip header, so the app can
+    // reach it even between heartbeats. Anything but a private IPv4 is
+    // ignored. Written only when it changes, in the same update as the
+    // firmware bookkeeping.
+    const seenNow = new Date();
+    const presence: Prisma.DeviceUpdateInput = {};
+    if (!device.lastSeenAt || seenNow.getTime() - device.lastSeenAt.getTime() > SEEN_WRITE_EVERY_MS) {
+      presence.lastSeenAt = seenNow;
+    }
+    const localIp = privateLanIpv4(req.header('x-local-ip'));
+    if (localIp && localIp !== device.localIp) presence.localIp = localIp;
+
+    const firmware = await syncDeviceFirmware(device, runningVersion, presence);
 
     res.json({
       data: {
@@ -180,10 +216,13 @@ router.post(
     const body = req.body as z.infer<typeof heartbeatSchema>;
 
     const updated = await prisma.$transaction(async (tx) => {
+      const now = new Date();
       const dev = await tx.device.update({
         where: { id: device.id },
         data: {
-          lastHeartbeatAt: new Date(),
+          lastHeartbeatAt: now,
+          // The row is written anyway, so lastSeenAt needs no throttling here.
+          lastSeenAt: now,
           firmwareVersion: body.firmwareVersion ?? device.firmwareVersion,
           wifiSsid: body.wifiSsid ?? device.wifiSsid,
           localIp: body.localIp ?? device.localIp,
@@ -195,7 +234,7 @@ router.post(
           leakDetectedAt: body.leak ? new Date() : device.leakDetectedAt,
         },
         select: {
-          id: true, lastHeartbeatAt: true, firmwareVersion: true, wifiSsid: true, localIp: true,
+          id: true, lastHeartbeatAt: true, lastSeenAt: true, firmwareVersion: true, wifiSsid: true, localIp: true,
           lastTdsPpm: true, filterLifePct: true, usageLitresTotal: true, leakDetectedAt: true,
         },
       });
@@ -325,7 +364,7 @@ router.get(
   authRequired(['CUSTOMER']),
   asyncHandler(async (req, res) => {
     const sub = await prisma.subscription.findFirst({
-      where: { userId: req.auth!.sub, status: { in: ['ACTIVE', 'GRACE', 'PAUSED'] } },
+      where: { userId: req.auth!.sub, status: { in: ['ACTIVE', 'GRACE'] } },
       include: { device: true, plan: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -333,13 +372,10 @@ router.get(
       return res.json({ data: null });
     }
     const dev = sub.device;
-    const isOnline = dev.lastHeartbeatAt
-      ? Date.now() - dev.lastHeartbeatAt.getTime() < 90 * 60 * 1000
-      : false;
     res.json({
       data: {
         serial: dev.serial,
-        isOnline,
+        ...presenceOf(dev),
         lastHeartbeatAt: dev.lastHeartbeatAt,
         tdsPpm: dev.lastTdsPpm,
         filterLifePct: dev.filterLifePct,
@@ -393,16 +429,13 @@ router.get(
     res.set('Cache-Control', 'no-store');
     const dev = sub?.device;
     if (!dev) return res.json({ data: null });
-    const isOnline = dev.lastHeartbeatAt
-      ? Date.now() - dev.lastHeartbeatAt.getTime() < 90 * 60 * 1000
-      : false;
     res.json({
       data: {
         serial: dev.serial,
         localIp: dev.localIp,
         localKey: dev.deviceToken ? localKeyFor(dev.deviceToken) : null,
         lastHeartbeatAt: dev.lastHeartbeatAt,
-        isOnline,
+        ...presenceOf(dev),
       },
     });
   })
@@ -679,10 +712,7 @@ router.get(
       include: { subscription: { include: { user: { select: { id: true, fullName: true, phone: true } } } } },
     });
     if (!device) throw NotFound('Device not found');
-    const isOnline = device.lastHeartbeatAt
-      ? Date.now() - new Date(device.lastHeartbeatAt).getTime() < 90 * 60 * 1000
-      : false;
-    res.json({ data: { ...hideToken(device), isOnline } });
+    res.json({ data: { ...hideToken(device), ...presenceOf(device) } });
   })
 );
 

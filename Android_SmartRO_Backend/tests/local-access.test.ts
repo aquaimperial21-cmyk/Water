@@ -12,7 +12,8 @@ import { signAccessToken } from '../src/core/auth';
 import { localKeyFor } from '../src/core/device-token';
 
 const app = buildApp();
-const DAY = 86400000;
+const HOUR = 3600000;
+const DAY = 24 * HOUR;
 const rnd = () => crypto.randomBytes(5).toString('hex').toUpperCase();
 const phone = () => `+9194${crypto.randomInt(10_000_000, 99_999_999)}`;
 
@@ -36,6 +37,12 @@ const localAccess = (jwt?: string) => {
 };
 const heartbeat = (body: object) =>
   request(app).post(`/api/v1/devices/${serial}/heartbeat`).set('X-Device-Token', deviceToken).send(body);
+const pollState = (headers: Record<string, string> = {}, token = deviceToken) => {
+  const r = request(app).get(`/api/v1/devices/${serial}/state`).set('X-Device-Token', token);
+  for (const [k, v] of Object.entries(headers)) r.set(k, v);
+  return r;
+};
+const deviceRow = () => prisma.device.findUniqueOrThrow({ where: { serial } });
 
 beforeAll(async () => {
   const admin = await prisma.user.findFirstOrThrow({ where: { kind: 'ADMIN' } });
@@ -140,6 +147,7 @@ describe('GET /devices/me/local-access', () => {
       localIp: null,
       localKey: localKeyFor(deviceToken),
       lastHeartbeatAt: null,
+      lastSeenAt: null,
       isOnline: false,
     });
   });
@@ -199,11 +207,12 @@ describe('Heartbeat localIp', () => {
     expect(JSON.stringify(r.body)).not.toContain('deviceToken');
   });
 
-  it('shows the device offline after 90 minutes without a heartbeat', async () => {
-    await prisma.device.update({
-      where: { serial },
-      data: { lastHeartbeatAt: new Date(Date.now() - 91 * 60 * 1000) },
-    });
+  it('stays online for 25 hours without contact, then shows offline', async () => {
+    const ago = (ms: number) => new Date(Date.now() - ms);
+    await prisma.device.update({ where: { serial }, data: { lastHeartbeatAt: ago(24 * HOUR), lastSeenAt: ago(24 * HOUR) } });
+    expect((await localAccess(pairedToken)).body.data).toMatchObject({ isOnline: true });
+
+    await prisma.device.update({ where: { serial }, data: { lastHeartbeatAt: ago(26 * HOUR), lastSeenAt: ago(26 * HOUR) } });
     const r = await localAccess(pairedToken);
     expect(r.body.data).toMatchObject({ localIp: '192.168.1.50', isOnline: false });
   });
@@ -218,5 +227,85 @@ describe('Heartbeat localIp', () => {
     expect(r.body.data.localKey).toBe(localKeyFor(fresh));
     expect(r.body.data.localKey).not.toBe(localKeyFor(deviceToken));
     deviceToken = fresh;
+  });
+});
+
+describe('/state presence: lastSeenAt and X-Local-Ip', () => {
+  const ago = (ms: number) => new Date(Date.now() - ms);
+
+  it('a /state poll sets lastSeenAt and brings the device online, heartbeat untouched', async () => {
+    const oldBeat = ago(2 * DAY);
+    await prisma.device.update({ where: { serial }, data: { lastHeartbeatAt: oldBeat, lastSeenAt: ago(2 * DAY) } });
+    expect((await localAccess(pairedToken)).body.data.isOnline).toBe(false);
+
+    const r = await pollState();
+    expect(r.status).toBe(200);
+    const row = await deviceRow();
+    expect(row.lastSeenAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
+    expect(row.lastHeartbeatAt!.getTime()).toBe(oldBeat.getTime());
+
+    const la = await localAccess(pairedToken);
+    expect(la.body.data.isOnline).toBe(true);
+    expect(new Date(la.body.data.lastSeenAt).getTime()).toBe(row.lastSeenAt!.getTime());
+  });
+
+  it('writes lastSeenAt at most once a minute', async () => {
+    await pollState();
+    const first = (await deviceRow()).lastSeenAt!;
+    await pollState();
+    expect((await deviceRow()).lastSeenAt!.getTime()).toBe(first.getTime());
+
+    await prisma.device.update({ where: { serial }, data: { lastSeenAt: ago(61_000) } });
+    await pollState();
+    expect((await deviceRow()).lastSeenAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it('stores a private IPv4 from X-Local-Ip', async () => {
+    for (const ip of ['10.0.0.7', '172.16.5.4', '172.31.255.254', '192.168.0.20']) {
+      const r = await pollState({ 'X-Local-Ip': ip });
+      expect(r.status, ip).toBe(200);
+      expect((await deviceRow()).localIp, ip).toBe(ip);
+    }
+    expect((await localAccess(pairedToken)).body.data.localIp).toBe('192.168.0.20');
+  });
+
+  it('silently ignores anything else in X-Local-Ip', async () => {
+    const bad = [
+      '8.8.8.8', '172.15.0.1', '172.32.0.1', '192.169.1.1', '11.0.0.1', '127.0.0.1', '169.254.1.1',
+      '192.168.1.300', '192.168.01.5', '192.168.1', '192.168.1.5.6', 'fe80::1', 'smartro.local', '',
+    ];
+    for (const ip of bad) {
+      const r = await pollState({ 'X-Local-Ip': ip });
+      expect(r.status, ip).toBe(200);
+      expect((await deviceRow()).localIp, ip).toBe('192.168.0.20');
+    }
+    // No header at all keeps it too.
+    await pollState();
+    expect((await deviceRow()).localIp).toBe('192.168.0.20');
+  });
+
+  it('an unauthorised poll records nothing', async () => {
+    const before = await deviceRow();
+    await prisma.device.update({ where: { serial }, data: { lastSeenAt: ago(5 * 60_000) } });
+    const r = await pollState({ 'X-Local-Ip': '10.9.9.9' }, 'not-the-token');
+    expect(r.status).toBe(401);
+    const after = await deviceRow();
+    expect(after.localIp).toBe(before.localIp);
+    expect(after.lastSeenAt!.getTime()).toBeLessThan(Date.now() - 4 * 60_000);
+  });
+
+  it('a heartbeat sets lastSeenAt too', async () => {
+    await prisma.device.update({ where: { serial }, data: { lastSeenAt: ago(DAY) } });
+    const r = await heartbeat({});
+    expect(r.status).toBe(200);
+    expect(new Date(r.body.data.lastSeenAt).getTime()).toBeGreaterThan(Date.now() - 60_000);
+    expect((await deviceRow()).lastSeenAt!.getTime()).toBe(new Date(r.body.data.lastHeartbeatAt).getTime());
+  });
+
+  it('/me/health reports the same presence', async () => {
+    const r = await request(app).get('/api/v1/devices/me/health').set('Authorization', `Bearer ${pairedToken}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ serial, isOnline: true });
+    expect(new Date(r.body.data.lastSeenAt).getTime()).toBeGreaterThan(Date.now() - 60_000);
   });
 });

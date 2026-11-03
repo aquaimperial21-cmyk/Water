@@ -1,7 +1,8 @@
-// Subscription states behind the app's My Plan screen: pause / resume and the
-// time it credits, autopay setup and its gateway failures, plan switches under
-// a mandate, mandate webhooks on paused and closed plans, cancel, and /me.
-// Only the Razorpay network calls are faked.
+// Subscription states behind the app's My Plan screen: autopay setup and its
+// gateway failures, plan switches under a mandate, mandate webhooks (closed
+// plans, mandates paused at the gateway), legacy PAUSED plans from before the
+// pause feature was removed, TEST products' 1-minute terms on the Razorpay
+// paths, cancel, and /me. Only the Razorpay network calls are faked.
 
 import crypto from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -33,8 +34,6 @@ vi.mock('../src/services/razorpay', async (importOriginal) => {
       short_url: 'https://rzp.io/i/test',
     })),
     cancelMandate: vi.fn(async (id: string) => mandate(id, 'cancelled')),
-    pauseMandate: vi.fn(async (id: string) => mandate(id, 'paused')),
-    resumeMandate: vi.fn(async (id: string) => mandate(id, 'active')),
   };
 });
 
@@ -42,7 +41,8 @@ import { buildApp } from '../src/app';
 import { prisma } from '../src/core/prisma';
 import { signAccessToken } from '../src/core/auth';
 import { addMonthsIst, istDayOfMonth } from '../src/core/time';
-import { cancelMandate, createMandateSubscription, pauseMandate, resumeMandate } from '../src/services/razorpay';
+import { cancelMandate, createMandateSubscription } from '../src/services/razorpay';
+import { TEST_TERM_MS } from '../src/core/pricing';
 
 const WEBHOOK_SECRET = 'test_webhook_secret';
 const DAY = 24 * 60 * 60 * 1000;
@@ -54,21 +54,24 @@ let techUserId = '';
 let technicianId = '';
 let price: Prisma.PlanCityPriceGetPayload<{ include: { plan: true } }>;
 let otherPlanId = '';
+/** A price on a product tagged TEST (1-minute terms), made for this file. */
+let testPrice: Prisma.PlanCityPriceGetPayload<{ include: { plan: true } }>;
+let testProductId = '';
 
 const rnd = () => crypto.randomBytes(6).toString('hex');
 const post = (path: string, body: object = {}) =>
   request(app).post(`/api/v1${path}`).set('Authorization', `Bearer ${token}`).send(body);
 
-/** A booking + subscription on `price`, 5 days in with 20 left unless overridden. */
-async function makeSub(over: Partial<Prisma.SubscriptionUncheckedCreateInput> = {}) {
+/** A booking + subscription on `on` (default `price`), 5 days in with 20 left unless overridden. */
+async function makeSub(over: Partial<Prisma.SubscriptionUncheckedCreateInput> = {}, on = price) {
   const booking = await prisma.booking.create({
     data: {
       userId,
-      productId: price.productId,
-      planId: price.planId,
-      cityId: price.cityId,
-      depositPaise: price.depositPaise,
-      firstPaymentPaise: price.monthlyPricePaise * price.plan.durationMonths,
+      productId: on.productId,
+      planId: on.planId,
+      cityId: on.cityId,
+      depositPaise: on.depositPaise,
+      firstPaymentPaise: on.monthlyPricePaise * on.plan.durationMonths,
       status: 'PAID',
     },
   });
@@ -77,8 +80,8 @@ async function makeSub(over: Partial<Prisma.SubscriptionUncheckedCreateInput> = 
     data: {
       userId,
       bookingId: booking.id,
-      productId: price.productId,
-      planId: price.planId,
+      productId: on.productId,
+      planId: on.planId,
       status: 'ACTIVE',
       startedAt: new Date(now - 5 * DAY),
       expiresAt: new Date(now + 20 * DAY),
@@ -141,6 +144,25 @@ beforeAll(async () => {
   });
   techUserId = techUser.id;
   technicianId = (await prisma.technician.create({ data: { userId: techUser.id, employeeCode: `TST-${rnd()}`, zone: 'TEST' } })).id;
+
+  // Like the live "TEST Purifier ₹1": tagged TEST, priced on the same plan + city.
+  const testProduct = await prisma.product.create({
+    data: {
+      slug: `test-term-${rnd()}`,
+      name: 'TEST term purifier',
+      kind: 'HOME',
+      capacityLitres: 8,
+      technology: 'RO',
+      mounting: 'WALL',
+      description: 'Sub states test product',
+      tag: 'TEST',
+    },
+  });
+  testProductId = testProduct.id;
+  testPrice = await prisma.planCityPrice.create({
+    data: { planId: price.planId, cityId: price.cityId, productId: testProduct.id, monthlyPricePaise: 100, depositPaise: 0 },
+    include: { plan: true },
+  });
 });
 
 afterAll(async () => {
@@ -153,133 +175,120 @@ afterAll(async () => {
   await prisma.subscription.deleteMany({ where: { userId } });
   await prisma.booking.deleteMany({ where: { userId } });
   await prisma.notification.deleteMany({ where: { userId } });
+  await prisma.planCityPrice.deleteMany({ where: { productId: testProductId } });
+  await prisma.product.deleteMany({ where: { id: testProductId } });
   await prisma.technician.delete({ where: { id: technicianId } });
   await prisma.user.deleteMany({ where: { id: { in: [userId, techUserId] } } });
 });
 
-describe('Pause', () => {
-  it('refuses a plan that has already ended', async () => {
-    const sub = await makeSub({ expiresAt: new Date(Date.now() - DAY) });
-    const r = await post(`/subscriptions/${sub.id}/pause`);
-    expect(r.status).toBe(400);
-    expect(r.body.error.message).toBe('Your plan has ended. Recharge to restart it.');
-    expect((await reload(sub.id)).status).toBe('ACTIVE');
-  });
-
-  it('refuses a closed plan and is a no-op on a paused one', async () => {
-    const closed = await makeSub({ status: 'CLOSED' });
-    const r = await post(`/subscriptions/${closed.id}/pause`);
-    expect(r.status).toBe(400);
-    expect(r.body.error.message).toBe('Subscription is closed');
-
-    // Paused long enough that expiresAt has passed: still a no-op, not "ended".
-    const pausedAt = new Date(Date.now() - 30 * DAY);
-    const paused = await makeSub({ status: 'PAUSED', pausedAt, expiresAt: new Date(Date.now() - DAY) });
-    const again = await post(`/subscriptions/${paused.id}/pause`);
-    expect(again.status).toBe(200);
-    expect((await reload(paused.id)).pausedAt?.toISOString()).toBe(pausedAt.toISOString());
-  });
-
-  it('credits the paused time to expiry and lock-in on resume', async () => {
-    const sub = await makeSub();
-    const p = await post(`/subscriptions/${sub.id}/pause`);
-    expect(p.status).toBe(200);
-    expect(p.body.data.status).toBe('PAUSED');
-    expect(p.body.data.pausedAt).not.toBeNull();
-
-    // As if it had been paused three days ago.
-    await prisma.subscription.update({ where: { id: sub.id }, data: { pausedAt: new Date(Date.now() - 3 * DAY) } });
-    const r = await post(`/subscriptions/${sub.id}/resume`);
-    expect(r.status).toBe(200);
-
-    const after = await reload(sub.id);
-    expect(after.status).toBe('ACTIVE');
-    expect(after.pausedAt).toBeNull();
-    const shift = after.expiresAt.getTime() - sub.expiresAt.getTime();
-    expect(Math.abs(shift - 3 * DAY)).toBeLessThan(60_000);
-    expect(after.lockInUntil.getTime() - sub.lockInUntil.getTime()).toBe(shift);
-  });
-
-  it('leaves a lock-in that had already ended alone', async () => {
-    const lockInUntil = new Date(Date.now() - 2 * DAY);
-    const sub = await makeSub({ status: 'PAUSED', pausedAt: new Date(Date.now() - DAY), lockInUntil });
-    expect((await post(`/subscriptions/${sub.id}/resume`)).status).toBe(200);
-    const after = await reload(sub.id);
-    expect(after.lockInUntil.toISOString()).toBe(lockInUntil.toISOString());
-    expect(after.expiresAt.getTime()).toBeGreaterThan(sub.expiresAt.getTime());
-  });
-
-  it('pauses the mandate first, and refuses the pause when the gateway fails', async () => {
-    const autopayId = `sub_S${rnd()}`;
-    const sub = await makeSub({ autopayId, autopayStatus: 'ACTIVE' });
-
-    vi.mocked(pauseMandate).mockRejectedValueOnce(new Error('gateway down'));
-    const failed = await post(`/subscriptions/${sub.id}/pause`);
-    expect(failed.status).toBe(502);
-    expect(failed.body.error.code).toBe('AUTOPAY_PAUSE_FAILED');
-    expect(failed.body.error.message).toMatch(/not been paused/);
-    expect(await reload(sub.id)).toMatchObject({ status: 'ACTIVE', autopayStatus: 'ACTIVE', pausedAt: null });
-
-    const ok = await post(`/subscriptions/${sub.id}/pause`);
-    expect(ok.status).toBe(200);
-    expect(vi.mocked(pauseMandate)).toHaveBeenLastCalledWith(autopayId);
-    expect(await reload(sub.id)).toMatchObject({ status: 'PAUSED', autopayStatus: 'PAUSED' });
-
-    const resumed = await post(`/subscriptions/${sub.id}/resume`);
-    expect(resumed.status).toBe(200);
-    expect(vi.mocked(resumeMandate)).toHaveBeenLastCalledWith(autopayId);
-    expect(await reload(sub.id)).toMatchObject({ status: 'ACTIVE', autopayStatus: 'ACTIVE' });
-  });
-
-  it('resumes the plan even when the mandate will not, and lets autopay be retried', async () => {
-    const autopayId = `sub_S${rnd()}`;
-    const sub = await makeSub({ status: 'PAUSED', pausedAt: new Date(Date.now() - DAY), autopayId, autopayStatus: 'PAUSED' });
-
-    vi.mocked(resumeMandate).mockRejectedValueOnce(new Error('gateway down'));
-    expect((await post(`/subscriptions/${sub.id}/resume`)).status).toBe(200);
-    expect(await reload(sub.id)).toMatchObject({ status: 'ACTIVE', autopayStatus: 'PAUSED' });
-
-    vi.mocked(resumeMandate).mockRejectedValueOnce(Object.assign(new Error('x'), { error: { description: 'Bank unreachable' } }));
-    const retryFail = await post(`/payments/subscriptions/${sub.id}/autopay/resume`);
-    expect(retryFail.status).toBe(502);
-    expect(retryFail.body.error.code).toBe('AUTOPAY_GATEWAY_ERROR');
-    expect(retryFail.body.error.message).toContain('Bank unreachable.');
-
-    const retry = await post(`/payments/subscriptions/${sub.id}/autopay/resume`);
-    expect(retry.status).toBe(200);
-    expect(retry.body.data.autopayStatus).toBe('ACTIVE');
-  });
-});
-
 describe('Autopay gateway errors', () => {
-  it('answers 502 on cancel and pause instead of a 500', async () => {
+  it('answers 502 on cancel instead of a 500', async () => {
     const sub = await makeSub({ autopayId: `sub_S${rnd()}`, autopayStatus: 'ACTIVE' });
     vi.mocked(cancelMandate).mockRejectedValueOnce(new Error('timeout'));
     const c = await post(`/payments/subscriptions/${sub.id}/autopay/cancel`);
     expect(c.status).toBe(502);
     expect(c.body.error.code).toBe('AUTOPAY_GATEWAY_ERROR');
-
-    vi.mocked(pauseMandate).mockRejectedValueOnce(new Error('timeout'));
-    const p = await post(`/payments/subscriptions/${sub.id}/autopay/pause`);
-    expect(p.status).toBe(502);
-    expect(p.body.error.code).toBe('AUTOPAY_GATEWAY_ERROR');
     expect((await reload(sub.id)).autopayStatus).toBe('ACTIVE');
   });
 });
 
+describe('Pause is gone', () => {
+  it('has no pause or resume routes, for the plan or its autopay', async () => {
+    const sub = await makeSub({ autopayId: `sub_S${rnd()}`, autopayStatus: 'ACTIVE' });
+    for (const path of [
+      `/subscriptions/${sub.id}/pause`,
+      `/subscriptions/${sub.id}/resume`,
+      `/payments/subscriptions/${sub.id}/autopay/pause`,
+      `/payments/subscriptions/${sub.id}/autopay/resume`,
+    ]) {
+      expect((await post(path)).status).toBe(404);
+    }
+    expect(await reload(sub.id)).toMatchObject({ status: 'ACTIVE', autopayStatus: 'ACTIVE', pausedAt: null });
+  });
+});
+
+describe('Legacy PAUSED plans', () => {
+  // Nothing creates PAUSED any more; a leftover row is just a plan that isn't
+  // running. The app shows it as inactive with Recharge and Set up autopay.
+  const legacy = (over: Partial<Prisma.SubscriptionUncheckedCreateInput> = {}) =>
+    makeSub({ status: 'PAUSED', pausedAt: new Date(Date.now() - 10 * DAY), ...over });
+
+  it('recharges (Razorpay order + payment.captured) to ACTIVE, one term from the later of now and its end', async () => {
+    const sub = await legacy();
+    const order = await post(`/payments/subscriptions/${sub.id}/order`);
+    expect(order.status).toBe(201);
+    const r = await webhook({
+      event: 'payment.captured',
+      payload: { payment: { entity: { id: `pay_S${rnd()}`, order_id: order.body.data.orderId, status: 'captured', amount: order.body.data.amount } } },
+    });
+    expect(r.status).toBe(200);
+    const after = await reload(sub.id);
+    expect(after).toMatchObject({ status: 'ACTIVE', pausedAt: null });
+    // Its end was still 20 days out, so the term goes on top of it.
+    expect(after.expiresAt.toISOString()).toBe(
+      addMonthsIst(sub.expiresAt, price.plan.durationMonths, istDayOfMonth(sub.startedAt)).toISOString()
+    );
+  });
+
+  it('recharges on the stub driver too, from now when its end has passed', async () => {
+    const sub = await legacy({ expiresAt: new Date(Date.now() - 3 * DAY), lockInUntil: new Date(Date.now() - 3 * DAY) });
+    process.env.PAYMENT_DRIVER = 'stub';
+    try {
+      const at = Date.now();
+      const r = await post(`/subscriptions/${sub.id}/recharge`);
+      expect(r.status).toBe(200);
+      const after = await reload(sub.id);
+      expect(after).toMatchObject({ status: 'ACTIVE', pausedAt: null });
+      expect(after.expiresAt.getTime()).toBeGreaterThan(at + 27 * DAY);
+      expect(after.expiresAt.getTime()).toBeLessThanOrEqual(addMonthsIst(new Date(), price.plan.durationMonths, istDayOfMonth(sub.startedAt)).getTime());
+    } finally {
+      process.env.PAYMENT_DRIVER = 'razorpay';
+    }
+  });
+
+  it('lets autopay be set up', async () => {
+    const sub = await legacy();
+    const r = await post(`/payments/subscriptions/${sub.id}/autopay`);
+    expect(r.status).toBe(201);
+    expect(await reload(sub.id)).toMatchObject({ status: 'PAUSED', autopayStatus: 'CREATED', autopayId: r.body.data.autopayId });
+  });
+
+  it('turns ACTIVE on an autopay debit, like any other stopped plan', async () => {
+    const autopayId = `sub_S${rnd()}`;
+    const sub = await legacy({ autopayId, autopayStatus: 'ACTIVE' });
+    const r = await webhook({
+      event: 'subscription.charged',
+      payload: {
+        subscription: { entity: { id: autopayId, status: 'active' } },
+        payment: { entity: { id: `pay_S${rnd()}`, order_id: `order_S${rnd()}`, status: 'captured', amount: 49900 } },
+      },
+    });
+    expect(r.status).toBe(200);
+    const after = await reload(sub.id);
+    expect(after).toMatchObject({ status: 'ACTIVE', pausedAt: null });
+    expect(after.expiresAt.toISOString()).toBe(
+      addMonthsIst(sub.expiresAt, price.plan.durationMonths, istDayOfMonth(sub.startedAt)).toISOString()
+    );
+  });
+});
+
 describe('Autopay setup', () => {
-  it('is refused on a closed or paused plan', async () => {
+  it('is refused on a closed plan', async () => {
     const calls = vi.mocked(createMandateSubscription).mock.calls.length;
     const closed = await makeSub({ status: 'CLOSED' });
     const c = await post(`/payments/subscriptions/${closed.id}/autopay`);
     expect(c.status).toBe(400);
     expect(c.body.error.message).toBe('This plan is closed');
-
-    const paused = await makeSub({ status: 'PAUSED', pausedAt: new Date() });
-    const p = await post(`/payments/subscriptions/${paused.id}/autopay`);
-    expect(p.status).toBe(400);
-    expect(p.body.error.message).toBe('Resume the plan before setting up autopay');
     expect(vi.mocked(createMandateSubscription).mock.calls.length).toBe(calls);
+  });
+
+  it('replaces a mandate that was paused at the gateway', async () => {
+    const paused = `sub_S${rnd()}`;
+    const sub = await makeSub({ autopayId: paused, autopayStatus: 'PAUSED' });
+    const r = await post(`/payments/subscriptions/${sub.id}/autopay`);
+    expect(r.status).toBe(201);
+    expect(vi.mocked(cancelMandate)).toHaveBeenLastCalledWith(paused, false);
+    expect(await reload(sub.id)).toMatchObject({ autopayStatus: 'CREATED', autopayId: r.body.data.autopayId });
   });
 
   it('schedules the first debit on the renewal date', async () => {
@@ -379,15 +388,24 @@ describe('Mandate webhooks', () => {
     expect(await prisma.payment.count({ where: { subscriptionId: sub.id, kind: 'REFUND' } })).toBe(1);
   });
 
-  it('extends a paused plan but keeps it paused', async () => {
+  it('extends a running plan by one term', async () => {
     const autopayId = `sub_S${rnd()}`;
-    const sub = await makeSub({ status: 'PAUSED', pausedAt: new Date(Date.now() - 2 * DAY), autopayId, autopayStatus: 'ACTIVE' });
+    const sub = await makeSub({ autopayId, autopayStatus: 'ACTIVE' });
     expect((await charged(autopayId, `pay_S${rnd()}`, 49900)).status).toBe(200);
     const after = await reload(sub.id);
-    expect(after.status).toBe('PAUSED');
+    expect(after.status).toBe('ACTIVE');
     expect(after.expiresAt.toISOString()).toBe(
       addMonthsIst(sub.expiresAt, price.plan.durationMonths, istDayOfMonth(sub.startedAt)).toISOString()
     );
+  });
+
+  it('records a mandate paused and resumed at the gateway, leaving the plan alone', async () => {
+    const autopayId = `sub_S${rnd()}`;
+    const sub = await makeSub({ autopayId, autopayStatus: 'ACTIVE' });
+    await webhook({ event: 'subscription.paused', payload: { subscription: { entity: { id: autopayId, status: 'paused' } } } });
+    expect(await reload(sub.id)).toMatchObject({ status: 'ACTIVE', autopayStatus: 'PAUSED', pausedAt: null });
+    await webhook({ event: 'subscription.resumed', payload: { subscription: { entity: { id: autopayId, status: 'active' } } } });
+    expect(await reload(sub.id)).toMatchObject({ status: 'ACTIVE', autopayStatus: 'ACTIVE' });
   });
 
   it('records pending and completed mandates', async () => {
@@ -408,6 +426,71 @@ describe('Mandate webhooks', () => {
     expect(vi.mocked(cancelMandate)).toHaveBeenLastCalledWith(autopayId, false);
     expect((await reload(sub.id)).autopayStatus).toBe('CANCELLED');
     expect(await prisma.notification.count({ where: { userId, title: 'Autopay activated' } })).toBe(before);
+  });
+});
+
+describe('TEST products get 1-minute terms on the Razorpay paths', () => {
+  const near = (d: Date, ms: number) => expect(Math.abs(d.getTime() - ms)).toBeLessThan(5000);
+
+  it('booking payment (checkout /verify): the plan runs one minute from now', async () => {
+    const b = await prisma.booking.create({
+      data: {
+        userId,
+        productId: testPrice.productId,
+        planId: testPrice.planId,
+        cityId: testPrice.cityId,
+        depositPaise: testPrice.depositPaise,
+        firstPaymentPaise: testPrice.monthlyPricePaise * testPrice.plan.durationMonths,
+        status: 'PENDING_PAY',
+        agreementSignedAt: new Date(),
+      },
+    });
+    const order = await post(`/payments/bookings/${b.id}/order`);
+    expect(order.status).toBe(201);
+    const paymentId = `pay_S${rnd()}`;
+    const signature = crypto.createHmac('sha256', 'test_key_secret').update(`${order.body.data.orderId}|${paymentId}`).digest('hex');
+    const at = Date.now();
+    const v = await post('/payments/verify', {
+      razorpay_order_id: order.body.data.orderId,
+      razorpay_payment_id: paymentId,
+      razorpay_signature: signature,
+    });
+    expect(v.status).toBe(200);
+    const sub = await prisma.subscription.findUniqueOrThrow({ where: { bookingId: b.id } });
+    near(sub.expiresAt, at + TEST_TERM_MS);
+    expect(sub.expiresAt.getTime() - sub.startedAt.getTime()).toBe(TEST_TERM_MS);
+    expect(sub.lockInUntil.toISOString()).toBe(sub.expiresAt.toISOString());
+    expect(sub.trialEndsAt?.toISOString()).toBe(sub.expiresAt.toISOString());
+  });
+
+  it('recharge order on an ended plan (payment.captured webhook): one minute from now, at the normal price', async () => {
+    const sub = await makeSub({ expiresAt: new Date(Date.now() - DAY), lockInUntil: new Date(Date.now() - DAY) }, testPrice);
+    const order = await post(`/payments/subscriptions/${sub.id}/order`);
+    expect(order.status).toBe(201);
+    expect(order.body.data.amount).toBe(testPrice.monthlyPricePaise * testPrice.plan.durationMonths);
+    const at = Date.now();
+    const r = await webhook({
+      event: 'payment.captured',
+      payload: { payment: { entity: { id: `pay_S${rnd()}`, order_id: order.body.data.orderId, status: 'captured', amount: order.body.data.amount } } },
+    });
+    expect(r.status).toBe(200);
+    const after = await reload(sub.id);
+    expect(after.status).toBe('ACTIVE');
+    near(after.expiresAt, at + TEST_TERM_MS);
+  });
+
+  it('autopay debit on a running plan (subscription.charged): one minute on top of the current end', async () => {
+    const autopayId = `sub_S${rnd()}`;
+    const sub = await makeSub({ expiresAt: new Date(Date.now() + 30_000), autopayId, autopayStatus: 'ACTIVE' }, testPrice);
+    const r = await webhook({
+      event: 'subscription.charged',
+      payload: {
+        subscription: { entity: { id: autopayId, status: 'active' } },
+        payment: { entity: { id: `pay_S${rnd()}`, order_id: `order_S${rnd()}`, status: 'captured', amount: 100 } },
+      },
+    });
+    expect(r.status).toBe(200);
+    expect((await reload(sub.id)).expiresAt.getTime()).toBe(sub.expiresAt.getTime() + TEST_TERM_MS);
   });
 });
 

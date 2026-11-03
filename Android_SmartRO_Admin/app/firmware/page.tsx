@@ -56,6 +56,8 @@ interface OtaDevice {
   otaAttempts?: number | null;
   otaUpdatedAt?: string | null;
   lastHeartbeatAt?: string | null;
+  /** Latest contact (a /state poll or a heartbeat). Online = seen in the last day. */
+  lastSeenAt?: string | null;
   isOnline?: boolean;
 }
 
@@ -948,12 +950,14 @@ function PurifiersCard({
                 ) : null}
               </div>,
               <div key="h" className="text-xs">
-                {d.lastHeartbeatAt ? (
+                {(d.lastSeenAt ?? d.lastHeartbeatAt) ? (
                   <>
                     <Pill tone={d.isOnline ? 'success' : 'warning'} size="sm" dot>
                       {d.isOnline ? 'Online' : 'Offline'}
                     </Pill>
-                    <div className="text-ink-muted mt-1 whitespace-nowrap">{formatDateTime(d.lastHeartbeatAt)}</div>
+                    <div className="text-ink-muted mt-1 whitespace-nowrap">
+                      {formatDateTime(d.lastSeenAt ?? d.lastHeartbeatAt)}
+                    </div>
                   </>
                 ) : (
                   <Pill tone="neutral" size="sm">

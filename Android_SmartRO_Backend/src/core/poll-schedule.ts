@@ -2,35 +2,40 @@
 //
 // The chip caches expiresAt and closes the valve by itself at that time, even
 // with no internet, so polling is not what stops the water on time. A poll
-// only brings news: a recharge, or an admin stopping the plan. So:
+// only brings news: a recharge, or an admin stopping the plan. And after a
+// recharge the customer app tells the chip to check at once over the home
+// Wi-Fi, so most news doesn't wait for the next poll either. So:
 //
 // - No subscription attached: once an hour.
-// - Plan running (ACTIVE or GRACE, water allowed): once an hour while more
-//   than 3 days are left, every 15 minutes in the last 3 days (the reminder
-//   window). One check is also timed for just after the end, so a recharge
-//   made shortly before expiry is seen about 5 s after the end (the chip
-//   closes the valve at the end time, so water pauses for a few seconds).
+// - Plan running (ACTIVE or GRACE, water allowed): once a day while more than
+//   3 days are left, once an hour in the last 3 days (the reminder window).
+//   One check is also timed for just after the end, so a recharge made
+//   shortly before expiry is seen about 5 s after the end (the chip closes
+//   the valve at the end time, so water stops for a few seconds).
 // - Plan ended, waiting for a recharge: every minute for the first day, so
 //   water comes back within a minute of the customer paying; every 5 minutes
 //   up to a week; every 15 minutes after that, so a purifier left plugged in
 //   after the customer stopped paying doesn't check every minute forever.
 //   A missing or unreadable end date counts as ended long ago.
-// - PAUSED: every 5 minutes. Anything else (SUSPENDED, CLOSED, TRIAL, ...):
-//   every 30 minutes.
+// - Anything else (SUSPENDED, CLOSED, TRIAL, a legacy PAUSED row from before
+//   the pause feature was removed, unknown): once an hour.
+// - Test plans (product tagged TEST): every minute, whatever the state.
 //
-// The firmware clamps whatever we send to 30..3600 seconds, so every answer
-// is a whole number of seconds inside that range.
+// Every answer is a whole number of seconds from 30 to 86400 (a day).
+// Firmware up to 1.1.1 clamps what we send to 30..3600 by itself, so on those
+// chips a daily answer just means hourly: raising the maximum is backward
+// compatible.
 
 const DAY_SEC = 24 * 60 * 60;
 
-/** The firmware's range; never ask for less or more. */
+/** The range we answer in; never ask for less or more. */
 export const POLL_MIN_SEC = 30;
-export const POLL_MAX_SEC = 3600;
+export const POLL_MAX_SEC = DAY_SEC;
 
 export const POLL_NO_SUBSCRIPTION_SEC = 3600;
-export const POLL_RUNNING_SEC = 3600;
-export const POLL_REMINDER_WINDOW_SEC = 900;
-/** Inside this many seconds of the end, a running plan polls every 15 minutes. */
+export const POLL_RUNNING_SEC = DAY_SEC;
+export const POLL_REMINDER_WINDOW_SEC = 3600;
+/** Inside this many seconds of the end, a running plan polls hourly instead of daily. */
 export const REMINDER_WINDOW_SEC = 3 * DAY_SEC;
 /** The end-time check lands this many seconds after the plan ends. */
 export const POLL_AFTER_END_MARGIN_SEC = 5;
@@ -44,8 +49,7 @@ export const POLL_ENDED_LONG_SEC = 900;
 export const JUST_ENDED_WINDOW_SEC = DAY_SEC;
 export const ENDED_DAYS_WINDOW_SEC = 7 * DAY_SEC;
 
-export const POLL_PAUSED_SEC = 300;
-export const POLL_OTHER_SEC = 1800;
+export const POLL_OTHER_SEC = 3600;
 
 /**
  * DEVICE_GRACE_DAYS as a usable number: a finite value above 0, else 0.
@@ -66,14 +70,23 @@ export interface PollScheduleInput {
   graceDays: number;
   /** Current time, in epoch milliseconds. */
   now: number;
+  /**
+   * Test plans (product tagged TEST) check every minute whatever the state,
+   * so a recharge or plan end shows on the chip within a minute.
+   */
+  fastPoll?: boolean;
 }
 
+/** Product tag that marks an internal test plan (see `fastPoll`). */
+export const TEST_PRODUCT_TAG = 'TEST';
+export const POLL_TEST_PLAN_SEC = 60;
+
 /** Seconds the device should wait before its next state poll. Never throws. */
-export function pollIntervalSec({ subscription, allowFlow, graceDays, now }: PollScheduleInput): number {
+export function pollIntervalSec({ subscription, allowFlow, graceDays, now, fastPoll }: PollScheduleInput): number {
   if (!subscription) return toFirmwareRange(POLL_NO_SUBSCRIPTION_SEC);
+  if (fastPoll) return toFirmwareRange(POLL_TEST_PLAN_SEC);
 
   const { status } = subscription;
-  if (status === 'PAUSED') return toFirmwareRange(POLL_PAUSED_SEC);
   if (status !== 'ACTIVE' && status !== 'GRACE') return toFirmwareRange(POLL_OTHER_SEC);
 
   const days = Number.isFinite(graceDays) && graceDays > 0 ? graceDays : 0;
@@ -102,7 +115,7 @@ function toMs(value: Date | string | number | null | undefined): number {
   return new Date(value).getTime();
 }
 
-/** A whole number of seconds inside the firmware's 30..3600 range. */
+/** A whole number of seconds from POLL_MIN_SEC (30) to POLL_MAX_SEC (86400). */
 function toFirmwareRange(sec: number): number {
   if (!Number.isFinite(sec)) return POLL_MAX_SEC;
   return Math.min(POLL_MAX_SEC, Math.max(POLL_MIN_SEC, Math.ceil(sec)));

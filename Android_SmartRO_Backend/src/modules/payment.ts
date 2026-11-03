@@ -28,8 +28,6 @@ import {
   fetchOrderPayments,
   getPaymentDriver,
   getPublicKeyId,
-  pauseMandate,
-  resumeMandate,
   verifyCheckoutSignature,
   verifyWebhookSignature,
 } from '../services/razorpay';
@@ -153,8 +151,6 @@ router.post(
     // A closed plan has been refunded and its device collected; paying again
     // would silently resurrect it.
     if (sub.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
-    // Same rule as the stub recharge: settling would silently unpause the plan.
-    if (sub.status === 'PAUSED') throw BadRequest('Resume the plan before recharging it');
     // The mandate's amount is fixed to the plan it was set up on; switching
     // plans under it would debit the old price for the new term.
     if (req.body.planId && req.body.planId !== sub.planId && sub.autopayStatus === 'ACTIVE') {
@@ -272,12 +268,12 @@ router.post(
     });
     if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
     if (sub.status === 'CLOSED') throw BadRequest('This plan is closed');
-    if (sub.status === 'PAUSED') throw BadRequest('Resume the plan before setting up autopay');
     if (sub.autopayStatus === 'ACTIVE') {
       return res.json({ data: { alreadyActive: true, autopayId: sub.autopayId } });
     }
-    // A mandate left behind — authorisation never finished (CREATED), or a
-    // paused / retrying one — would otherwise sit beside the new one, and the
+    // A mandate left behind — authorisation never finished (CREATED), or one
+    // paused at the gateway or retrying a debit (PAUSED / PENDING / HALTED,
+    // from the webhook below) — would otherwise sit beside the new one, and the
     // customer could end up with two live debits. Best effort: one that is
     // already dead at Razorpay refuses the cancel, which is fine.
     if (sub.autopayId && sub.autopayStatus !== 'CANCELLED' && sub.autopayStatus !== 'COMPLETED') {
@@ -378,44 +374,6 @@ router.post(
     const updated = await prisma.subscription.update({
       where: { id: sub.id },
       data: { autopayStatus: 'CANCELLED' },
-    });
-    res.json({ data: updated });
-  })
-);
-
-router.post(
-  '/subscriptions/:id/autopay/pause',
-  authRequired(['CUSTOMER']),
-  asyncHandler(async (req, res) => {
-    const sub = await prisma.subscription.findUnique({ where: { id: req.params.id } });
-    if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
-    if (!sub.autopayId) throw BadRequest('No autopay mandate');
-    const autopayId = sub.autopayId;
-    await viaGateway('pause', autopayId, () => pauseMandate(autopayId));
-    const updated = await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { autopayStatus: 'PAUSED' },
-    });
-    res.json({ data: updated });
-  })
-);
-
-router.post(
-  '/subscriptions/:id/autopay/resume',
-  authRequired(['CUSTOMER']),
-  asyncHandler(async (req, res) => {
-    const sub = await prisma.subscription.findUnique({ where: { id: req.params.id } });
-    if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
-    if (!sub.autopayId) throw BadRequest('No autopay mandate');
-    // Debits restarting on a frozen or refunded plan would charge for
-    // service the customer isn't getting.
-    if (sub.status === 'CLOSED') throw BadRequest('This plan is closed');
-    if (sub.status === 'PAUSED') throw BadRequest('Resume the plan before resuming autopay');
-    const autopayId = sub.autopayId;
-    await viaGateway('resume', autopayId, () => resumeMandate(autopayId));
-    const updated = await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { autopayStatus: 'ACTIVE' },
     });
     res.json({ data: updated });
   })
@@ -580,6 +538,12 @@ webhookRouter.post(
       return res.json({ data: { ok: true } });
     }
 
+    // The mandate's own state, as Razorpay reports it. This sets autopayStatus
+    // only, never the plan's status. The app can't pause anything any more,
+    // but a mandate can still be paused or resumed outside it (Razorpay
+    // Dashboard, the customer's bank or UPI app). Recording that means the app
+    // doesn't show autopay as on while it is paused, and autopay setup above
+    // replaces the paused mandate instead of adding a second one beside it.
     const MANDATE_STATUS: Record<string, string> = {
       'subscription.cancelled': 'CANCELLED',
       'subscription.halted': 'HALTED',
@@ -614,7 +578,7 @@ webhookRouter.post(
       if (!p || !s) return res.json({ data: { ok: true, ignored: true } });
       const sub = await prisma.subscription.findFirst({
         where: { autopayId: s.id },
-        include: { plan: true },
+        include: { plan: true, product: { select: { tag: true } } },
       });
       if (!sub) return res.json({ data: { ok: true, ignored: true } });
 
@@ -664,8 +628,8 @@ webhookRouter.post(
       }
 
       // Create a RECHARGE payment row + extend expiresAt the same way the
-      // manual recharge path does. A paused plan gets the term but stays paused.
-      const { expiresAt: newExpiresAt, status } = applyPaidTerm(sub, sub.plan.durationMonths);
+      // manual recharge path does (one minute for a TEST product).
+      const term = applyPaidTerm(sub, sub.plan.durationMonths, sub.product.tag);
       await prisma.$transaction(async (tx) => {
         const payment = await tx.payment.create({
           data: {
@@ -688,7 +652,7 @@ webhookRouter.post(
         });
         await tx.subscription.update({
           where: { id: sub.id },
-          data: { expiresAt: newExpiresAt, status },
+          data: term,
         });
         const rupees = Math.round(amountPaise / 100);
         await tx.notification.create({
@@ -696,10 +660,7 @@ webhookRouter.post(
             userId: sub.userId,
             channel: 'INAPP',
             title: 'Autopay charged',
-            body:
-              status === 'PAUSED'
-                ? `Recharged ₹${rupees} via autopay. Your plan is still paused; the new term is added and its clock restarts when you resume.`
-                : `Recharged ₹${rupees} via autopay. Active until ${formatIstDate(newExpiresAt)}.`,
+            body: `Recharged ₹${rupees} via autopay. Active until ${formatIstDate(term.expiresAt)}.`,
           },
         });
       });
@@ -802,7 +763,10 @@ async function settlePayment(paymentId: string, gatewayPaymentId: string) {
     });
     const payment = await tx.payment.findUnique({
       where: { id: paymentId },
-      include: { booking: { include: { plan: true } }, subscription: true },
+      include: {
+        booking: { include: { plan: true, product: { select: { tag: true } } } },
+        subscription: { include: { product: { select: { tag: true } } } },
+      },
     });
     if (!payment) throw NotFound('Payment not found');
     if (claimed.count === 0) return { payment, alreadyApplied: true };
@@ -844,7 +808,11 @@ async function settlePayment(paymentId: string, gatewayPaymentId: string) {
 
     if (payment.kind === 'DEPOSIT' && payment.booking) {
       const b = payment.booking;
-      const { startedAt, expiresAt, lockInUntil, trialEndsAt } = firstTermDates(new Date(), b.plan.durationMonths);
+      const { startedAt, expiresAt, lockInUntil, trialEndsAt } = firstTermDates(
+        new Date(),
+        b.plan.durationMonths,
+        b.product.tag
+      );
       const sub = await tx.subscription.create({
         data: {
           userId: b.userId,
@@ -881,21 +849,17 @@ async function settlePayment(paymentId: string, gatewayPaymentId: string) {
       const planId = payment.targetPlanId ?? sub.planId;
       const plan = await tx.plan.findUnique({ where: { id: planId } });
       if (!plan) throw NotFound('Plan not found');
-      // Paused after the order was made: grant the term, stay paused.
-      const { expiresAt: newExpiresAt, status } = applyPaidTerm(sub, plan.durationMonths);
+      const term = applyPaidTerm(sub, plan.durationMonths, sub.product.tag);
       const updatedSub = await tx.subscription.update({
         where: { id: sub.id },
-        data: { expiresAt: newExpiresAt, status, planId },
+        data: { ...term, planId },
       });
       await tx.notification.create({
         data: {
           userId: sub.userId,
           channel: 'INAPP',
           title: 'Recharge successful',
-          body:
-            status === 'PAUSED'
-              ? 'Your recharge is added. Your plan is still paused; its clock restarts when you resume.'
-              : `Your plan is extended to ${formatIstDate(newExpiresAt)}.`,
+          body: `Your plan is extended to ${formatIstDate(term.expiresAt)}.`,
         },
       });
       return { payment: updatedPay, subscription: updatedSub };

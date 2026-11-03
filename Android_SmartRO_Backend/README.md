@@ -93,8 +93,13 @@ Webhook**:
 - **Secret:** the same value as `RAZORPAY_WEBHOOK_SECRET`
 - **Active events:** `payment.captured`, `order.paid`, `payment.failed`,
   `subscription.authenticated`, `subscription.activated`,
-  `subscription.charged`, `subscription.paused`, `subscription.halted`,
+  `subscription.charged`, `subscription.pending`, `subscription.halted`,
+  `subscription.paused`, `subscription.resumed`, `subscription.completed`,
   `subscription.cancelled`, `refund.processed`
+
+  `subscription.paused` / `resumed` only record the autopay mandate's state
+  when it is paused outside the app (Razorpay Dashboard, the customer's bank).
+  Plans themselves can't be paused.
 
 Razorpay can't reach `localhost`. For local testing, either:
 

@@ -2,14 +2,15 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
-import { BadRequest, NotFound, Forbidden, Conflict, HttpError, asyncHandler } from '../core/errors';
+import { BadRequest, NotFound, Forbidden, Conflict, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { applyPaidTerm, termPricePaise } from '../core/pricing';
 import { nextInvoiceNumber } from '../core/invoice';
 import { assertStubPaymentsAllowed } from '../core/payments';
 import { formatIstDate } from '../core/time';
 import { hideToken } from '../core/device-token';
-import { cancelMandate, pauseMandate, resumeMandate } from '../services/razorpay';
+import { presenceOf } from '../core/device-online';
+import { cancelMandate } from '../services/razorpay';
 
 const router = Router();
 
@@ -59,7 +60,8 @@ router.get(
       const j = jobs.find((job) => job.bookingId === s.bookingId || job.ticket?.subscriptionId === s.id);
       return {
         ...s,
-        device: hideToken(s.device),
+        // isOnline / lastSeenAt use the shared 25 h window (core/device-online.ts).
+        device: s.device ? { ...hideToken(s.device), ...presenceOf(s.device) } : null,
         refund: r ? { amountPaise: r.amountPaise, status: r.status, createdAt: r.createdAt } : null,
         nextVisit: j ? { scheduledFor: j.scheduledFor, type: j.type } : null,
       };
@@ -96,13 +98,12 @@ router.post(
     assertStubPaymentsAllowed();
     const sub = await prisma.subscription.findUnique({
       where: { id: req.params.id },
-      include: { plan: true, booking: true },
+      include: { plan: true, booking: true, product: { select: { tag: true } } },
     });
     if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
     // A cancelled plan has been refunded and the device collected. Recharging
     // it charged the customer and flipped it back to ACTIVE.
     if (sub.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
-    if (sub.status === 'PAUSED') throw BadRequest('Resume the plan before recharging it');
     // The mandate's amount is fixed to the plan it was set up on; switching
     // plans under it would debit the old price for the new term.
     if (req.body.planId && req.body.planId !== sub.planId && sub.autopayStatus === 'ACTIVE') {
@@ -142,11 +143,12 @@ router.post(
     await new Promise((r) => setTimeout(r, PAYMENT_STUB_DELAY_MS));
 
     const result = await prisma.$transaction(async (tx) => {
-      // Re-read: the plan may have been paused during the "gateway" delay,
-      // and a paid term must not unpause it.
+      // Re-read: the plan may have been cancelled, or its expiry moved by
+      // another payment, during the "gateway" delay.
       const current = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } });
       if (current.status === 'CLOSED') throw BadRequest('This plan is closed; start a new booking');
-      const { expiresAt: newExpiresAt, status } = applyPaidTerm(current, price.plan.durationMonths);
+      // A TEST product's term is one minute (core/pricing.ts).
+      const term = applyPaidTerm(current, price.plan.durationMonths, sub.product.tag);
       await tx.payment.update({ where: { id: payment.id }, data: { status: 'SUCCESS' } });
       await tx.invoice.create({
         data: {
@@ -158,132 +160,20 @@ router.post(
       });
       const updated = await tx.subscription.update({
         where: { id: sub.id },
-        data: {
-          expiresAt: newExpiresAt,
-          status,
-          planId: targetPlanId,
-        },
+        data: { ...term, planId: targetPlanId },
       });
       await tx.notification.create({
         data: {
           userId: sub.userId,
           channel: 'INAPP',
           title: 'Recharge successful',
-          body: `Your plan is extended to ${formatIstDate(newExpiresAt)}.`,
+          body: `Your plan is extended to ${formatIstDate(term.expiresAt)}.`,
         },
       });
       return updated;
     });
 
     res.json({ data: result });
-  })
-);
-
-// ─────────────────────────── Pause / Resume ───────────────────────────
-//
-// Pause freezes the plan's clock: the time left at `pausedAt` is handed back
-// on resume (expiresAt moves out by however long it was paused). A live
-// autopay mandate is paused at the gateway first — the plan is never frozen
-// while debits carry on. Resume restores ACTIVE.
-
-router.post(
-  '/:id/pause',
-  authRequired(['CUSTOMER']),
-  validateBody(z.object({ reason: z.string().max(280).optional() }).default({})),
-  asyncHandler(async (req, res) => {
-    const sub = await prisma.subscription.findUnique({ where: { id: req.params.id } });
-    if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
-    if (sub.status === 'CLOSED' || sub.status === 'CANCELLED' as any)
-      throw BadRequest('Subscription is closed');
-    // Before the expiry check: a paused plan's expiresAt can pass while it is
-    // paused, and its remaining time is still owed.
-    if (sub.status === 'PAUSED') return res.json({ data: sub });
-    // Nothing left to freeze; resuming would hand back time that was never there.
-    if (sub.expiresAt <= new Date()) throw BadRequest('Your plan has ended. Recharge to restart it.');
-
-    let autopayPaused = false;
-    if (sub.autopayStatus === 'ACTIVE' && sub.autopayId) {
-      try {
-        await pauseMandate(sub.autopayId);
-        autopayPaused = true;
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(`[pause] could not pause mandate ${sub.autopayId} for subscription ${sub.id}`, e);
-        throw new HttpError(
-          502,
-          'AUTOPAY_PAUSE_FAILED',
-          "We couldn't pause your autopay with the bank, so your plan has not been paused. Please try again in a few minutes."
-        );
-      }
-    }
-
-    const updated = await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { status: 'PAUSED', pausedAt: new Date(), ...(autopayPaused ? { autopayStatus: 'PAUSED' } : {}) },
-    });
-    await prisma.notification.create({
-      data: {
-        userId: sub.userId,
-        channel: 'INAPP',
-        title: 'Subscription paused',
-        body: 'Your purifier flow is on hold. Resume anytime from the app.',
-      },
-    });
-    res.json({ data: updated });
-  })
-);
-
-router.post(
-  '/:id/resume',
-  authRequired(['CUSTOMER']),
-  asyncHandler(async (req, res) => {
-    const sub = await prisma.subscription.findUnique({ where: { id: req.params.id } });
-    if (!sub || sub.userId !== req.auth!.sub) throw NotFound('Subscription not found');
-    if (sub.status !== 'PAUSED') throw BadRequest('Subscription is not paused');
-
-    // Hand back the paused time. Lock-in moves with it only if it was still
-    // running when the plan was paused.
-    const now = new Date();
-    const pausedAt = sub.pausedAt ?? now;
-    const pausedMs = Math.max(0, now.getTime() - pausedAt.getTime());
-    const expiresAt = new Date(sub.expiresAt.getTime() + pausedMs);
-    const lockInUntil =
-      sub.lockInUntil > pausedAt ? new Date(sub.lockInUntil.getTime() + pausedMs) : sub.lockInUntil;
-
-    // A failed mandate resume must not keep the customer's water off: the plan
-    // resumes regardless, autopay stays PAUSED, and the app offers a retry
-    // (POST /payments/subscriptions/:id/autopay/resume).
-    let autopayResumed = false;
-    if (sub.autopayStatus === 'PAUSED' && sub.autopayId) {
-      try {
-        await resumeMandate(sub.autopayId);
-        autopayResumed = true;
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(`[resume] could not resume mandate ${sub.autopayId} for subscription ${sub.id}`, e);
-      }
-    }
-
-    const updated = await prisma.subscription.update({
-      where: { id: sub.id },
-      data: {
-        status: 'ACTIVE',
-        resumedAt: now,
-        pausedAt: null,
-        expiresAt,
-        lockInUntil,
-        ...(autopayResumed ? { autopayStatus: 'ACTIVE' } : {}),
-      },
-    });
-    await prisma.notification.create({
-      data: {
-        userId: sub.userId,
-        channel: 'INAPP',
-        title: 'Subscription resumed',
-        body: `Welcome back — flow is on. Your plan now runs until ${formatIstDate(expiresAt)}.`,
-      },
-    });
-    res.json({ data: updated });
   })
 );
 

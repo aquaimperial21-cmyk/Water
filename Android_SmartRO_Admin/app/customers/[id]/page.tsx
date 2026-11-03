@@ -22,7 +22,7 @@ interface Detail {
     lockInUntil: string;
     product?: { name: string; technology: string; capacityLitres: number };
     plan?: { name: string; durationMonths: number };
-    device?: { id: string; serial: string; status: string; lastHeartbeatAt?: string | null; firmwareVersion?: string | null; wifiSsid?: string | null };
+    device?: { id: string; serial: string; status: string; lastHeartbeatAt?: string | null; lastSeenAt?: string | null; firmwareVersion?: string | null; wifiSsid?: string | null };
     booking?: { addressId?: string | null; city?: { name: string } };
     installAddress?: { line1: string; line2?: string | null; pincode: string; city?: { name: string }; lat?: number | null; lng?: number | null } | null;
     deviceOnline: boolean;
@@ -176,7 +176,8 @@ export default function CustomerDetail() {
           <div className="space-y-4">
             {data.subscriptions.map((s) => {
               const addr = s.installAddress;
-              const lastSeen = s.device?.lastHeartbeatAt ? formatDateTime(s.device.lastHeartbeatAt) : 'never';
+              const seenAt = s.device?.lastSeenAt ?? s.device?.lastHeartbeatAt;
+              const lastSeen = seenAt ? formatDateTime(seenAt) : 'never';
               return (
                 <Card key={s.id} variant="elevated">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -217,7 +218,7 @@ export default function CustomerDetail() {
                       <div className="text-eyebrow uppercase text-ink-muted mb-2">Hardware</div>
                       <Row k="Firmware" v={s.device?.firmwareVersion ?? '—'} />
                       <Row k="Wi-Fi SSID" v={s.device?.wifiSsid ?? '—'} />
-                      <Row k="Last heartbeat" v={lastSeen} />
+                      <Row k="Last seen" v={lastSeen} />
                       <Row k="Plan expires" v={formatDate(s.expiresAt)} />
                     </div>
                   </div>

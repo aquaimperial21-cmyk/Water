@@ -41,7 +41,18 @@ Request:
 ```
 GET /api/v1/devices/IA-PP-08821/state?token=Xy7…2kQ HTTP/1.1
 Host: api.imperialaqua.in
+X-Firmware-Version: 1.1.1
+X-Local-Ip: 192.168.1.50
 ```
+
+Both headers are optional. `X-Firmware-Version` drives remote updates (see
+[OTA](#remote-firmware-updates-ota)). `X-Local-Ip` is the ESP32's address on
+the home LAN: when it is a private IPv4 (`10.x`, `172.16–31.x`, `192.168.x`)
+the server stores it in `Device.localIp`, the same field the heartbeat sets,
+so the app can reach the purifier without waiting for a heartbeat. Anything
+else is ignored silently, never an error. Every authorised poll also updates
+`Device.lastSeenAt` (written at most once a minute), which is what makes the
+purifier count as online.
 
 Response (200):
 
@@ -52,7 +63,7 @@ Response (200):
     "status": "ACTIVE",
     "expiresAt": "2026-10-26T04:06:31.265Z",
     "graceDays": 0,
-    "pollIntervalSec": 3600,
+    "pollIntervalSec": 86400,
     "message": null,
     "serverTime": "2026-04-29T06:11:02.912Z"
   }
@@ -70,8 +81,10 @@ Behaviour:
 - `graceDays` is configurable via `DEVICE_GRACE_DAYS` env on the backend
   (default 0). Useful to keep flow on for a small window after expiry.
 - `pollIntervalSec` is how many seconds to wait before the next poll. It is
-  always a whole number from 30 to 3600. The firmware obeys it, clamped to
-  that range, and waits 5 minutes if the field is missing.
+  always a whole number from 30 to 86400 (one day). The firmware obeys it,
+  clamped to that range, and waits 5 minutes if the field is missing.
+  Firmware 1.1.1 and older clamp it to 30–3600 by themselves, so on those
+  chips a daily answer means hourly: the larger range is backward compatible.
 
 #### How often the purifier checks
 
@@ -79,40 +92,63 @@ The server picks `pollIntervalSec` from the plan:
 
 | Plan | Next check |
 |---|---|
-| Paid, more than 3 days left | every 1 hour (3600 s) |
-| Last 3 days before the end (the reminder period) | every 15 minutes (900 s), plus one check right at the end time (`expiresAt + graceDays`) |
+| Paid, more than 3 days left | once a day (86400 s) |
+| Last 3 days before the end (the reminder period) | every 1 hour (3600 s), plus one check right at the end time (`expiresAt + graceDays`) |
 | Ended less than 24 hours ago, waiting for recharge | every 1 minute (60 s) |
 | Ended 1–7 days ago | every 5 minutes (300 s) |
 | Ended more than 7 days ago | every 15 minutes (900 s) |
-| Paused | every 5 minutes (300 s) |
-| Suspended or closed | every 30 minutes (1800 s) |
+| Suspended, closed, trial or any other status | every 1 hour (3600 s) |
 | No plan attached | every 1 hour (3600 s) |
+| Test plan (product tagged `TEST`), any state | every 1 minute (60 s) |
+
+A test plan's paid term is also just one minute (booking payment and every
+recharge, whatever plan was bought), so paying, water coming on and water
+stopping can be tried in a few minutes.
 
 Why water still stops on time: the firmware saves the plan's end time
 (`expiresAt + graceDays`) and closes the valve by itself at that moment, even
 with no internet. Frequent checks are not what stops the water. They only
 bring news: a recharge, or admin stopping a plan. The check at the end time
 means a recharge made just before expiry is seen about 5 seconds after the
-end, so the water pauses for a few seconds at most. A recharge right after the end brings water back within about a minute;
-after a long lapse, within about 15 minutes. An admin cancel or suspend
-reaches a purifier at its next check, so within about an hour at most.
+end, so the water stops for a few seconds at most. A recharge right after
+the end brings water back within about a minute; after a long lapse, within
+about 15 minutes.
+
+After a recharge, the customer app also tells the purifier to check at once
+over the home Wi-Fi when the phone is on the same network, so the water comes
+back without waiting for the schedule. Changes made elsewhere (an admin cancel or suspend, a payment made away from home) reach
+the purifier at its next check: within a day while the plan has more than 3
+days left, within an hour otherwise.
 
 To make a purifier check at once, unplug its power for a few seconds and plug
 it back in. It checks the server as soon as it is back on Wi-Fi. This is
 handy right after installation or allocation, or to pick up a recharge or an
 admin change without waiting.
 
-The heartbeat (below) is separate and still goes every 30 minutes.
+The heartbeat (below) is separate and follows its own timer in the firmware.
 
-Load example: 100 purifiers used to make about 149,000 requests a day (a
-check every 60 s, plus heartbeats). On this schedule it is roughly 8,000.
+Load example, 100 purifiers on monthly plans: about 330 checks a day on this
+schedule (one a day for most of the month, hourly in the last 3 days, so
+about 3 per purifier), against about 3,100 on the previous hourly schedule
+and 144,000 when every purifier checked every minute. Heartbeats come on top:
+100 a day at one per purifier per day, or 4,800 with firmware 1.1.1, which
+sends one every 30 minutes.
 
 ### `POST /api/v1/devices/:serial/heartbeat`
 
-Posted by firmware every 30 minutes, and right after it gets an IP (boot,
-Wi-Fi reconnect) so a DHCP change reaches the app quickly. Updates
-`Device.lastHeartbeatAt`, surfaced in the admin customer-360 view as the
-"Online / Offline" pill (online = heartbeat within 90 minutes).
+Posted by firmware right after it gets an IP (boot, Wi-Fi reconnect, IP
+change) so a DHCP change reaches the app quickly, and at least once a day
+after that (firmware 1.1.1 and older: every 30 minutes). Updates
+`Device.lastHeartbeatAt` and `Device.lastSeenAt`.
+
+**Online.** A purifier counts as online when the server heard from it, by an
+authorised `/state` poll or a heartbeat, within the last 25 hours (a day,
+since a paid purifier checks once a day, plus an hour of slack). One helper
+decides it (`isDeviceOnline()` in `src/core/device-online.ts`) for every
+`isOnline` the API returns: the customer app's health and local-access
+calls, the admin customer-360 "Online / Offline" pill, the Devices page and
+the Firmware page. Responses carry `lastSeenAt`, the later of
+`Device.lastSeenAt` and `Device.lastHeartbeatAt`.
 
 Request:
 
@@ -134,7 +170,7 @@ is a 400). The customer app uses it for local Wi-Fi control (below).
 Response (200):
 
 ```json
-{ "data": { "lastHeartbeatAt": "…", "firmwareVersion": "1.4.2", "wifiSsid": "Customer-Home", "localIp": "192.168.1.50", … } }
+{ "data": { "lastHeartbeatAt": "…", "lastSeenAt": "…", "firmwareVersion": "1.4.2", "wifiSsid": "Customer-Home", "localIp": "192.168.1.50", … } }
 ```
 
 ## Remote firmware updates (OTA)
@@ -253,15 +289,16 @@ never returned.
     "localIp": "192.168.1.50",
     "localKey": "8ba08c6f…251a14",
     "lastHeartbeatAt": "2026-11-03T09:12:44.120Z",
+    "lastSeenAt": "2026-11-04T08:02:10.511Z",
     "isOnline": true
   }
 }
 ```
 
 - `{ "data": null }` → no device paired.
-- `localIp` is `null` until a heartbeat reports one.
+- `localIp` is `null` until a heartbeat or a `/state` `X-Local-Ip` header reports one.
 - `localKey` is `null` while the device has no token.
-- `isOnline` = heartbeat within 90 minutes.
+- `lastSeenAt` = the last `/state` poll or heartbeat; `isOnline` = seen within 25 hours.
 
 ### Command signature (app → ESP32)
 
@@ -358,8 +395,8 @@ Use curl to simulate a device:
 SERIAL=IA-PP-08821
 TOKEN=…  # from POST /admin/:serial/issue-token
 
-# Read state
-curl "http://localhost:4000/api/v1/devices/$SERIAL/state?token=$TOKEN"
+# Read state (X-Local-Ip is optional)
+curl "http://localhost:4000/api/v1/devices/$SERIAL/state?token=$TOKEN" -H 'X-Local-Ip: 192.168.1.50'
 
 # Heartbeat
 curl -X POST "http://localhost:4000/api/v1/devices/$SERIAL/heartbeat?token=$TOKEN" \

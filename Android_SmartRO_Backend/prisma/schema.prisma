@@ -289,12 +289,18 @@ model Subscription {
   plan          Plan      @relation(fields: [planId], references: [id])
   deviceId      String?   @unique
   device        Device?   @relation(fields: [deviceId], references: [id])
-  status        String    @default("ACTIVE") // ACTIVE | TRIAL | PAUSED | GRACE | SUSPENDED | CLOSED
+  // ACTIVE | TRIAL | GRACE | SUSPENDED | CLOSED. PAUSED is legacy: nothing
+  // creates it since the pause feature was removed (2026-11-04), and a leftover
+  // row is treated like any other non-running status (no water).
+  status        String    @default("ACTIVE")
   startedAt     DateTime  @default(now())
   expiresAt     DateTime
   lockInUntil   DateTime
   // 7-day trial window — applies during the first week after install.
   trialEndsAt   DateTime?
+  // Legacy, unused (pause feature removed 2026-11-04). Kept so old rows and
+  // migrations stay intact. Nothing sets them; a paid term clears pausedAt
+  // on a leftover PAUSED row (core/pricing.ts applyPaidTerm).
   pausedAt      DateTime?
   resumedAt     DateTime?
   cancelledAt   DateTime?
@@ -304,6 +310,8 @@ model Subscription {
   // CREATED = mandate created, awaiting first authorisation debit
   // ACTIVE  = mandate authorised, future charges will auto-debit
   // HALTED  = customer cancelled or bank declined; revert to manual
+  // PAUSED / PENDING / COMPLETED / CANCELLED = as the Razorpay webhook reports
+  // (a mandate paused outside the app, e.g. Razorpay Dashboard or bank)
   autopayId     String? // razorpay subscription id (sub_XXXX)
   autopayStatus String?
   createdAt     DateTime  @default(now())
@@ -329,8 +337,9 @@ model Device {
   deviceToken      String?   @unique // 32-char random token issued at install
   firmwareVersion  String?
   wifiSsid         String?
-  localIp          String? // home-LAN IPv4 from the last heartbeat; the app talks to the ESP32 here
+  localIp          String? // home-LAN IPv4 from the last heartbeat or /state X-Local-Ip; the app talks to the ESP32 here
   lastHeartbeatAt  DateTime?
+  lastSeenAt       DateTime? // last authorised /state or /heartbeat (written at most once a minute)
   // Telemetry rollups (latest snapshot — see DeviceReading for time series)
   lastTdsPpm       Int?
   filterLifePct    Int? // 0–100, fall-off counter maintained by firmware

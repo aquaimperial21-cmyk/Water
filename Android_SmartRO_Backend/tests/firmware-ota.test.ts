@@ -522,7 +522,9 @@ describe('A newer release', () => {
       otaAttempts: 0,
       otaUpdatedAt: expect.any(String),
       lastHeartbeatAt: null,
-      isOnline: false,
+      // No heartbeat yet, but its /state polls count as contact.
+      lastSeenAt: expect.any(String),
+      isOnline: true,
     });
     expect(JSON.stringify(r.body)).not.toContain(devices.A.token);
   });

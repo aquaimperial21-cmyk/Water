@@ -8,6 +8,7 @@ import { asyncHandler, NotFound, BadRequest, Conflict } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { refreshLowestMonthlyRollup } from './catalog';
 import { hideToken } from '../core/device-token';
+import { isDeviceOnline, presenceOf } from '../core/device-online';
 
 const router = Router();
 
@@ -123,10 +124,8 @@ router.get(
         const installAddress = addrId
           ? await prisma.address.findUnique({ where: { id: addrId }, include: { city: true } })
           : null;
-        const isOnline =
-          s.device?.lastHeartbeatAt &&
-          Date.now() - new Date(s.device.lastHeartbeatAt).getTime() < 90 * 60 * 1000;
-        return { ...s, device: hideToken(s.device), installAddress, deviceOnline: !!isOnline };
+        const device = s.device ? { ...hideToken(s.device), ...presenceOf(s.device) } : null;
+        return { ...s, device, installAddress, deviceOnline: isDeviceOnline(s.device) };
       })
     );
     const tickets = customer.tickets.map((t) => ({ ...t, device: hideToken(t.device) }));
@@ -143,7 +142,10 @@ router.get(
       include: { product: true, subscription: { include: { user: { select: { id: true, fullName: true, phone: true } } } } },
       orderBy: { serial: 'asc' },
     });
-    res.json({ data: items.map((d) => hideToken(d)) });
+    // lastSeenAt / isOnline come from core/device-online.ts, so the console
+    // doesn't keep its own copy of the online window.
+    const now = Date.now();
+    res.json({ data: items.map((d) => ({ ...hideToken(d), ...presenceOf(d, now) })) });
   })
 );
 

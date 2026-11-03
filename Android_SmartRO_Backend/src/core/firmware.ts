@@ -349,11 +349,17 @@ export function mayDownload(release: Pick<FirmwareRelease, 'id' | 'rollout' | 't
 /**
  * Runs on every /state poll. Records the version the chip says it is running
  * (X-Firmware-Version), marks the offered release INSTALLED once the chip
- * runs it, and returns the release to offer, if any.
+ * runs it, and returns the release to offer, if any. `also` holds other
+ * Device fields the poll changes (lastSeenAt, localIp), written in the same
+ * update so a poll costs at most one write.
  */
-export async function syncDeviceFirmware(device: OtaDevice, reportedVersion?: string): Promise<FirmwareOffer | null> {
+export async function syncDeviceFirmware(
+  device: OtaDevice,
+  reportedVersion?: string,
+  also: Prisma.DeviceUpdateInput = {}
+): Promise<FirmwareOffer | null> {
   const now = new Date();
-  const data: Prisma.DeviceUpdateInput = {};
+  const data: Prisma.DeviceUpdateInput = { ...also };
   let otaStatus = device.otaStatus;
 
   if (reportedVersion) {

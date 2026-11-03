@@ -1,9 +1,9 @@
-// How often a purifier checks the server: hourly while a plan is comfortably
-// paid, faster near the end and just after it, slower again after a long
-// lapse. Pure function, no database.
+// How often a purifier checks the server: daily while a plan is comfortably
+// paid, hourly in the last 3 days, fast just after the end, slower again after
+// a long lapse. Pure function, no database.
 
 import { describe, it, expect } from 'vitest';
-import { parseGraceDays, pollIntervalSec } from '../src/core/poll-schedule';
+import { parseGraceDays, pollIntervalSec, POLL_MAX_SEC, POLL_MIN_SEC } from '../src/core/poll-schedule';
 
 const NOW = Date.UTC(2026, 10, 3, 6, 0, 0);
 const SEC = 1000;
@@ -36,20 +36,36 @@ describe('no subscription', () => {
 });
 
 describe('plan running (water allowed)', () => {
-  it('checks hourly while more than 3 days are left', () => {
-    expect(poll('ACTIVE', 30 * DAY)).toBe(3600);
-    expect(poll('ACTIVE', 3 * DAY + SEC)).toBe(3600);
+  it('checks once a day while more than 3 days are left', () => {
+    expect(poll('ACTIVE', 400 * DAY)).toBe(86400);
+    expect(poll('ACTIVE', 30 * DAY)).toBe(86400);
+    expect(poll('ACTIVE', 14 * DAY)).toBe(86400);
+    expect(poll('ACTIVE', 4 * DAY)).toBe(86400);
+    expect(poll('ACTIVE', 3 * DAY + SEC)).toBe(86400);
   });
 
-  it('checks every 15 minutes from exactly 3 days left', () => {
-    expect(poll('ACTIVE', 3 * DAY)).toBe(900);
-    expect(poll('ACTIVE', 2 * DAY)).toBe(900);
-    expect(poll('ACTIVE', 20 * MIN)).toBe(900);
+  it('checks once an hour from exactly 3 days left', () => {
+    expect(poll('ACTIVE', 3 * DAY)).toBe(3600);
+    expect(poll('ACTIVE', 2 * DAY)).toBe(3600);
+    expect(poll('ACTIVE', DAY)).toBe(3600);
+    expect(poll('ACTIVE', 2 * HOUR)).toBe(3600);
+    expect(poll('ACTIVE', HOUR)).toBe(3600);
   });
 
   it('times one check for just after the end', () => {
+    expect(poll('ACTIVE', HOUR - 10 * SEC)).toBe(3595);
+    expect(poll('ACTIVE', 30 * MIN)).toBe(1805);
+    expect(poll('ACTIVE', 20 * MIN)).toBe(1205);
     expect(poll('ACTIVE', 10 * MIN)).toBe(605);
     expect(poll('ACTIVE', 26 * SEC)).toBe(31);
+  });
+
+  it('the daily check never lands past the end', () => {
+    // Daily is only used with more than 3 days left; inside the hourly window
+    // the end check (end + 5 s) takes over once it is the sooner of the two.
+    for (const msLeft of [3 * DAY + SEC, 3 * DAY + HOUR, 5 * DAY, 30 * DAY]) {
+      expect(poll('ACTIVE', msLeft) * SEC).toBeLessThan(msLeft);
+    }
   });
 
   it('rounds a part-second up to whole seconds', () => {
@@ -71,8 +87,8 @@ describe('plan running (water allowed)', () => {
   });
 
   it('a plan in GRACE within its window follows the same schedule', () => {
-    expect(poll('GRACE', 5 * DAY, 7)).toBe(3600);
-    expect(poll('GRACE', 2 * DAY, 7)).toBe(900);
+    expect(poll('GRACE', 5 * DAY, 7)).toBe(86400);
+    expect(poll('GRACE', 2 * DAY, 7)).toBe(3600);
     expect(poll('GRACE', 10 * MIN, 7)).toBe(605);
   });
 
@@ -81,7 +97,7 @@ describe('plan running (water allowed)', () => {
     const graceDays = 5; // ...but water runs 5 days past expiry: 4 days left
     const allowFlow = handlerAllowFlow('ACTIVE', expiresAt, graceDays, NOW);
     expect(allowFlow).toBe(true);
-    expect(pollIntervalSec({ subscription: { status: 'ACTIVE', expiresAt }, allowFlow, graceDays, now: NOW })).toBe(3600);
+    expect(pollIntervalSec({ subscription: { status: 'ACTIVE', expiresAt }, allowFlow, graceDays, now: NOW })).toBe(86400);
     // Same expiry with no grace: ended a day ago.
     expect(pollIntervalSec({ subscription: { status: 'ACTIVE', expiresAt }, allowFlow: false, graceDays: 0, now: NOW })).toBe(300);
   });
@@ -142,20 +158,17 @@ describe('missing or unreadable end date', () => {
 });
 
 describe('other statuses', () => {
-  it('PAUSED checks every 5 minutes', () => {
-    expect(poll('PAUSED', 30 * DAY)).toBe(300);
-    expect(poll('PAUSED', -30 * DAY)).toBe(300);
-  });
-
-  it.each(['SUSPENDED', 'CLOSED', 'TRIAL', '', 'active', 'SOMETHING_NEW'])('%j checks every 30 minutes', (status) => {
-    expect(poll(status, 30 * DAY)).toBe(1800);
-    expect(poll(status, 10 * SEC)).toBe(1800);
-    expect(poll(status, -30 * DAY)).toBe(1800);
+  // PAUSED: a legacy row from before the pause feature was removed. No water,
+  // and no schedule of its own.
+  it.each(['SUSPENDED', 'CLOSED', 'TRIAL', 'PAUSED', '', 'active', 'SOMETHING_NEW'])('%j checks once an hour', (status) => {
+    expect(poll(status, 30 * DAY)).toBe(3600);
+    expect(poll(status, 10 * SEC)).toBe(3600);
+    expect(poll(status, -30 * DAY)).toBe(3600);
   });
 
   it('a status that is not even a string does not throw', () => {
     const subscription = { status: undefined as unknown as string, expiresAt: new Date(NOW) };
-    expect(pollIntervalSec({ subscription, allowFlow: false, graceDays: 0, now: NOW })).toBe(1800);
+    expect(pollIntervalSec({ subscription, allowFlow: false, graceDays: 0, now: NOW })).toBe(3600);
   });
 });
 
@@ -180,8 +193,13 @@ describe('DEVICE_GRACE_DAYS', () => {
   });
 });
 
-describe('every answer fits the firmware', () => {
-  it('is a whole number of seconds from 30 to 3600', () => {
+describe('every answer is in range', () => {
+  it('the range is 30 seconds to one day', () => {
+    expect(POLL_MIN_SEC).toBe(30);
+    expect(POLL_MAX_SEC).toBe(86400);
+  });
+
+  it('is a whole number of seconds from 30 to 86400', () => {
     const offsets = [
       -400 * DAY, -8 * DAY, -7 * DAY, -DAY - 1, -DAY, -HOUR, -1, 0, 1, 999, 25 * SEC, 25 * SEC + 1,
       10 * MIN + 1, 3 * DAY - 1, 3 * DAY, 3 * DAY + 1, 400 * DAY,
@@ -192,9 +210,32 @@ describe('every answer fits the firmware', () => {
           const sec = poll(status, msLeft, graceDays);
           expect(Number.isInteger(sec)).toBe(true);
           expect(sec).toBeGreaterThanOrEqual(30);
-          expect(sec).toBeLessThanOrEqual(3600);
+          expect(sec).toBeLessThanOrEqual(86400);
         }
       }
     }
+  });
+
+  it('a running plan never asks for more than a day, however long is left', () => {
+    expect(poll('ACTIVE', 10 * 365 * DAY)).toBe(86400);
+    expect(poll('GRACE', 10 * 365 * DAY, 2)).toBe(86400);
+  });
+});
+
+describe('test plans (product tagged TEST) check every minute', () => {
+  const base = { graceDays: 0, now: NOW, fastPoll: true };
+  it('a running plan with weeks left, or in its last 3 days', () => {
+    expect(pollIntervalSec({ ...base, subscription: { status: 'ACTIVE', expiresAt: new Date(NOW + 30 * DAY) }, allowFlow: true })).toBe(60);
+    expect(pollIntervalSec({ ...base, subscription: { status: 'ACTIVE', expiresAt: new Date(NOW + 400 * DAY) }, allowFlow: true })).toBe(60);
+    expect(pollIntervalSec({ ...base, subscription: { status: 'GRACE', expiresAt: new Date(NOW + 2 * DAY) }, allowFlow: true })).toBe(60);
+  });
+  it('ended long ago, and other states', () => {
+    expect(pollIntervalSec({ ...base, subscription: { status: 'CLOSED', expiresAt: new Date(NOW + 30 * DAY) }, allowFlow: false })).toBe(60);
+    expect(pollIntervalSec({ ...base, subscription: { status: 'ACTIVE', expiresAt: new Date(NOW - 30 * DAY) }, allowFlow: false })).toBe(60);
+    expect(pollIntervalSec({ ...base, subscription: { status: 'SUSPENDED', expiresAt: new Date(NOW + DAY) }, allowFlow: false })).toBe(60);
+  });
+  it('no subscription is still hourly, and fastPoll false keeps the normal schedule', () => {
+    expect(pollIntervalSec({ ...base, subscription: null, allowFlow: false })).toBe(3600);
+    expect(pollIntervalSec({ ...base, fastPoll: false, subscription: { status: 'ACTIVE', expiresAt: new Date(NOW + 30 * DAY) }, allowFlow: true })).toBe(86400);
   });
 });

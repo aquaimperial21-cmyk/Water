@@ -236,7 +236,10 @@ router.post(
   asyncHandler(async (req, res) => {
     // No gateway is involved below, so this must never run where real money is.
     assertStubPaymentsAllowed();
-    const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { plan: true } });
+    const b = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: { plan: true, product: { select: { tag: true } } },
+    });
     if (!b || b.userId !== req.auth!.sub) throw NotFound('Booking not found');
     if (!b.agreementSignedAt) throw BadRequest('Agreement must be signed before payment');
     if (b.status === 'PAID' || b.status === 'INSTALLED') return res.json({ data: { booking: b } });
@@ -277,7 +280,12 @@ router.post(
       });
 
       // Auto-create active subscription on payment success (matches doc: subscription created on installation; we treat paid → installed in prototype)
-      const { startedAt, expiresAt, lockInUntil, trialEndsAt } = firstTermDates(new Date(), b.plan.durationMonths);
+      // A TEST product's term is one minute (core/pricing.ts).
+      const { startedAt, expiresAt, lockInUntil, trialEndsAt } = firstTermDates(
+        new Date(),
+        b.plan.durationMonths,
+        b.product.tag
+      );
       const sub = await tx.subscription.create({
         data: {
           userId: b.userId,

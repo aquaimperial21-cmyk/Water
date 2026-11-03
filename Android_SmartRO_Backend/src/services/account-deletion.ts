@@ -37,7 +37,7 @@ function phoneVariants(phone: string): string[] {
 
 async function assertDeletable(tx: Tx, userId: string): Promise<void> {
   // Any plan that isn't CLOSED blocks, expired or not: ACTIVE past its end
-  // date, PAUSED, GRACE… the purifier is still on the customer's wall.
+  // date, GRACE, SUSPENDED… the purifier is still on the customer's wall.
   const runningPlan = await tx.subscription.findFirst({
     where: { userId, status: { not: 'CLOSED' } },
     select: { id: true },

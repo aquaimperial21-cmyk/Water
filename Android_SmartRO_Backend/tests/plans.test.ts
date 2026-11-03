@@ -1,5 +1,6 @@
-// Plans: admin management, calendar-month terms end to end, autopay cadence,
-// and the IST month arithmetic the terms are built on.
+// Plans: admin management, calendar-month terms end to end, TEST products'
+// 1-minute terms, autopay cadence, and the IST month arithmetic the terms are
+// built on.
 
 import crypto from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -17,6 +18,7 @@ import { prisma } from '../src/core/prisma';
 import { signAccessToken } from '../src/core/auth';
 import { addMonthsIst, istDayOfMonth } from '../src/core/time';
 import { mandateSchedule } from '../src/modules/payment';
+import { applyPaidTerm, firstTermDates, TEST_TERM_MS } from '../src/core/pricing';
 
 const app = buildApp();
 
@@ -24,6 +26,7 @@ let adminToken = '';
 let userId = '';
 let token = '';
 const createdPlanIds: string[] = [];
+const createdProductIds: string[] = [];
 
 /** The instant that reads `y-m-d h:min` on an Indian clock (IST is UTC+5:30, no DST). */
 const ist = (y: number, m: number, d: number, h = 10, min = 0) =>
@@ -36,11 +39,13 @@ async function unusedMonths(): Promise<number> {
   return free[crypto.randomInt(free.length)]!;
 }
 
-/** Book `months` on a priced active plan, sign, and pay through the stub gateway. */
-async function bookAndPay(months: number) {
-  const price = await prisma.planCityPrice.findFirstOrThrow({
-    where: { monthlyPricePaise: { gt: 0 }, plan: { durationMonths: months, isActive: true } },
-  });
+/** Book `months` on a priced active plan (or the given price), sign, and pay through the stub gateway. */
+async function bookAndPay(months: number, on?: { productId: string; planId: string; cityId: string; monthlyPricePaise: number; depositPaise: number }) {
+  const price =
+    on ??
+    (await prisma.planCityPrice.findFirstOrThrow({
+      where: { monthlyPricePaise: { gt: 0 }, plan: { durationMonths: months, isActive: true } },
+    }));
   const b = await request(app)
     .post('/api/v1/bookings')
     .set('Authorization', `Bearer ${token}`)
@@ -75,7 +80,8 @@ afterAll(async () => {
   await prisma.booking.deleteMany({ where: { userId } });
   await prisma.notification.deleteMany({ where: { userId } });
   await prisma.user.delete({ where: { id: userId } });
-  await prisma.planCityPrice.deleteMany({ where: { planId: { in: createdPlanIds } } });
+  await prisma.planCityPrice.deleteMany({ where: { OR: [{ planId: { in: createdPlanIds } }, { productId: { in: createdProductIds } }] } });
+  await prisma.product.deleteMany({ where: { id: { in: createdProductIds } } });
   await prisma.auditLog.deleteMany({ where: { entity: 'Plan', entityId: { in: createdPlanIds } } });
   await prisma.plan.deleteMany({ where: { id: { in: createdPlanIds } } });
 });
@@ -174,6 +180,101 @@ describe('Calendar-month terms', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ productId: base.productId, planId: plan.id, cityId: base.cityId });
     expect(b.status).toBe(400);
+  });
+});
+
+describe('TEST products: every paid term is one minute', () => {
+  const near = (d: Date, ms: number) => expect(Math.abs(d.getTime() - ms)).toBeLessThan(5000);
+  const stub = async <T>(fn: () => Promise<T>) => {
+    process.env.PAYMENT_DRIVER = 'stub';
+    return fn();
+  };
+
+  /** A product tagged TEST, priced ₹1 a month on the 1-month plan in some city. */
+  async function testProductPrice() {
+    const base = await prisma.planCityPrice.findFirstOrThrow({
+      where: { monthlyPricePaise: { gt: 0 }, plan: { durationMonths: 1, isActive: true } },
+    });
+    const product = await prisma.product.create({
+      data: {
+        slug: `test-purifier-${crypto.randomBytes(4).toString('hex')}`,
+        name: 'TEST Purifier',
+        kind: 'HOME',
+        capacityLitres: 8,
+        technology: 'RO',
+        mounting: 'WALL',
+        description: 'Plans test product',
+        tag: 'TEST',
+      },
+    });
+    createdProductIds.push(product.id);
+    return prisma.planCityPrice.create({
+      data: { planId: base.planId, cityId: base.cityId, productId: product.id, monthlyPricePaise: 100, depositPaise: 0 },
+    });
+  }
+
+  it('works the dates out in one place: one minute for TEST, calendar months for the rest', () => {
+    const start = ist(2027, 1, 31);
+    expect(firstTermDates(start, 6, 'TEST')).toEqual({
+      startedAt: start,
+      expiresAt: new Date(start.getTime() + TEST_TERM_MS),
+      lockInUntil: new Date(start.getTime() + TEST_TERM_MS),
+      trialEndsAt: new Date(start.getTime() + TEST_TERM_MS),
+    });
+    for (const tag of [null, undefined, 'BEST_SELLER', 'test']) {
+      const d = firstTermDates(start, 1, tag);
+      expect(d.expiresAt).toEqual(ist(2027, 2, 28));
+      expect(d.lockInUntil).toEqual(d.expiresAt);
+      expect(d.trialEndsAt.getTime() - start.getTime()).toBe(Number(process.env.TRIAL_DAYS ?? 7) * 24 * 3600 * 1000);
+    }
+
+    const now = ist(2027, 3, 10);
+    const running = { expiresAt: ist(2027, 3, 20), startedAt: ist(2027, 2, 20) };
+    const ended = { expiresAt: ist(2027, 3, 1), startedAt: ist(2027, 2, 1) };
+    expect(applyPaidTerm(running, 12, 'TEST', now).expiresAt).toEqual(new Date(running.expiresAt.getTime() + TEST_TERM_MS));
+    expect(applyPaidTerm(ended, 12, 'TEST', now).expiresAt).toEqual(new Date(now.getTime() + TEST_TERM_MS));
+    expect(applyPaidTerm(running, 1, null, now)).toEqual({ expiresAt: ist(2027, 4, 20), status: 'ACTIVE', pausedAt: null });
+    expect(applyPaidTerm(ended, 1, null, now).expiresAt).toEqual(ist(2027, 4, 10));
+  });
+
+  it('booking payment (stub): water for one minute from now, at the normal price', async () => {
+    const price = await testProductPrice();
+    const at = Date.now();
+    const { booking, sub } = await bookAndPay(1, price);
+    expect(booking.firstPaymentPaise).toBe(100);
+    near(sub.expiresAt, at + TEST_TERM_MS);
+    expect(sub.expiresAt.getTime() - sub.startedAt.getTime()).toBe(TEST_TERM_MS);
+    expect(sub.lockInUntil.toISOString()).toBe(sub.expiresAt.toISOString());
+    expect(sub.trialEndsAt?.toISOString()).toBe(sub.expiresAt.toISOString());
+  });
+
+  it('recharge (stub): one minute on top of a running plan, or from now once it has ended', async () => {
+    const price = await testProductPrice();
+    const { sub } = await bookAndPay(1, price);
+    const recharge = () =>
+      stub(() => request(app).post(`/api/v1/subscriptions/${sub.id}/recharge`).set('Authorization', `Bearer ${token}`).send({}));
+
+    const r1 = await recharge();
+    expect(r1.status).toBe(200);
+    const running = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+    expect(running.expiresAt.getTime()).toBe(sub.expiresAt.getTime() + TEST_TERM_MS);
+    const pay = await prisma.payment.findFirstOrThrow({ where: { subscriptionId: sub.id, kind: 'RECHARGE' } });
+    expect(pay.amountPaise).toBe(100);
+
+    await prisma.subscription.update({ where: { id: sub.id }, data: { expiresAt: new Date(Date.now() - 3 * 60 * 1000) } });
+    const at = Date.now();
+    expect((await recharge()).status).toBe(200);
+    const after = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+    expect(after.status).toBe('ACTIVE');
+    near(after.expiresAt, at + TEST_TERM_MS);
+  });
+
+  it('leaves a normal product on calendar months when it recharges', async () => {
+    const { sub } = await bookAndPay(1);
+    const r = await stub(() => request(app).post(`/api/v1/subscriptions/${sub.id}/recharge`).set('Authorization', `Bearer ${token}`).send({}));
+    expect(r.status).toBe(200);
+    const after = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+    expect(after.expiresAt.toISOString()).toBe(addMonthsIst(sub.expiresAt, 1, istDayOfMonth(sub.startedAt)).toISOString());
   });
 });
 

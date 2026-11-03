@@ -45,6 +45,9 @@ interface Device {
   firmwareVersion?: string | null;
   wifiSsid?: string | null;
   lastHeartbeatAt?: string | null;
+  /** Latest contact (a /state poll or a heartbeat); the server sets this and isOnline. */
+  lastSeenAt?: string | null;
+  isOnline?: boolean;
   lastTdsPpm?: number | null;
   filterLifePct?: number | null;
   usageLitresTotal: number;
@@ -55,8 +58,6 @@ interface Device {
     user?: { id: string; fullName?: string | null; phone?: string };
   } | null;
 }
-
-const ONLINE_WINDOW_MS = 90 * 60 * 1000;
 
 const STATUS_OPTIONS = ['ALL', 'WAREHOUSE', 'INSTALLED', 'IN_SERVICE', 'RETURNED', 'RETIRED'] as const;
 type StatusFilter = (typeof STATUS_OPTIONS)[number];
@@ -175,19 +176,15 @@ export default function DevicesPage() {
     return c;
   }, [devices]);
 
-  const onlineInstalled = devices.filter(
-    (d) =>
-      d.status === 'INSTALLED' &&
-      d.lastHeartbeatAt &&
-      Date.now() - new Date(d.lastHeartbeatAt).getTime() < ONLINE_WINDOW_MS
-  ).length;
+  // Online is decided by the server (seen in the last day), not here.
+  const onlineInstalled = devices.filter((d) => d.status === 'INSTALLED' && d.isOnline).length;
 
   return (
     <Shell title="Device fleet" eyebrow="Operations · Inventory">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <Stat label="Warehouse" value={counts.WAREHOUSE ?? 0} sub="Ready to allocate" />
         <Stat label="Installed" value={counts.INSTALLED ?? 0} sub="In customer homes" />
-        <Stat label="Online" value={onlineInstalled} sub="Heartbeat ≤ 90 min ago" />
+        <Stat label="Online" value={onlineInstalled} sub="Seen in the last day" />
         <Stat label="Returned" value={counts.RETURNED ?? 0} sub="Awaiting inspection" />
         <Stat label="Retired" value={counts.RETIRED ?? 0} sub="End-of-life" />
       </div>
@@ -231,13 +228,11 @@ export default function DevicesPage() {
           <div className="text-sm font-semibold text-danger py-6">{error}</div>
         ) : (
           <Table
-            headers={['Serial', 'Product', 'Status', 'Customer', 'TDS', 'Filter', 'Heartbeat', '']}
+            headers={['Serial', 'Product', 'Status', 'Customer', 'TDS', 'Filter', 'Last seen', '']}
             empty={loading ? 'Loading…' : 'No devices match that filter'}
             rows={filtered.map((d) => {
-              const lastSeenMs = d.lastHeartbeatAt
-                ? Date.now() - new Date(d.lastHeartbeatAt).getTime()
-                : Infinity;
-              const isOnline = d.status === 'INSTALLED' && lastSeenMs < ONLINE_WINDOW_MS;
+              const seenAt = d.lastSeenAt ?? d.lastHeartbeatAt;
+              const isOnline = d.status === 'INSTALLED' && Boolean(d.isOnline);
               return [
                 <span key="s">
                   <div className="font-bold tracking-wider">{d.serial}</div>
@@ -280,10 +275,10 @@ export default function DevicesPage() {
                   <span key="f" className="text-xs text-ink-muted">—</span>
                 ),
                 <span key="h" className="text-xs">
-                  {d.lastHeartbeatAt ? (
+                  {seenAt ? (
                     <>
                       <Badge tone={isOnline ? 'success' : 'warning'}>{isOnline ? 'Online' : 'Offline'}</Badge>
-                      <div className="text-ink-muted mt-1">{formatDateTime(d.lastHeartbeatAt)}</div>
+                      <div className="text-ink-muted mt-1">{formatDateTime(seenAt)}</div>
                     </>
                   ) : (
                     <Badge tone="info">Never</Badge>
