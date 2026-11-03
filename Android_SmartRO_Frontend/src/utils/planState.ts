@@ -2,14 +2,16 @@
 // what the status card says, and which actions the server will accept.
 //
 // Pure functions of (subscription, now) — no React, no network. The server
-// only ever sends status ACTIVE | PAUSED | CLOSED and never flips a status at
-// expiry, so "expired" (water off) is derived here: ACTIVE with expiresAt <= now.
+// sends status ACTIVE | CLOSED and never flips a status at expiry, so
+// "expired" (water off) is derived here: ACTIVE with expiresAt <= now. Any
+// other status (a legacy PAUSED plan, or one this app doesn't know) is
+// "inactive": water off, with recharge and support offered.
 
 import type { AutopayStatus, Subscription, SubscriptionRefund } from '../api/endpoints';
 import { formatDate, paiseToInr } from './format';
 import { planTermLabel, termLength } from './plans';
 
-export type PlanKind = 'awaitingInstall' | 'active' | 'expiring' | 'expired' | 'paused' | 'closed';
+export type PlanKind = 'awaitingInstall' | 'active' | 'expiring' | 'expired' | 'inactive' | 'closed';
 
 /** Subset of the Pill tones the plan states use. */
 export type PlanTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
@@ -87,7 +89,7 @@ export function isExpired(sub: Subscription, now: Date): boolean {
 
 export function planKind(sub: Subscription, now: Date): PlanKind {
   if (sub.status === 'CLOSED') return 'closed';
-  if (sub.status === 'PAUSED') return 'paused';
+  if (sub.status !== 'ACTIVE') return 'inactive';
   const left = ms(sub.expiresAt) - now.getTime();
   if (!(left > 0)) return 'expired';
   if (sub.booking?.status !== 'INSTALLED' && !sub.device) return 'awaitingInstall';
@@ -98,14 +100,14 @@ const KIND_RANK: Record<PlanKind, number> = {
   awaitingInstall: 0,
   active: 0,
   expiring: 0,
-  paused: 1,
+  inactive: 1,
   expired: 2,
   closed: 3,
 };
 
 /**
  * The subscription My Plan opens on: running plans (incl. awaiting install)
- * first, then paused, then expired, then closed; newest first within each.
+ * first, then inactive, then expired, then closed; newest first within each.
  */
 export function pickDefaultSubscription(subs: Subscription[], now: Date): Subscription | null {
   if (subs.length === 0) return null;
@@ -137,18 +139,10 @@ export function rechargeEndDate(sub: Subscription, now: Date): Date {
   return addCalendarMonths(base, planMonths(sub));
 }
 
-/** The end date after resuming now: the paused time is added back. */
-export function resumeEndDate(sub: Subscription, now: Date): Date | null {
-  if (sub.status !== 'PAUSED' || !sub.pausedAt) return null;
-  const pausedFor = Math.max(0, now.getTime() - ms(sub.pausedAt));
-  return new Date(ms(sub.expiresAt) + pausedFor);
-}
-
-/** Time left on the plan; frozen at the moment of pausing while PAUSED. */
+/** Time left on the plan; none once the water is off. */
 function remainingMs(sub: Subscription, kind: PlanKind, now: Date): number {
-  if (kind === 'expired' || kind === 'closed') return 0;
-  const from = kind === 'paused' && sub.pausedAt ? ms(sub.pausedAt) : now.getTime();
-  return Math.max(0, ms(sub.expiresAt) - from);
+  if (kind === 'expired' || kind === 'closed' || kind === 'inactive') return 0;
+  return Math.max(0, ms(sub.expiresAt) - now.getTime());
 }
 
 export function refundText(refund: SubscriptionRefund): string {
@@ -166,7 +160,7 @@ const VISIT_LABEL: Record<string, string> = {
 
 /* ─────────────────────────── View model ─────────────────────────── */
 
-export type PlanRowIcon = 'renew' | 'end' | 'lock' | 'visit' | 'pause' | 'refund';
+export type PlanRowIcon = 'renew' | 'end' | 'lock' | 'visit' | 'refund';
 export interface PlanRow { key: string; icon: PlanRowIcon; label: string; value: string }
 
 export interface PlanAction {
@@ -178,14 +172,14 @@ export interface PlanAction {
 }
 
 export type CancelMode = 'trial' | 'postLockIn' | 'locked';
-export type AutopayOp = 'create' | 'cancel' | 'resume';
+export type AutopayOp = 'create' | 'cancel';
 
 export interface PlanActions {
-  primary: 'recharge' | 'resume' | 'installSlot' | null;
+  primary: 'recharge' | 'installSlot' | null;
   recharge: PlanAction;
-  resume: PlanAction;
-  pause: PlanAction;
   installSlot: PlanAction;
+  /** Inactive plans only: talk to us about getting the water back on. */
+  support: PlanAction;
   cancel: PlanAction & { mode: CancelMode | null; refundPaise: number };
   autopay: PlanAction & { op: AutopayOp | null; note: string | null; warn: boolean };
   smartHealth: PlanAction;
@@ -208,8 +202,6 @@ export interface PlanView {
   actions: PlanActions;
   /** End date a recharge made now would give — for the confirm dialog. */
   rechargeEndsAt: Date;
-  /** End date a resume made now would give; null unless paused. */
-  resumeEndsAt: Date | null;
 }
 
 export interface PlanViewOptions {
@@ -242,21 +234,10 @@ function autopayAction(
       warn: true,
     };
   }
-  if (kind === 'closed') return none;
+  // Inactive: the server won't set up autopay; recharge or support come first.
+  if (kind === 'closed' || kind === 'inactive') return none;
   if (opts.autopayAvailable === false) {
     return { ...none, note: 'Autopay is not available yet. Recharge manually before your plan ends.' };
-  }
-  if (kind === 'paused') {
-    // Paused with the plan; it comes back on resume. Status only.
-    const label = status === 'PAUSED' || status === 'ACTIVE' ? 'Autopay paused' : 'No autopay';
-    return {
-      ...shown(label, status === 'PAUSED' || status === 'ACTIVE'
-        ? 'Autopay resumes when you resume the plan.'
-        : 'Resume the plan to set up autopay.'),
-      op: null,
-      note: null,
-      warn: false,
-    };
   }
   switch (status) {
     case 'CREATED':
@@ -264,7 +245,14 @@ function autopayAction(
     case 'ACTIVE':
       return { ...shown('Autopay on'), op: 'cancel', note: null, warn: false };
     case 'PAUSED':
-      return { ...shown('Autopay paused'), op: 'resume', note: 'Autopay is paused. Tap it to turn renewals back on.', warn: false };
+      // Put on hold at Razorpay. The app can't restart a mandate; setting up
+      // again makes a new one (the server cancels the old one first).
+      return {
+        ...shown('Set up autopay'),
+        op: 'create',
+        note: "Autopay is on hold, so renewals won't be debited. Set it up again or recharge manually.",
+        warn: true,
+      };
     case 'PENDING':
       return {
         ...shown('Autopay retrying', 'A renewal debit failed and Razorpay is retrying it.'),
@@ -289,7 +277,6 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
   const nowMs = now.getTime();
   const expires = new Date(sub.expiresAt);
   const lockIn = new Date(sub.lockInUntil);
-  const pausedAt = sub.pausedAt ? new Date(sub.pausedAt) : null;
   const cycleStart = currentCycleStart(sub);
   const months = planMonths(sub);
   const autopayOn = sub.autopayStatus === 'ACTIVE';
@@ -301,7 +288,7 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
     active: { label: 'Active', tone: 'success' as const },
     expiring: { label: 'Ends soon', tone: 'warning' as const },
     expired: { label: 'Expired', tone: 'danger' as const },
-    paused: { label: 'Paused', tone: 'neutral' as const },
+    inactive: { label: 'Inactive', tone: 'neutral' as const },
     closed: { label: sub.cancelledAt ? 'Cancelled' : 'Closed', tone: 'neutral' as const },
   }[kind];
 
@@ -309,8 +296,8 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
   const remaining = remainingMs(sub, kind, now);
   const cycleMs = Math.max(1, expires.getTime() - cycleStart.getTime());
   const progress = Math.max(0, Math.min(1, remaining / cycleMs));
-  // Paused: a duration kept for later. Otherwise: calendar days to the end date.
-  const days = kind === 'paused' ? Math.round(remaining / DAY_MS) : calendarDaysUntil(expires, now);
+  // Calendar days to the end date.
+  const days = calendarDaysUntil(expires, now);
   const hours = Math.max(1, Math.ceil(remaining / HOUR_MS));
   const endedOn = kind === 'closed' && sub.cancelledAt ? new Date(sub.cancelledAt) : expires;
 
@@ -319,19 +306,20 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
   if (kind === 'expired' || kind === 'closed') {
     ring = { progress: 0, label: '0', caption: kind === 'closed' ? 'ENDED' : 'DAYS LEFT' };
     daysLeftText = `Ended ${onDay(endedOn, now)}`;
+  } else if (kind === 'inactive') {
+    ring = { progress: 0, label: 'Off', caption: 'INACTIVE' };
+    daysLeftText = 'Water is off';
   } else if (days >= 1) {
     ring = { progress, label: String(days), caption: days === 1 ? 'DAY LEFT' : 'DAYS LEFT' };
-    daysLeftText = kind === 'paused' ? `${plural(days, 'day')} kept while paused` : `${plural(days, 'day')} left`;
+    daysLeftText = `${plural(days, 'day')} left`;
   } else {
     ring = { progress, label: String(hours), caption: hours === 1 ? 'HOUR LEFT' : 'HOURS LEFT' };
-    daysLeftText = kind === 'paused'
-      ? `${plural(hours, 'hour')} kept while paused`
-      : sameLocalDay(expires, now) ? 'Ends today' : `${plural(hours, 'hour')} left`;
+    daysLeftText = sameLocalDay(expires, now) ? 'Ends today' : `${plural(hours, 'hour')} left`;
   }
 
   const cycleText = kind === 'closed'
     ? null
-    : kind !== 'paused' && kind !== 'expired' && nowMs < cycleStart.getTime()
+    : kind !== 'inactive' && kind !== 'expired' && nowMs < cycleStart.getTime()
       ? 'Next term already paid'
       // The plan's own length, not a day count: a month is a month.
       : planTermLabel(months);
@@ -365,10 +353,8 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
     case 'expired':
       headline = `Water stopped ${onDay(expires, now)}. Recharge to restore it.`;
       break;
-    case 'paused':
-      headline = pausedAt
-        ? `Paused ${onDay(pausedAt, now)}. Water is off; the days left are added back when you resume.`
-        : 'Paused. Water is off; the days left are added back when you resume.';
+    case 'inactive':
+      headline = 'This plan is inactive, so the water is off. Recharge to restore it, or contact support.';
       break;
     case 'closed': {
       const ended = sub.cancelledAt ? `Cancelled ${onDay(endedOn, now)}.` : `Ended ${onDay(endedOn, now)}.`;
@@ -386,8 +372,8 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
   if (kind === 'closed') {
     rows.push({ key: 'end', icon: 'end', label: 'Ended on', value: formatDate(endedOn) });
     if (refund) rows.push({ key: 'refund', icon: 'refund', label: 'Refund', value: refund.text });
-  } else if (kind === 'paused') {
-    if (pausedAt) rows.push({ key: 'paused', icon: 'pause', label: 'Paused on', value: formatDate(pausedAt) });
+  } else if (kind === 'inactive') {
+    // No end date to show: the water is off whatever the plan has left.
   } else if (kind === 'expired') {
     rows.push({ key: 'end', icon: 'end', label: 'Ended on', value: formatDate(expires) });
   } else {
@@ -443,22 +429,15 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
 
   const recharge: PlanAction = kind === 'closed'
     ? hidden
-    : kind === 'paused'
-      ? shown('Recharge', 'Resume the plan before recharging it.')
-      : shown(kind === 'expired' ? 'Restore water' : kind === 'expiring' ? 'Recharge now' : 'Recharge');
+    : shown(kind === 'expired' ? 'Restore water' : kind === 'expiring' ? 'Recharge now' : 'Recharge');
 
   const actions: PlanActions = {
-    primary: kind === 'paused'
-      ? 'resume'
-      : kind === 'closed'
-        ? null
-        : canSchedule ? 'installSlot' : 'recharge',
+    primary: kind === 'closed' ? null : canSchedule ? 'installSlot' : 'recharge',
     recharge,
-    resume: kind === 'paused' ? shown('Resume') : hidden,
-    pause: running ? shown('Pause') : hidden,
     installSlot: canSchedule
       ? shown(nextVisit?.type === 'INSTALL' ? 'Change slot' : 'Pick a slot')
       : hidden,
+    support: kind === 'inactive' ? shown('Contact support') : hidden,
     cancel,
     autopay: autopayAction(sub, kind, opts),
     smartHealth: running && sub.device?.serial ? shown('Smart health') : hidden,
@@ -478,7 +457,6 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
     refund,
     actions,
     rechargeEndsAt: rechargeEndDate(sub, now),
-    resumeEndsAt: resumeEndDate(sub, now),
   };
 }
 

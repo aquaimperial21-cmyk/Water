@@ -145,7 +145,7 @@ export function HomeScreen() {
   );
   React.useEffect(() => { void refresh(); }, [refresh]);
 
-  // Same pick as My Plan: running > paused > expired > closed, newest first.
+  // Same pick as My Plan: running > inactive > expired > closed, newest first.
   const featured = React.useMemo(() => (subs ? pickDefaultSubscription(subs, now) : null), [subs, now]);
   const openPlan = featured && featured.status !== 'CLOSED' ? featured : null;
   // Only closed plans left: no plan, but say when the last one ended.
@@ -531,8 +531,8 @@ function SubscriptionHero({
   const productName = sub.product?.name ?? 'Smart RO Plan';
   // Only a paired purifier has a serial; before installation there is none.
   const serial = sub.device?.serial ?? null;
-  // "Renews on" (autopay on) · "Ends on" · "Ended on" · "Paused on".
-  const dateRow = view.rows.find((r) => r.key === 'renew' || r.key === 'end' || r.key === 'paused');
+  // "Renews on" (autopay on) · "Ends on" · "Ended on".
+  const dateRow = view.rows.find((r) => r.key === 'renew' || r.key === 'end');
   const visitRow = view.rows.find((r) => r.key === 'visit');
   // undefined = the server didn't say; null = nothing booked.
   const visitKnown = sub.nextVisit !== undefined;

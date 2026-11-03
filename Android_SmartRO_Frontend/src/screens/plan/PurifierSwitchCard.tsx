@@ -4,6 +4,7 @@
 // SmartRO server is down, as long as the access info was cached once.
 // The purifier decides: OFF always works, ON only while the plan is paid —
 // a refusal is shown as-is with a way to recharge, never as success.
+// Opening the card also asks the purifier to check SmartRO now (refreshPurifier).
 
 import React from 'react';
 import { ActivityIndicator, AppState, Keyboard, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
@@ -20,6 +21,7 @@ import {
   normalizeIPv4,
   purifierIp,
   refreshAccess,
+  refreshPurifier,
   setManualIp,
   switchWater,
   type LocalAccessCache,
@@ -72,8 +74,12 @@ export function PurifierSwitchCard({ refreshSignal = 0, style }: { refreshSignal
     const cached = await getCachedAccess();
     if (cached) setState((s) => (s.phase === 'ready' ? s : { phase: 'ready', access: cached }));
     const r = await refreshAccess();
-    if (r.access) setState({ phase: 'ready', access: r.access });
-    else if (r.source === 'backend') setState({ phase: 'none' });
+    if (r.access) {
+      setState({ phase: 'ready', access: r.access });
+      // The purifier may check SmartRO only once a day: opening this asks it to check now,
+      // so the status polled below shows the latest plan. At most once a minute.
+      void refreshPurifier({ access: r.access, throttle: true });
+    } else if (r.source === 'backend') setState({ phase: 'none' });
     else setState(cached ? { phase: 'ready', access: cached } : { phase: 'unavailable' });
   }, []);
 

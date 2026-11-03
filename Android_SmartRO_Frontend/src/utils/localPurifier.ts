@@ -12,6 +12,10 @@
  *
  * The access info (serial, IP, key) is cached so the switch keeps working
  * while the SmartRO server is unreachable.
+ *
+ * refreshPurifier() asks the purifier to check SmartRO now (firmware 1.1.2+),
+ * so a recharge or cancellation reaches it without waiting for its next
+ * scheduled check, which may be a day away while the plan is paid.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,6 +24,12 @@ import { DeviceHealthApi, type LocalAccess } from '../api/endpoints';
 
 const STORAGE_KEY = 'smartro.localPurifier';
 const TIMEOUT_MS = 4000;
+/** A refresh is a nudge: give up quickly rather than hold a socket open. */
+const REFRESH_TIMEOUT_MS = 3000;
+/** The purifier answers 429 to a second refresh within 10 s; wait just past that to ask again. */
+const REFRESH_RETRY_AFTER_MS = 11_000;
+/** Opening the water switch asks for a refresh at most this often. */
+const OPEN_REFRESH_EVERY_MS = 60_000;
 
 export const PLAN_INACTIVE_MESSAGE = 'Your plan is not active. Recharge to turn the water on.';
 const UNREACHABLE_MESSAGE = 'Make sure your phone is on the same Wi-Fi as the purifier.';
@@ -109,13 +119,18 @@ export function signValve(localKey: string, on: boolean, nonce: string): string 
   return sha256.hmac(localKey, `valve:${on ? '1' : '0'}:${nonce}`);
 }
 
+/** POST /api/refresh signature (firmware 1.1.2+). Exported for tests. */
+export function signRefresh(localKey: string, nonce: string): string {
+  return sha256.hmac(localKey, `refresh:${nonce}`);
+}
+
 type RawResponse =
   | { reached: true; status: number; body: unknown }
   | { reached: false };
 
-async function request(ip: string, path: string, init?: RequestInit): Promise<RawResponse> {
+async function request(ip: string, path: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<RawResponse> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`http://${ip}${path}`, {
       ...init,
@@ -219,8 +234,8 @@ export async function getStatus(ip: string, expectedSerial?: string | null): Pro
   return { ok: true, data: status };
 }
 
-async function getNonce(ip: string): Promise<{ ok: true; nonce: string } | Failure> {
-  const res = await request(ip, '/api/nonce');
+async function getNonce(ip: string, timeoutMs = TIMEOUT_MS): Promise<{ ok: true; nonce: string } | Failure> {
+  const res = await request(ip, '/api/nonce', undefined, timeoutMs);
   if (!res.reached || res.status < 200 || res.status >= 300) return failure(res);
   const nonce = isRecord(res.body) ? res.body.nonce : null;
   if (typeof nonce !== 'string' || !nonce) return { ok: false, code: 'unreachable', message: NOT_A_PURIFIER_MESSAGE };
@@ -385,4 +400,88 @@ export async function switchWater(
     if (!recheck.ok) return { result: recheck, access: next };
   }
   return { result: await setValve(nextIp, next.localKey, on), access: next };
+}
+
+/* ------------------------------------------------- "check SmartRO now" */
+
+export type PurifierRefreshResult =
+  /** The purifier queued a check with SmartRO. */
+  | 'sent'
+  /** No answer: phone not on the purifier's Wi-Fi, purifier off, or a stale address. */
+  | 'unreachable'
+  /** Firmware 1.1.1 or older: no /api/refresh, so it updates at its next scheduled check. */
+  | 'unsupported'
+  /** Nothing to ask: no purifier paired, no address or key known, or already asked within the last minute. */
+  | 'skipped'
+  | 'error';
+
+/** 'busy' = 429, another refresh went out under 10 s ago. */
+type RefreshAttempt = PurifierRefreshResult | 'busy' | 'bad_nonce';
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function postRefresh(ip: string, localKey: string): Promise<RefreshAttempt> {
+  const n = await getNonce(ip, REFRESH_TIMEOUT_MS);
+  if (!n.ok) return n.code === 'unreachable' ? 'unreachable' : 'error';
+  const res = await request(
+    ip,
+    '/api/refresh',
+    {
+      method: 'POST',
+      // text/plain for the same reason as /api/valve: no CORS preflight on web.
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ nonce: n.nonce, sig: signRefresh(localKey, n.nonce) }),
+    },
+    REFRESH_TIMEOUT_MS,
+  );
+  if (!res.reached) return 'unreachable';
+  if (res.status >= 200 && res.status < 300) return isRecord(res.body) && res.body.ok === true ? 'sent' : 'error';
+  if (res.status === 404 || res.status === 405) return 'unsupported';
+  if (res.status === 429) return 'busy';
+  return isRecord(res.body) && res.body.error === 'bad_nonce' ? 'bad_nonce' : 'error';
+}
+
+async function sendRefresh(access: LocalAccessCache): Promise<RefreshAttempt> {
+  const ip = purifierIp(access);
+  if (!ip || !access.localKey) return 'skipped';
+  const first = await postRefresh(ip, access.localKey);
+  return first === 'bad_nonce' ? postRefresh(ip, access.localKey) : first;
+}
+
+let lastRefreshAt = 0;
+
+/**
+ * Ask the purifier on this Wi-Fi to check SmartRO now (POST /api/refresh),
+ * so a recharge or cancellation reaches it in seconds instead of at its next
+ * scheduled check.
+ *
+ * Fire-and-forget: call it as `void refreshPurifier()`. It never throws and
+ * shows nothing; the result is only for logging. Without `access` it fetches
+ * the latest from SmartRO (falling back to the phone's copy) like the switch.
+ * `throttle` (for opening a screen) skips it if any refresh started within
+ * the last minute. Otherwise a 429 (another refresh under 10 s ago, possibly
+ * from before this change) is retried once just after the purifier's limit.
+ */
+export async function refreshPurifier(
+  opts: { access?: LocalAccessCache; throttle?: boolean } = {},
+): Promise<PurifierRefreshResult> {
+  let result: PurifierRefreshResult;
+  try {
+    if (opts.throttle && Date.now() - lastRefreshAt < OPEN_REFRESH_EVERY_MS) return 'skipped';
+    lastRefreshAt = Date.now();
+    const access = opts.access ?? (await refreshAccess()).access;
+    let r: RefreshAttempt = access ? await sendRefresh(access) : 'skipped';
+    if (r === 'busy' && !opts.throttle) {
+      await sleep(REFRESH_RETRY_AFTER_MS);
+      // Re-read: the customer may have signed out (cache cleared) or changed the address meanwhile.
+      const latest = await getCachedAccess();
+      r = latest ? await sendRefresh(latest) : 'skipped';
+    }
+    // Still busy: a refresh went out seconds ago, and the purifier is about to check anyway.
+    result = r === 'busy' ? 'sent' : r === 'bad_nonce' ? 'error' : r;
+  } catch {
+    result = 'error';
+  }
+  if (__DEV__) console.log(`[purifier] refresh: ${result}`);
+  return result;
 }

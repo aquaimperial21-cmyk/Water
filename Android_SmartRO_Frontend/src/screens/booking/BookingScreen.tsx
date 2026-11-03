@@ -33,6 +33,7 @@ import { Stepper } from '@ui/index';
 import { paiseToInr } from '../../utils/format';
 import { cycleLabel, planTermLabel, termLength, termPricePaise } from '../../utils/plans';
 import { PaymentCancelledError, PaymentFailedError, payForBooking } from '../../utils/payments';
+import { refreshPurifier } from '../../utils/localPurifier';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
@@ -110,6 +111,8 @@ export function BookingScreen({ route, navigation }: Props) {
         booking.id,
         `${product?.name ?? 'Purifier'} — ${price?.plan?.name ?? 'rental'}`
       );
+      // A purifier already installed for this account picks up the new plan now (no-op if none yet).
+      if (outcome === 'paid') void refreshPurifier();
       setPhase('done');
       if (outcome === 'pending') {
         void showDialog({

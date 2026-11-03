@@ -22,9 +22,8 @@ import {
   ChevronUp,
   CreditCard,
   Info,
+  LifeBuoy,
   Lock,
-  Pause,
-  Play,
   Power,
   RefreshCw,
   ShoppingBag,
@@ -48,7 +47,7 @@ import {
 } from '../../api/endpoints';
 import { tokens } from '@theme/tokens';
 import { Aurora, Button, Chip, EmptyState, Pill, ProgressRing, Skeleton } from '@ui/index';
-import { formatDate, paiseToInr } from '../../utils/format';
+import { formatAgo, formatDate, paiseToInr } from '../../utils/format';
 import { apiErrorMessage } from '../../api/client';
 import { PaymentCancelledError, PaymentFailedError, payRecharge } from '../../utils/payments';
 import { cycleLabel, termLength, termPricePaise } from '../../utils/plans';
@@ -58,12 +57,11 @@ import {
   planMonths,
   planView,
   rechargeEndDate,
-  resumeEndDate,
   type PlanRowIcon,
   type PlanView,
 } from '../../utils/planState';
 import type { RootStackParamList } from '../../navigation';
-import { getCachedAccess } from '../../utils/localPurifier';
+import { getCachedAccess, refreshPurifier } from '../../utils/localPurifier';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -105,7 +103,7 @@ const priceKey = (productId: string, cityId: string) => `${productId}:${cityId}`
 
 const AUTOPAY_UNAVAILABLE = 'Autopay is not available yet. Recharge manually before your plan ends.';
 
-type BusyKey = 'recharge' | 'pause' | 'resume' | 'autopay' | 'cancel' | 'waterTest';
+type BusyKey = 'recharge' | 'autopay' | 'cancel' | 'waterTest';
 
 export function MyPlanScreen() {
   const navigation = useNavigation<Nav>();
@@ -254,6 +252,8 @@ export function MyPlanScreen() {
         start();
         try {
           const outcome = await payRecharge(sub.id, `${sub.plan?.name ?? 'Plan'} recharge`);
+          // Settled on the server: ask the purifier on this Wi-Fi to pick it up now.
+          if (outcome === 'paid') void refreshPurifier();
           await load();
           if (outcome === 'pending') {
             void showDialog({
@@ -280,58 +280,6 @@ export function MyPlanScreen() {
     [act, listedMonthly, load]
   );
 
-  const onPause = React.useCallback(
-    (sub: Subscription, v: PlanView) =>
-      act('pause', async (start) => {
-        const ok = await confirmAction({
-          title: 'Pause plan',
-          message:
-            `Pausing turns your water off right away. The time left on your plan (${v.daysLeftText.toLowerCase()}) is added back when you resume.` +
-            (sub.autopayStatus === 'ACTIVE' ? '\n\nAutopay pauses with it.' : ''),
-          confirmLabel: 'Pause',
-        });
-        if (!ok) return;
-        start();
-        try {
-          await Subscriptions.pause(sub.id);
-          toast.success('Plan paused', 'Water is off. Resume any time from here.');
-        } catch (e) {
-          if (apiError(e).code === 'AUTOPAY_PAUSE_FAILED') {
-            toast.error('Plan not paused', "We couldn't pause your autopay, so the plan was left running. Try again in a few minutes.");
-          } else {
-            toast.error('Pause failed', apiErrorMessage(e));
-          }
-        }
-        await load();
-      }),
-    [act, load]
-  );
-
-  const onResume = React.useCallback(
-    (sub: Subscription) =>
-      act('resume', async (start) => {
-        const newEnd = resumeEndDate(sub, new Date());
-        const ok = await confirmAction({
-          title: 'Resume plan',
-          message:
-            'Water comes back on right away.' +
-            (newEnd ? ` With the paused days added back, your plan ends on ${formatDate(newEnd)}.` : '') +
-            (sub.autopayStatus === 'PAUSED' ? '\n\nAutopay resumes with it.' : ''),
-          confirmLabel: 'Resume',
-        });
-        if (!ok) return;
-        start();
-        try {
-          await Subscriptions.resume(sub.id);
-          toast.success('Plan resumed', 'Water is back on.');
-        } catch (e) {
-          toast.error('Resume failed', apiErrorMessage(e));
-        }
-        await load();
-      }),
-    [act, load]
-  );
-
   const onCancel = React.useCallback(
     (sub: Subscription, v: PlanView) =>
       act('cancel', async (start) => {
@@ -355,6 +303,8 @@ export function MyPlanScreen() {
         start();
         try {
           const r = await Subscriptions.cancel(sub.id, c.mode === 'trial' ? 'TRIAL_CANCEL' : 'POST_LOCKIN_CANCEL');
+          // Closed on the server: ask the purifier on this Wi-Fi to switch off now.
+          void refreshPurifier();
           toast.success(
             'Plan cancelled',
             r.refundPaise > 0
@@ -399,25 +349,7 @@ export function MyPlanScreen() {
           return;
         }
 
-        if (ap.op === 'resume') {
-          const ok = await confirmAction({
-            title: 'Resume autopay',
-            message: 'Turn automatic renewal debits back on?',
-            confirmLabel: 'Resume autopay',
-          });
-          if (!ok) return;
-          start();
-          try {
-            await Payments.autopay.resume(sub.id);
-            toast.success('Autopay on', 'Renewals are automatic again.');
-          } catch (e) {
-            toast.error('Could not resume autopay', apiErrorMessage(e));
-          }
-          await load();
-          return;
-        }
-
-        // create — also finishes a CREATED mandate (the server replaces it).
+        // create — also replaces a CREATED or on-hold mandate (the server cancels the old one).
         const months = planMonths(sub);
         const monthly = listedMonthly(sub);
         const amount = monthly === null ? null : termPricePaise(monthly, months);
@@ -574,14 +506,13 @@ export function MyPlanScreen() {
               monthlyPaise={listedMonthly(selected) ?? bookingMonthly(selected)}
               busy={busy}
               onRecharge={() => void onRecharge(selected)}
-              onPause={() => void onPause(selected, view)}
-              onResume={() => void onResume(selected)}
               onAutopay={() => void onAutopay(selected, view)}
               onCancel={() => void onCancel(selected, view)}
               onInstallSlot={() =>
                 selected.booking && navigation.navigate('InstallSlot', { bookingId: selected.booking.id })
               }
               onSmartHealth={() => navigation.navigate('DeviceHealth')}
+              onSupport={() => navigation.navigate('NewTicket', { subscriptionId: selected.id })}
               onBrowse={onBrowse}
             />
 
@@ -759,7 +690,6 @@ const ROW_ICON: Record<PlanRowIcon, (color: string) => React.ReactNode> = {
   end: (c) => <Calendar size={14} color={c} />,
   lock: (c) => <Lock size={14} color={c} />,
   visit: (c) => <Wrench size={14} color={c} />,
-  pause: (c) => <Pause size={14} color={c} />,
   refund: (c) => <Undo2 size={14} color={c} />,
 };
 
@@ -778,12 +708,11 @@ function StatusCard({
   monthlyPaise,
   busy,
   onRecharge,
-  onPause,
-  onResume,
   onAutopay,
   onCancel,
   onInstallSlot,
   onSmartHealth,
+  onSupport,
   onBrowse,
 }: {
   sub: Subscription;
@@ -791,12 +720,11 @@ function StatusCard({
   monthlyPaise: number | null;
   busy: BusyKey | null;
   onRecharge: () => void;
-  onPause: () => void;
-  onResume: () => void;
   onAutopay: () => void;
   onCancel: () => void;
   onInstallSlot: () => void;
   onSmartHealth: () => void;
+  onSupport: () => void;
   onBrowse: () => void;
 }) {
   const { actions, kind } = view;
@@ -804,14 +732,13 @@ function StatusCard({
   const tagline = sub.product?.technology ?? 'Premium subscription';
   const paired = Boolean(sub.device?.serial);
   const serial = sub.device?.serial ?? `SUB-${sub.id.slice(-6).toUpperCase()}`;
-  const waterOff = kind === 'paused' || kind === 'expired';
-  const lastSeenMs = sub.device?.lastHeartbeatAt
-    ? new Date(sub.device.lastHeartbeatAt).getTime()
-    : 0;
-  const isOnline = lastSeenMs > 0 && Date.now() - lastSeenMs < 90 * 60 * 1000;
-  const lastSeen = lastSeenMs
-    ? `${Math.max(1, Math.round((Date.now() - lastSeenMs) / 60000))}m ago`
-    : 'never';
+  const waterOff = kind === 'inactive' || kind === 'expired';
+  // The server decides "online" (seen within 25 h: chips check in about once a day).
+  const isOnline = sub.device?.isOnline === true;
+  const seenAt = sub.device?.lastSeenAt ?? sub.device?.lastHeartbeatAt ?? null;
+  const parsedSeen = seenAt ? new Date(seenAt).getTime() : NaN;
+  const lastSeenMs = Number.isFinite(parsedSeen) ? parsedSeen : 0;
+  const lastSeen = lastSeenMs ? formatAgo(lastSeenMs) : 'never';
   const installed = sub.booking?.status === 'INSTALLED';
 
   /* Buttons, from the view model */
@@ -826,8 +753,6 @@ function StatusCard({
   let primary: ActionButtonSpec | null = null;
   if (kind === 'closed') {
     primary = { key: 'browse', busyKey: null, label: 'Browse purifiers', icon: (c) => <ShoppingBag size={14} color={c} />, enabled: true, onPress: onBrowse };
-  } else if (actions.primary === 'resume') {
-    primary = { key: 'resume', busyKey: 'resume', label: actions.resume.label, icon: (c) => <Play size={14} color={c} />, enabled: actions.resume.enabled, onPress: onResume };
   } else if (actions.primary === 'installSlot') {
     primary = { key: 'installSlot', busyKey: null, label: actions.installSlot.label, icon: (c) => <CalendarClock size={14} color={c} />, enabled: actions.installSlot.enabled, onPress: onInstallSlot };
   } else if (actions.primary === 'recharge') {
@@ -836,8 +761,8 @@ function StatusCard({
 
   const secondary: ActionButtonSpec[] = [];
   if (actions.recharge.visible && actions.primary !== 'recharge') secondary.push(recharge);
-  if (actions.pause.visible) {
-    secondary.push({ key: 'pause', busyKey: 'pause', label: actions.pause.label, icon: (c) => <Pause size={14} color={c} />, enabled: actions.pause.enabled, onPress: onPause });
+  if (actions.support.visible) {
+    secondary.push({ key: 'support', busyKey: null, label: actions.support.label, icon: (c) => <LifeBuoy size={14} color={c} />, enabled: actions.support.enabled, onPress: onSupport });
   }
   if (actions.autopay.visible) {
     secondary.push({ key: 'autopay', busyKey: 'autopay', label: actions.autopay.label, icon: (c) => <CreditCard size={14} color={c} />, enabled: actions.autopay.enabled, onPress: onAutopay });
@@ -919,7 +844,7 @@ function StatusCard({
               </Text>
               <Text style={styles.deviceSub}>
                 {paired
-                  ? `Last heartbeat · ${lastSeen}`
+                  ? `Last seen · ${lastSeen}`
                   : installed
                     ? 'Raise a service request and we will pair it.'
                     : 'We will pair your purifier at installation.'}

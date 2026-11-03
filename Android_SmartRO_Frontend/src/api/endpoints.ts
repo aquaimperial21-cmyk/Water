@@ -28,19 +28,32 @@ export interface Booking {
   jobs?: { id: string; type: string; scheduledFor: string; status: string; technician?: { id: string; user?: { fullName?: string | null; phone?: string | null } } }[];
 }
 /**
- * The server sends only these. "Expired" is not a status: it is ACTIVE with
- * expiresAt <= now (see utils/planState.ts).
+ * The server sends ACTIVE or CLOSED. "Expired" is not a status: it is ACTIVE
+ * with expiresAt <= now (see utils/planState.ts). PAUSED is legacy (plans can
+ * no longer be paused); the app shows it as an inactive plan, water off.
  */
-export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CLOSED';
+export type SubscriptionStatus = 'ACTIVE' | 'CLOSED' | 'PAUSED';
 /**
- * CREATED: authorisation not finished · PENDING: a debit failed, Razorpay is
- * retrying · HALTED: Razorpay gave up · CANCEL_FAILED: we couldn't stop the
- * mandate (support must) · COMPLETED: the mandate ran out.
+ * CREATED: authorisation not finished · PAUSED: the mandate was put on hold at
+ * Razorpay · PENDING: a debit failed, Razorpay is retrying · HALTED: Razorpay
+ * gave up · CANCEL_FAILED: we couldn't stop the mandate (support must) ·
+ * COMPLETED: the mandate ran out.
  */
 export type AutopayStatus =
   | 'CREATED' | 'ACTIVE' | 'PAUSED' | 'PENDING' | 'HALTED' | 'CANCELLED' | 'CANCEL_FAILED' | 'COMPLETED';
 export interface SubscriptionRefund { amountPaise: number; status: 'INITIATED' | 'SUCCESS'; createdAt: string; }
 export interface SubscriptionVisit { scheduledFor: string; type: string; } // type: INSTALL | SERVICE | FILTER | PICKUP
+/** The purifier paired with a subscription, as GET /subscriptions/me sends it. */
+export interface SubscriptionDevice {
+  serial: string;
+  /** Last heartbeat only; prefer lastSeenAt, which counts every contact. */
+  lastHeartbeatAt?: string | null;
+  /** Latest contact of any kind (heartbeat or poll); null if never seen. */
+  lastSeenAt?: string | null;
+  /** Server's call: seen within the last 25 h (chips check in about once a day). */
+  isOnline?: boolean;
+  firmwareVersion?: string | null;
+}
 export interface Subscription {
   id: string; userId: string; productId: string; planId: string;
   status: SubscriptionStatus;
@@ -49,14 +62,12 @@ export interface Subscription {
   lockInUntil: string;
   /** startedAt + 7 days; a cancel before it refunds deposit + first payment. */
   trialEndsAt?: string | null;
-  /** Set while PAUSED; on resume the paused time is added back to expiresAt. */
-  pausedAt?: string | null;
   cancelledAt?: string | null;
   autopayId?: string | null;
   autopayStatus?: AutopayStatus | null;
   product?: Product; plan?: Plan;
   /** Paired at installation; null before it. */
-  device?: { serial: string; lastHeartbeatAt?: string | null; firmwareVersion?: string | null } | null;
+  device?: SubscriptionDevice | null;
   booking?: Booking;
   refund?: SubscriptionRefund | null;
   nextVisit?: SubscriptionVisit | null;
@@ -203,10 +214,6 @@ export const Subscriptions = {
   mine: () => api.get('/subscriptions/me').then((r) => r.data.data as Subscription[]),
   recharge: (id: string, planId?: string) =>
     api.post(`/subscriptions/${id}/recharge`, { planId }).then((r) => r.data.data as Subscription),
-  pause: (id: string, reason?: string) =>
-    api.post(`/subscriptions/${id}/pause`, { reason }).then((r) => r.data.data as Subscription),
-  resume: (id: string) =>
-    api.post(`/subscriptions/${id}/resume`).then((r) => r.data.data as Subscription),
   cancel: (id: string, reason?: string) =>
     api.post(`/subscriptions/${id}/cancel`, { reason })
       .then((r) => r.data.data as { subscription: Subscription; refundPaise: number }),
@@ -229,16 +236,13 @@ export const Payments = {
   sync: (orderId: string) =>
     api.post(`/payments/orders/${orderId}/sync`).then((r) => r.data.data as { status: 'SUCCESS' | 'INITIATED' | 'FAILED'; settled: boolean }),
   autopay: {
-    // ACTIVE → { alreadyActive: true }; CREATED → the stale mandate is replaced.
-    // Refused for PAUSED/CLOSED plans, and 409 RAZORPAY_DISABLED on the stub gateway.
+    // ACTIVE → { alreadyActive: true }; any other live mandate (CREATED, on
+    // hold, retrying) is replaced. Refused for closed or inactive plans, and
+    // 409 RAZORPAY_DISABLED on the stub gateway.
     create: (subscriptionId: string) =>
       api.post(`/payments/subscriptions/${subscriptionId}/autopay`).then((r) => r.data.data as AutopayCreateResult),
     cancel: (subscriptionId: string, atCycleEnd = false) =>
       api.post(`/payments/subscriptions/${subscriptionId}/autopay/cancel`, { atCycleEnd }).then((r) => r.data.data),
-    pause: (subscriptionId: string) =>
-      api.post(`/payments/subscriptions/${subscriptionId}/autopay/pause`).then((r) => r.data.data),
-    resume: (subscriptionId: string) =>
-      api.post(`/payments/subscriptions/${subscriptionId}/autopay/resume`).then((r) => r.data.data),
   },
 };
 
