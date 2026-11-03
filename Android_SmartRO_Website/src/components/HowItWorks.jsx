@@ -117,7 +117,7 @@ const steps = [
   {
     num: '06',
     title: 'Connect & Enjoy',
-    desc: 'Track your plan, recharge or pause, and raise service requests in the app. Cancel within 7 days for a full refund.',
+    desc: 'Track and recharge your plan, and raise service requests in the app. Cancel within 7 days for a full refund.',
     color: '#A855F7',
     glow: 'rgba(168,85,247,0.45)',
     icon: (

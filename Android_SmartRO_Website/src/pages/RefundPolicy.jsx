@@ -35,12 +35,8 @@ export default function RefundPolicy() {
 
       <h3>2. After the trial, until lock-in ends: cancellation not available</h3>
       <p>
-        Between the end of the trial and the end of your first plan term, the rental cannot be cancelled. If you
-        have a special situation, contact us to ask for an exception.
-      </p>
-      <p>
-        You can pause your plan from the app instead. Water is off while the plan is paused, and the remaining days
-        are added back when you resume. Autopay is paused too.
+        Between the end of the trial and the end of your first plan term, the rental cannot be cancelled; your plan
+        runs until its end date. If you have a special situation, contact us to ask for an exception.
       </p>
 
       <h3>3. After lock-in ends: security deposit refunded</h3>

@@ -265,13 +265,12 @@ For **each** product, fill the block below. Duplicate the block as many times as
 
 ---
 
-## 8. Pause / Cancel / Refund Policy
+## 8. Cancel / Refund Policy
 
-*The customer app references a "pause" feature and a "cancel anytime after lock-in" policy. We need the real wording.*
+*The customer app references a "cancel anytime after lock-in" policy. We need the real wording.*
 
-**8.1 Can a customer pause their subscription?** — yes / no. If yes, after how long, and for how long max?
-*Currently: app says "Pause is available after lock-in. Talk to support to schedule a pause window." (no concrete rule).*
-> Your answer:
+**8.1 Can a customer pause their subscription?**
+> Decided (2026-11-04): no pause option. Plans run until their end date.
 
 **8.2 Cancellation window** — how many days' notice must a customer give before pickup?
 *Currently: not specified.*
@@ -482,8 +481,8 @@ These are decisions hidden in the current code that you may not have realised yo
 **Q4. Lock-in length** — see §5.3. 180 days (6 months) is what's wired. Most rental businesses do 90 days (3 months) for new customers to lower the commitment barrier. Keep 180 or shorten?
 > Your answer:
 
-**Q5. Pause feature** — see §8.1. The UI references it but no concrete rule exists. Should pause exist at launch, or remove the mention from the app for now?
-> Your answer:
+**Q5. Pause feature** — see §8.1.
+> Decided (2026-11-04): no pause option. Plans run until their end date, and pause is removed from the app, admin console and website.
 
 ---
 

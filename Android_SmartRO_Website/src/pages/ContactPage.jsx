@@ -44,7 +44,7 @@ export default function ContactPage() {
 
       <h2>Existing customers</h2>
       <p>
-        If you already rent a purifier from us, you can ask for service, recharge, pause or cancel your plan from the
+        If you already rent a purifier from us, you can ask for service, recharge or cancel your plan from the
         Aqua Imperial app. For a payment or refund question, please give your registered mobile number and, if you
         have it, the Razorpay payment ID. See also our <Link to="/refund-policy">Cancellation &amp; Refund
         Policy</Link> and <Link to="/warranty">Service &amp; Warranty</Link>.

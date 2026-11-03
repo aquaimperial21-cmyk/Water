@@ -126,7 +126,7 @@ const features = [
   },
   {
     title: 'IoT & App Control',
-    desc: 'Track your plan, filter health and water usage in the Aqua Imperial Android app. Recharge, pause or raise a service request from your phone.',
+    desc: 'Track your plan, filter health and water usage in the Aqua Imperial Android app. Recharge or raise a service request from your phone.',
     stat: 'Android',
     statLabel: 'app',
     accent: '#22D3EE',

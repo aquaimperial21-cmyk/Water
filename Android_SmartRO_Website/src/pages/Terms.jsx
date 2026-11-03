@@ -76,7 +76,10 @@ export default function Terms() {
           <strong>Reminders:</strong> we remind you 7, 3 and 1 day before your end date, by app notification, SMS
           or WhatsApp.
         </li>
-        <li><strong>End date:</strong> when your plan reaches its end date, water stops until you renew.</li>
+        <li>
+          <strong>End date:</strong> your plan runs without a break until its end date; it cannot be paused. When
+          it reaches its end date, water stops until you renew.
+        </li>
         <li>
           <strong>Autopay (optional):</strong> with UPI Autopay or an e-mandate, your plan renews for another term
           on each end date. You can cancel Autopay at any time from the app; this stops automatic renewals but does
@@ -84,13 +87,7 @@ export default function Terms() {
         </li>
       </ul>
 
-      <h2>7. Pausing your plan</h2>
-      <p>
-        You can pause your plan from the app. Water is off while the plan is paused, and the remaining days are
-        added back when you resume. Autopay is paused too.
-      </p>
-
-      <h2>8. Lock-in, trial and cancellation</h2>
+      <h2>7. Lock-in, trial and cancellation</h2>
       <ul>
         <li>The lock-in period is your first plan term.</li>
         <li>
@@ -112,7 +109,7 @@ export default function Terms() {
         Policy</Link>.
       </p>
 
-      <h2>9. The purifier</h2>
+      <h2>8. The purifier</h2>
       <ul>
         <li>The purifier remains the property of Mahesh Enterprises at all times.</li>
         <li>
@@ -126,22 +123,22 @@ export default function Terms() {
         <li>We collect the purifier when your rental is cancelled.</li>
       </ul>
 
-      <h2>10. Where we operate</h2>
+      <h2>9. Where we operate</h2>
       <p>The service is available only in the cities we serve. The app shows whether it is available at your address.</p>
 
-      <h2>11. Your rights under law</h2>
+      <h2>10. Your rights under law</h2>
       <p>Nothing in these terms takes away any rights you have under Indian consumer protection law.</p>
 
-      <h2>12. Changes to these terms</h2>
+      <h2>11. Changes to these terms</h2>
       <p>We may update these terms from time to time. The “Last updated” date at the top shows when they last changed.</p>
 
-      <h2>13. Governing law and disputes</h2>
+      <h2>12. Governing law and disputes</h2>
       <p>
         These terms are governed by the laws of India. The courts at Ahmednagar, Maharashtra have jurisdiction over
         any dispute. Please contact us first so we can try to resolve the issue.
       </p>
 
-      <h2>14. Contact</h2>
+      <h2>13. Contact</h2>
       <p>
         Phone <PhoneLink /> · Email <EmailLink /> · <WhatsAppLink /> · More on our <Link to="/contact">Contact
         Us</Link> page.

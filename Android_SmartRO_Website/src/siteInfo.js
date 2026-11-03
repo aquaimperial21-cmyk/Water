@@ -24,4 +24,4 @@ export const BUSINESS = {
     'Gujar Galli, Near Swami Samarth Temple, Behind Deshpande Hospital, Shani Chowk, Ahmednagar, Maharashtra 414001, India',
 };
 
-export const POLICY_UPDATED = '3 November 2026';
+export const POLICY_UPDATED = '4 November 2026';
