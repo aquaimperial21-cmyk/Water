@@ -4,8 +4,8 @@ import { useInView } from 'react-intersection-observer';
 const steps = [
   {
     num: '01',
-    title: 'Choose Your Product',
-    desc: 'Browse RO, Copper, Alkaline or Mineral+ — pick what suits your family best.',
+    title: 'Choose Your Purifier',
+    desc: 'Browse RO, Copper, Alkaline or Mineral+ in the Aqua Imperial Android app — pick what suits your family.',
     color: '#22D3EE',
     glow: 'rgba(34,211,238,0.45)',
     icon: (
@@ -28,7 +28,7 @@ const steps = [
   {
     num: '02',
     title: 'Select a Plan',
-    desc: 'Flexible 28/90/180-day plans or long-term value plans — your choice.',
+    desc: 'Monthly, Quarterly, Half-yearly or Annual (1, 3, 6 or 12 months). Longer plans have a lower monthly rate.',
     color: '#06B6D4',
     glow: 'rgba(6,182,212,0.45)',
     icon: (
@@ -50,7 +50,7 @@ const steps = [
   {
     num: '03',
     title: 'Submit Details',
-    desc: 'Drop your name and address — our team verifies and confirms in minutes.',
+    desc: 'Sign in with your mobile number, then add your installation address and KYC details.',
     color: '#0EA5E9',
     glow: 'rgba(14,165,233,0.45)',
     icon: (
@@ -72,7 +72,7 @@ const steps = [
   {
     num: '04',
     title: 'Make Payment',
-    desc: 'Pay securely via UPI, cards or net banking — encrypted end-to-end.',
+    desc: 'Pay upfront through Razorpay: rent for the plan term plus a refundable security deposit, by UPI, card, net banking or wallet.',
     color: '#22C55E',
     glow: 'rgba(34,197,94,0.45)',
     icon: (
@@ -94,8 +94,8 @@ const steps = [
   },
   {
     num: '05',
-    title: 'Installation in 48hrs',
-    desc: 'Certified engineer installs at your home — fast, neat, completely free.',
+    title: 'Installation in 48 Hours',
+    desc: 'Pick a slot in the app. Our technician usually installs within 48 hours of payment, at no extra charge.',
     color: '#F59E0B',
     glow: 'rgba(245,158,11,0.45)',
     icon: (
@@ -117,7 +117,7 @@ const steps = [
   {
     num: '06',
     title: 'Connect & Enjoy',
-    desc: 'Pair with the Aqua Imperial app — track quality, recharge, and relax.',
+    desc: 'Track your plan, recharge or pause, and raise service requests in the app. Cancel within 7 days for a full refund.',
     color: '#A855F7',
     glow: 'rgba(168,85,247,0.45)',
     icon: (
@@ -295,7 +295,7 @@ export default function HowItWorks() {
               display: 'inline-flex', alignItems: 'center', gap: '10px',
             }}
           >
-            Start Your Free Trial
+            Book Now
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>

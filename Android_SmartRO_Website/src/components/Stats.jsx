@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { BUSINESS } from '../siteInfo';
 
 function AnimatedCounter({ target, suffix = '', duration = 2000 }) {
   const [count, setCount] = useState(0);
@@ -24,49 +25,8 @@ function AnimatedCounter({ target, suffix = '', duration = 2000 }) {
 
 const stats = [
   {
-    value: 10000, suffix: '+', label: 'Happy Families',
-    sub: 'across India',
-    accent: '#FCD34D',
-    icon: (
-      <svg viewBox="0 0 56 56" fill="none">
-        <defs>
-          <linearGradient id="s1g" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#FEF3C7"/>
-            <stop offset="100%" stopColor="#FCD34D"/>
-          </linearGradient>
-        </defs>
-        {/* heart with families */}
-        <path d="M28 50C28 50 6 38 6 22C6 14.27 12.27 8 20 8C23.61 8 26.93 9.43 29.42 11.83C31.85 9.43 35.18 8 38.78 8C46.51 8 52.78 14.27 52.78 22C52.78 29 46 36 39 41" fill="url(#s1g)" stroke="#0a2540" strokeWidth="1.6" strokeLinejoin="round"/>
-        <circle cx="20" cy="22" r="3" fill="#ffffff"/>
-        <circle cx="36" cy="22" r="3" fill="#ffffff"/>
-        <path d="M20 32 Q28 38 36 32" stroke="#ffffff" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
-    value: 99.9, suffix: '%', label: 'Purity Guarantee', decimal: true,
-    sub: 'every single drop',
-    accent: '#67E8F9',
-    icon: (
-      <svg viewBox="0 0 56 56" fill="none">
-        <defs>
-          <linearGradient id="s2g" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#67E8F9"/>
-            <stop offset="100%" stopColor="#0E7490"/>
-          </linearGradient>
-        </defs>
-        {/* shield with droplet inside */}
-        <path d="M28 6L8 14V28C8 39 16 48 28 52C40 48 48 39 48 28V14L28 6Z" fill="url(#s2g)" stroke="#0a2540" strokeWidth="1.4"/>
-        <path d="M28 18C28 18 22 26 22 30C22 33.31 24.69 36 28 36C31.31 36 34 33.31 34 30C34 26 28 18 28 18Z" fill="#ffffff"/>
-        <path d="M25 30C25 30 26 28 28 27.5" stroke="#0891B2" strokeWidth="1.4" strokeLinecap="round"/>
-        <circle cx="42" cy="42" r="6" fill="#22C55E" stroke="#0a2540" strokeWidth="1"/>
-        <path d="M39 42L41.5 44.5L46 39.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-  },
-  {
-    value: 5, suffix: '+', label: 'Cities Served',
-    sub: 'and growing fast',
+    text: '2011', label: 'In Business Since',
+    sub: 'Ahmednagar, Maharashtra',
     accent: '#A7F3D0',
     icon: (
       <svg viewBox="0 0 56 56" fill="none">
@@ -82,16 +42,30 @@ const stats = [
         <path d="M28 6C20.27 6 14 12.27 14 20C14 30 28 48 28 48C28 48 42 30 42 20C42 12.27 35.73 6 28 6Z" fill="url(#s3g)" stroke="#0a2540" strokeWidth="1.4"/>
         <circle cx="28" cy="20" r="5" fill="#ffffff"/>
         <circle cx="28" cy="20" r="2" fill="#16A34A"/>
-        {/* satellite dots */}
-        <circle cx="10" cy="14" r="2" fill="#86EFAC"/>
-        <circle cx="48" cy="10" r="2" fill="#86EFAC"/>
-        <circle cx="48" cy="44" r="2" fill="#86EFAC" opacity="0.7"/>
       </svg>
     ),
   },
   {
-    value: 24, suffix: '/7', label: 'Customer Support',
-    sub: 'real humans, fast replies',
+    text: 'MSME', label: 'Udyam-Registered',
+    sub: BUSINESS.udyam,
+    accent: '#67E8F9',
+    icon: (
+      <svg viewBox="0 0 56 56" fill="none">
+        <defs>
+          <linearGradient id="s2g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#67E8F9"/>
+            <stop offset="100%" stopColor="#0E7490"/>
+          </linearGradient>
+        </defs>
+        {/* shield with tick */}
+        <path d="M28 6L8 14V28C8 39 16 48 28 52C40 48 48 39 48 28V14L28 6Z" fill="url(#s2g)" stroke="#0a2540" strokeWidth="1.4"/>
+        <path d="M20 29L26 35L37 23" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
+    value: 48, suffix: ' hrs', label: 'Usual Installation',
+    sub: 'after your payment',
     accent: '#C4B5FD',
     icon: (
       <svg viewBox="0 0 56 56" fill="none">
@@ -111,6 +85,26 @@ const stats = [
         <circle cx="48" cy="28" r="1.5" fill="#ffffff"/>
         <circle cx="28" cy="48" r="1.5" fill="#ffffff"/>
         <circle cx="8" cy="28" r="1.5" fill="#ffffff"/>
+      </svg>
+    ),
+  },
+  {
+    text: 'Secure', label: 'Payments by Razorpay',
+    sub: 'UPI · cards · net banking · wallets',
+    accent: '#FCD34D',
+    icon: (
+      <svg viewBox="0 0 56 56" fill="none">
+        <defs>
+          <linearGradient id="s1g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FEF3C7"/>
+            <stop offset="100%" stopColor="#FCD34D"/>
+          </linearGradient>
+        </defs>
+        {/* padlock */}
+        <path d="M19 25V18C19 13.03 23.03 9 28 9C32.97 9 37 13.03 37 18V25" stroke="#0a2540" strokeWidth="2.4" fill="none" strokeLinecap="round"/>
+        <rect x="12" y="25" width="32" height="24" rx="5" fill="url(#s1g)" stroke="#0a2540" strokeWidth="1.6"/>
+        <circle cx="28" cy="35" r="3.2" fill="#0a2540"/>
+        <path d="M28 37V42" stroke="#0a2540" strokeWidth="2.4" strokeLinecap="round"/>
       </svg>
     ),
   },
@@ -189,7 +183,7 @@ export default function Stats() {
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1.5L8.6 4.85L12.25 5.4L9.6 8L10.25 11.6L7 9.85L3.75 11.6L4.4 8L1.75 5.4L5.4 4.85L7 1.5Z" fill="#FCD34D"/>
             </svg>
-            <span style={{ color: '#ffffff', fontSize: '12px', fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase' }}>By the Numbers</span>
+            <span style={{ color: '#ffffff', fontSize: '12px', fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase' }}>Why Families Trust Us</span>
           </div>
           <h2 style={{
             fontFamily: "'DM Sans', sans-serif",
@@ -200,12 +194,12 @@ export default function Stats() {
             lineHeight: 1.2,
             marginBottom: '14px',
           }}>
-            A Thriving Community of <br/>
+            A Local Business You Can <br/>
             <span style={{
               background: 'linear-gradient(90deg, #FCD34D, #67E8F9)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-            }}>Happy Families</span>
+            }}>Rely On</span>
           </h2>
           <p style={{
             color: 'rgba(255,255,255,0.75)',
@@ -214,7 +208,8 @@ export default function Stats() {
             margin: '0 auto',
             lineHeight: 1.7,
           }}>
-            Real numbers from real homes — measurable trust we've earned, one drop at a time.
+            Aqua Imperial is run by Mahesh Enterprises, Ahmednagar. Filters, servicing and repairs are
+            included for as long as you rent.
           </p>
         </motion.div>
 
@@ -235,8 +230,8 @@ export default function Stats() {
               <div className="stat-icon">{stat.icon}</div>
 
               <div className="stat-value">
-                {stat.decimal ? (
-                  <>{stat.value}{stat.suffix}</>
+                {stat.text ? (
+                  stat.text
                 ) : (
                   <AnimatedCounter target={stat.value} suffix={stat.suffix} />
                 )}

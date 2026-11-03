@@ -6,7 +6,6 @@ import Features from '../components/Features'
 import HowItWorks from '../components/HowItWorks'
 import Products from '../components/Products'
 import Stats from '../components/Stats'
-import Testimonials from '../components/Testimonials'
 import Contact from '../components/Contact'
 import Footer from '../components/Footer'
 import FloatingButtons from '../components/FloatingButtons'
@@ -23,7 +22,6 @@ export default function Home() {
       <Stats />
       <HowItWorks />
       <Products />
-      <Testimonials />
       <Contact />
       <Footer />
       <FloatingButtons />

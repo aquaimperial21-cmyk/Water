@@ -85,13 +85,13 @@ export default function FloatingButtons() {
                   fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
                 }}
               >
-                Free Trial
+                Enquire
               </motion.div>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={handleEnquiry}
-                aria-label="Request free trial"
+                aria-label="Send an enquiry"
                 style={{
                   width: '50px', height: '50px', borderRadius: '50%',
                   background: 'linear-gradient(135deg, #6366F1, #4F46E5)',

@@ -6,7 +6,7 @@ const SHOW_DELAY_MS = 1500;
 const WHATSAPP = '919595190024';
 const FORM_ENDPOINT = 'https://formsubmit.co/ajax/aquaimperial21@gmail.com';
 
-const cities = ['Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Other'];
+const cities = ['Ahmednagar', 'Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Other'];
 
 export default function EnquiryPopup() {
   const [open, setOpen] = useState(false);
@@ -141,15 +141,15 @@ export default function EnquiryPopup() {
                           <path d="M12 2C12 2 5 10 5 15C5 18.866 8.134 22 12 22C15.866 22 19 18.866 19 15C19 10 12 2 12 2Z" fill="white"/>
                         </svg>
                       </div>
-                      <span className="ep-eyebrow">Limited Summer Offer</span>
+                      <span className="ep-eyebrow">Water Purifier on Rent</span>
                     </div>
 
                     <h2 id="ep-title" className="ep-title">
-                      Free home demo<br />
-                      <span className="ep-title-accent">for ₹0 today</span>
+                      Rent a smart RO<br />
+                      <span className="ep-title-accent">with service included</span>
                     </h2>
                     <p className="ep-sub">
-                      Plans start at <strong>₹349/month</strong>. We'll call you within 30 minutes.
+                      Plans from <strong>₹349/month</strong> on 1, 3, 6 or 12-month terms. Leave your number and we'll call you back.
                     </p>
 
                     <form onSubmit={handleSubmit} noValidate className="ep-form">
@@ -213,7 +213,7 @@ export default function EnquiryPopup() {
                           </>
                         ) : (
                           <>
-                            Book Free Demo
+                            Request a Call Back
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                               <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
@@ -235,10 +235,10 @@ export default function EnquiryPopup() {
 
                     <div className="ep-trust">
                       <span className="ep-trust-item">
-                        <Tick />Zero installation cost
+                        <Tick />Installation included
                       </span>
                       <span className="ep-trust-item">
-                        <Tick />7-day risk-free trial
+                        <Tick />7-day trial, full refund
                       </span>
                       <span className="ep-trust-item">
                         <Tick />No spam, ever
@@ -264,7 +264,7 @@ export default function EnquiryPopup() {
                     </motion.div>
                     <h2 className="ep-title">You're all set, {data.name?.split(' ')[0] || 'Friend'}.</h2>
                     <p className="ep-sub">
-                      Our team will call you on <strong>+91 {data.phone}</strong> within 30 minutes.
+                      Our team will call you on <strong>+91 {data.phone}</strong> soon.
                     </p>
                     <a href="tel:+919595190024" className="ep-callbox">
                       <svg width="14" height="14" viewBox="0 0 22 22" fill="currentColor">

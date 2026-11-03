@@ -5,7 +5,7 @@ import { EMAIL, PHONE, WHATSAPP } from '../siteInfo';
 
 const FORM_ENDPOINT = `https://formsubmit.co/ajax/${EMAIL}`;
 
-const cities = ['Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Satara', 'Other'];
+const cities = ['Ahmednagar', 'Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Satara', 'Other'];
 const products = ['Aqua Imperial RO', 'Aqua Imperial Copper', 'Aqua Imperial Alkaline', 'Aqua Imperial Mineral+', 'Not Sure (Need Guidance)'];
 
 export default function Contact() {
@@ -123,10 +123,10 @@ export default function Contact() {
             fontSize: 'clamp(28px, 4vw, 42px)',
             fontWeight: 800, color: '#0F172A', marginBottom: '16px',
           }}>
-            Start Your Free Trial Today
+            Rent Your Purifier Today
           </h2>
           <p style={{ color: '#64748B', fontSize: '17px', maxWidth: '520px', margin: '0 auto', lineHeight: 1.7 }}>
-            Leave your details and our expert will contact you within 30 minutes — free of charge, no obligations.
+            Leave your details and our team will call you back. There is no obligation to book.
           </p>
         </motion.div>
 
@@ -152,7 +152,7 @@ export default function Contact() {
               Contact Us Instantly
             </h3>
             <p style={{ color: '#64748B', fontSize: '15px', lineHeight: 1.7, marginBottom: '36px' }}>
-              Choose how you'd like to reach us — WhatsApp, phone call, or email. We're available 7 days a week.
+              Choose how you'd like to reach us — WhatsApp, phone call, or email.
             </p>
 
             {/* Quick contact buttons */}
@@ -182,7 +182,7 @@ export default function Contact() {
                 </div>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontWeight: 700, fontSize: '14px' }}>Chat on WhatsApp</div>
-                  <div style={{ fontSize: '12px', opacity: 0.85 }}>Quick response · Available 24/7</div>
+                  <div style={{ fontSize: '12px', opacity: 0.85 }}>Message us on +91 95951 90024</div>
                 </div>
                 <svg style={{ marginLeft: 'auto' }} width="18" height="18" viewBox="0 0 18 18" fill="none">
                   <path d="M4 9H14M9 4L14 9L9 14" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
@@ -268,10 +268,11 @@ export default function Contact() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
-                  'Free home demo & water testing',
-                  'Professional installation by certified engineers',
-                  'No hidden charges, transparent pricing',
-                  'Annual maintenance & filter service included',
+                  'In business since 2011 · Udyam-registered MSME',
+                  'Installed by our own technicians, usually within 48 hours of payment',
+                  'Filters, servicing and repairs included, plus a free water-quality test',
+                  'Full price shown in the app before you pay; secure payments by Razorpay',
+                  '7-day trial: cancel within 7 days of payment for a full refund',
                 ].map((item) => (
                   <div key={item} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                     <div style={{ flexShrink: 0, marginTop: '2px' }}>
@@ -316,10 +317,10 @@ export default function Contact() {
                       fontSize: '22px', fontWeight: 700,
                       color: '#0F172A', marginBottom: '8px',
                     }}>
-                      Request a Free Trial
+                      Request a Call Back
                     </h3>
                     <p style={{ color: '#64748B', fontSize: '14px', marginBottom: '24px', lineHeight: 1.5 }}>
-                      Fill in your details and our team will contact you within 30 minutes.
+                      Fill in your details and our team will call you back.
                     </p>
 
                     <form onSubmit={handleSubmit} noValidate>
@@ -436,7 +437,7 @@ export default function Contact() {
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                               <path d="M9 2C9 2 4 8 4 12C4 14.761 6.239 17 9 17C11.761 17 14 14.761 14 12C14 8 9 2 9 2Z" fill="white" opacity="0.8"/>
                             </svg>
-                            Start Free Trial
+                            Request a Call Back
                           </>
                         )}
                       </motion.button>
@@ -473,7 +474,7 @@ export default function Contact() {
                       Thank You, {formData.name || 'Friend'}!
                     </h3>
                     <p style={{ color: '#64748B', fontSize: '15px', lineHeight: 1.7, marginBottom: '24px' }}>
-                      Your trial request has been received. Our team will call you within <strong>30 minutes</strong>.
+                      Your request has been received. Our team will call you soon.
                     </p>
                     <div style={{
                       background: 'rgba(8,145,178,0.05)', border: '1px solid rgba(8,145,178,0.15)',

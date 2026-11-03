@@ -11,38 +11,38 @@ const comparisonData = [
     highlight: true,
   },
   {
-    feature: 'Upfront Cost',
+    feature: 'Paid Upfront',
     waterCan: 'None',
     otherPurifier: '₹8,000–25,000',
-    aquaImperial: '₹0',
-    highlight: true,
+    aquaImperial: 'Plan rent + refundable deposit',
+    highlight: false,
   },
   {
     feature: 'Maintenance',
     waterCan: 'N/A',
     otherPurifier: '₹2,000–4,000/yr',
-    aquaImperial: 'Free for Life',
+    aquaImperial: 'Included in rent',
     highlight: true,
   },
   {
     feature: 'Water Purity',
     waterCan: 'Inconsistent',
     otherPurifier: 'Good',
-    aquaImperial: '99.9% Pure',
+    aquaImperial: 'RO purified',
     highlight: false,
   },
   {
     feature: 'Installation',
     waterCan: 'None needed',
     otherPurifier: '₹500–1500',
-    aquaImperial: 'Free',
+    aquaImperial: 'Included',
     highlight: false,
   },
   {
     feature: 'Filter Replacement',
     waterCan: 'N/A',
     otherPurifier: 'Self-arranged',
-    aquaImperial: 'Auto-scheduled',
+    aquaImperial: 'Included',
     highlight: false,
   },
   {
@@ -53,7 +53,7 @@ const comparisonData = [
     isBool: true,
   },
   {
-    feature: '24/7 Support',
+    feature: '7-Day Trial, Full Refund',
     waterCan: false,
     otherPurifier: false,
     aquaImperial: true,
@@ -64,9 +64,9 @@ const comparisonData = [
 const features = [
   {
     title: '7-Stage Purification',
-    desc: 'Sediment, carbon, RO membrane, UV sterilization, UF, and mineral boost — every sip is medically pure.',
-    stat: '99.9%',
-    statLabel: 'pure water',
+    desc: 'Sediment, carbon, RO membrane, UV sterilization, UF and mineral stages clean your water before it reaches your glass.',
+    stat: 'RO + UV',
+    statLabel: 'filtration',
     accent: '#0891B2',
     icon: (
       <svg viewBox="0 0 80 80" fill="none" aria-hidden="true">
@@ -126,8 +126,8 @@ const features = [
   },
   {
     title: 'IoT & App Control',
-    desc: 'Monitor filter life, water usage, and quality from your smartphone. Get alerts & reminders instantly.',
-    stat: 'iOS · Android',
+    desc: 'Track your plan, filter health and water usage in the Aqua Imperial Android app. Recharge, pause or raise a service request from your phone.',
+    stat: 'Android',
     statLabel: 'app',
     accent: '#22D3EE',
     icon: (
@@ -159,10 +159,10 @@ const features = [
     ),
   },
   {
-    title: 'BIS & WHO Certified',
-    desc: 'Fully certified by Bureau of Indian Standards and WHO water quality standards. Safe for infants.',
-    stat: '2 Certifications',
-    statLabel: 'BIS · WHO',
+    title: 'Secure Payments by Razorpay',
+    desc: 'Pay online by UPI, card, net banking or wallet through Razorpay. Your card and bank details are never stored by us.',
+    stat: 'UPI · Cards',
+    statLabel: 'net banking · wallets',
     accent: '#155E75',
     icon: (
       <svg viewBox="0 0 80 80" fill="none" aria-hidden="true">
@@ -176,19 +176,14 @@ const features = [
         <path d="M40 8L14 18V36C14 52 25 64 40 70C55 64 66 52 66 36V18L40 8Z" fill="url(#f4s)" stroke="#0a2540" strokeWidth="1.4"/>
         {/* tick */}
         <path d="M28 38L36 46L52 30" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
-        {/* rosette ribbons */}
-        <circle cx="22" cy="58" r="6" fill="#FCD34D" stroke="#0a2540" strokeWidth="1"/>
-        <text x="22" y="61" fill="#0a2540" fontSize="5.5" fontWeight="800" textAnchor="middle" fontFamily="DM Sans">BIS</text>
-        <circle cx="58" cy="58" r="6" fill="#22C55E" stroke="#0a2540" strokeWidth="1"/>
-        <text x="58" y="61" fill="#ffffff" fontSize="5" fontWeight="800" textAnchor="middle" fontFamily="DM Sans">WHO</text>
       </svg>
     ),
   },
   {
-    title: 'Auto Filter Alerts',
-    desc: 'Smart sensor tracks filter usage and sends timely replacement reminders — no guesswork needed.',
-    stat: '0 missed',
-    statLabel: 'reminders',
+    title: 'Filter Health Alerts',
+    desc: 'The purifier reports filter health to us, and we replace filters when they are due. Filter changes are included in your rent.',
+    stat: 'Included',
+    statLabel: 'filter changes',
     accent: '#F59E0B',
     icon: (
       <svg viewBox="0 0 80 80" fill="none" aria-hidden="true">
@@ -217,10 +212,10 @@ const features = [
     ),
   },
   {
-    title: '24×7 Support',
-    desc: 'Dedicated service engineers, free installation, and annual maintenance. We\'re always just a call away.',
-    stat: '< 30 min',
-    statLabel: 'response',
+    title: 'Installation & Service',
+    desc: 'We usually install within 48 hours of payment. Servicing and repairs are included — reach us by phone, WhatsApp, email or from the app.',
+    stat: '48 hrs',
+    statLabel: 'usual installation',
     accent: '#22C55E',
     icon: (
       <svg viewBox="0 0 80 80" fill="none" aria-hidden="true">

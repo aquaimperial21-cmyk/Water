@@ -81,33 +81,9 @@ export default function Footer() {
               </div>
             </div>
             <p style={{ fontSize: '14px', lineHeight: 1.8, marginBottom: '20px', maxWidth: '280px', color: 'rgba(255,255,255,0.55)' }}>
-              Smart Purifiers on Rent. Free Maintenance for Life. Your trusted partner for clean, safe drinking water at home.
+              Smart RO purifiers on rent, with filters, servicing and repairs included. Clean, safe drinking water at
+              home, from a local Ahmednagar business serving families since 2011.
             </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              {[
-                { label: 'Facebook', color: '#1877F2', path: 'M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z' },
-                { label: 'Instagram', color: '#E4405F', path: 'M16 4H8a4 4 0 00-4 4v8a4 4 0 004 4h8a4 4 0 004-4V8a4 4 0 00-4-4zm-4 11a3 3 0 110-6 3 3 0 010 6zm3.5-6.5a.75.75 0 110-1.5.75.75 0 010 1.5z' },
-                { label: 'YouTube', color: '#FF0000', path: 'M23 7s-.3-2-1.2-2.8C20.7 3.2 19.5 3 12 3S3.3 3.2 2.2 4.2C1.3 5 1 7 1 7s-.3 2-.3 4v2c0 2 .3 4 .3 4s.3 2 1.2 2.8c1.1 1 2.3 1.2 9.8 1.2s8.7-.2 9.8-1.2c.9-.8 1.2-2.8 1.2-2.8s.3-2 .3-4v-2c0-2-.3-4-.3-4zM10 15V9l6 3-6 3z' },
-              ].map((social) => (
-                <motion.a
-                  key={social.label}
-                  href="#"
-                  aria-label={social.label}
-                  whileHover={{ scale: 1.1, y: -2 }}
-                  style={{
-                    width: '36px', height: '36px', borderRadius: '10px',
-                    background: `${social.color}18`,
-                    border: `1px solid ${social.color}30`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', textDecoration: 'none',
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill={social.color}>
-                    <path d={social.path}/>
-                  </svg>
-                </motion.a>
-              ))}
-            </div>
           </div>
 
           {/* Quick links */}
@@ -121,7 +97,6 @@ export default function Footer() {
                 { label: 'Features', href: '#features' },
                 { label: 'How It Works', href: '#how-it-works' },
                 { label: 'Plans', href: '#products' },
-                { label: 'Testimonials', href: '#testimonials' },
               ].map((link) => (
                 <li key={link.label}>
                   <button
@@ -150,7 +125,7 @@ export default function Footer() {
               Our Products
             </h4>
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {['Aqua Imperial RO', 'Aqua Imperial Copper', 'Aqua Imperial Alkaline', 'Aqua Imperial Mineral+', 'Service & AMC'].map((item) => (
+              {['Aqua Imperial RO', 'Aqua Imperial Copper', 'Aqua Imperial Alkaline', 'Aqua Imperial Mineral+', 'Service & Repairs'].map((item) => (
                 <li key={item}>
                   <button
                     onClick={() => handleNav('#products')}
@@ -191,8 +166,8 @@ export default function Footer() {
                 },
                 {
                   icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="#22D3EE"><path d="M8 1C5.239 1 3 3.239 3 6C3 9.5 8 15 8 15C8 15 13 9.5 13 6C13 3.239 10.761 1 8 1ZM8 8C6.895 8 6 7.105 6 6C6 4.895 6.895 4 8 4C9.105 4 10 4.895 10 6C10 7.105 9.105 8 8 8Z"/></svg>,
-                  text: 'Maharashtra, India',
-                  href: '#',
+                  text: 'Ahmednagar, Maharashtra, India',
+                  href: '/contact',
                 },
               ].map((item, i) => (
                 <a key={i} href={item.href}
@@ -247,7 +222,7 @@ export default function Footer() {
           gap: '16px',
         }}>
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)' }}>
-            © 2025 Aqua Imperial. All rights reserved.
+            © 2026 Aqua Imperial. All rights reserved.
           </p>
           <nav aria-label="Policies" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 24px' }}>
             {policyLinks.map((item) => (

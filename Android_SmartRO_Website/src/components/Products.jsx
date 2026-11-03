@@ -10,7 +10,6 @@ const products = [
     specs: ['Storage Tank of 6.5L Capacity', 'Essential minerals', 'Wall-mount or countertop'],
     shortTermPrice: '₹399',
     longTermPrice: '₹349',
-    lockIn: '3 Months Lock-In',
     badge: null,
     color: '#0891B2',
     icon: (
@@ -28,8 +27,7 @@ const products = [
     specs: ['Storage Tank of 8L Capacity', 'Essential minerals & Copper', 'Wall-mount or countertop'],
     shortTermPrice: '₹449',
     longTermPrice: '₹404',
-    lockIn: '3 Months Lock-In',
-    badge: 'BESTSELLER',
+    badge: null,
     color: '#F59E0B',
     icon: (
       <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
@@ -47,8 +45,7 @@ const products = [
     specs: ['Storage Tank of 8L Capacity', 'Essential minerals & PH Booster', 'Wall-mount or countertop'],
     shortTermPrice: '₹549',
     longTermPrice: '₹495',
-    lockIn: '3 Months Lock-In',
-    badge: 'BEST VALUE',
+    badge: null,
     color: '#8B5CF6',
     icon: (
       <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
@@ -65,7 +62,6 @@ const products = [
     specs: ['Storage Tank of 6.5L Capacity', 'Essential minerals & Copper', 'Wall-mount or countertop'],
     shortTermPrice: '₹499',
     longTermPrice: '₹449',
-    lockIn: '3 Months Lock-In',
     badge: null,
     color: '#22C55E',
     icon: (
@@ -154,7 +150,7 @@ export default function Products() {
                 transition: 'all 0.25s',
               }}
             >
-              Flexible Short-term Plans
+              Short-term Plans
             </button>
             <button
               onClick={() => setPlanType('long')}
@@ -171,11 +167,13 @@ export default function Products() {
                 transition: 'all 0.25s',
               }}
             >
-              Long-term Value Plans
+              Long-term Plans
             </button>
           </div>
           <div style={{ color: '#94A3B8', fontSize: '12px', marginTop: '10px' }}>
-            {planType === 'short' ? 'Flexible plans suitable for renters on-the-go (28/90/180 days)' : 'Save more with annual subscriptions — best value for families'}
+            {planType === 'short'
+              ? 'Monthly (1 month) or Quarterly (3 months) plans'
+              : 'Half-yearly (6 months) or Annual (12 months) plans — a lower monthly rate'}
           </div>
         </motion.div>
 
@@ -321,7 +319,14 @@ export default function Products() {
                     textTransform: 'uppercase', letterSpacing: '0.5px',
                     transition: 'color 0.3s',
                   }}>
-                    {product.lockIn}
+                    {planType === 'short' ? 'Monthly · Quarterly' : 'Half-yearly · Annual'}
+                  </div>
+                  <div style={{
+                    color: isHovered ? 'rgba(255,255,255,0.4)' : '#94A3B8',
+                    fontSize: '11px', marginTop: '4px',
+                    transition: 'color 0.3s',
+                  }}>
+                    Lock-in: your first plan term
                   </div>
                 </div>
 
@@ -376,6 +381,12 @@ export default function Products() {
           })}
         </div>
 
+        <p style={{ color: '#64748B', fontSize: '13px', maxWidth: '760px', margin: '28px auto 0', lineHeight: 1.7, textAlign: 'center' }}>
+          Prices shown are the monthly rate. You pay upfront, online through Razorpay: the rent for the whole plan
+          term plus a refundable security deposit. Cancel within 7 days of payment for a full refund. Final prices
+          are shown in the app before you pay and can differ by purifier, plan length and city.
+        </p>
+
         {/* Bottom features */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -387,10 +398,10 @@ export default function Products() {
           }}
         >
           {[
-            { text: 'Free Installation', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L2 6V13L9 17L16 13V6L9 2Z" fill="#0891B2" opacity="0.15"/><path d="M6 9L8 11L12 7" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-            { text: 'No Maintenance Charges', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" fill="#0891B2" opacity="0.15"/><path d="M6 9L8 11L12 7" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-            { text: '24/7 Support', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" fill="#0891B2" opacity="0.15"/><path d="M9 5V9L12 11" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-            { text: '99.9% Pure Water', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2C9 2 4 8 4 12C4 14.761 6.239 17 9 17C11.761 17 14 14.761 14 12C14 8 9 2 9 2Z" fill="#0891B2" opacity="0.15"/><path d="M7 11C7 11 8 9.5 9 9" stroke="#0891B2" strokeWidth="1.2" strokeLinecap="round"/></svg> },
+            { text: 'Installation Included', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L2 6V13L9 17L16 13V6L9 2Z" fill="#0891B2" opacity="0.15"/><path d="M6 9L8 11L12 7" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round"/></svg> },
+            { text: 'Filters & Servicing Included', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" fill="#0891B2" opacity="0.15"/><path d="M6 9L8 11L12 7" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round"/></svg> },
+            { text: '7-Day Trial, Full Refund', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" fill="#0891B2" opacity="0.15"/><path d="M9 5V9L12 11" stroke="#0891B2" strokeWidth="1.5" strokeLinecap="round"/></svg> },
+            { text: 'Free Water-Quality Test', icon: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2C9 2 4 8 4 12C4 14.761 6.239 17 9 17C11.761 17 14 14.761 14 12C14 8 9 2 9 2Z" fill="#0891B2" opacity="0.15"/><path d="M7 11C7 11 8 9.5 9 9" stroke="#0891B2" strokeWidth="1.2" strokeLinecap="round"/></svg> },
           ].map((item) => (
             <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '14px', fontWeight: 500 }}>
               {item.icon}

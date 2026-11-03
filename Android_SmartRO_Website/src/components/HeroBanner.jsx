@@ -12,7 +12,7 @@ export default function HeroBanner() {
     <section
       id="home"
       className="hb-root"
-      aria-label="Aqua Imperial RO on rent — Summer Sale"
+      aria-label="Aqua Imperial RO on rent"
     >
       <div className="hb-nav-spacer" aria-hidden="true" />
 
@@ -26,7 +26,7 @@ export default function HeroBanner() {
           <source media="(min-width: 900px)" srcSet={HERO_DESKTOP} />
           <img
             src={HERO_MOBILE}
-            alt="Aqua Imperial Alkaline RO water purifier — Summer Sale plan starts at ₹417"
+            alt="Aqua Imperial RO water purifiers on rent"
             className="hb-img"
             loading="eager"
             fetchPriority="high"
@@ -45,7 +45,7 @@ export default function HeroBanner() {
             <span className="hb-headline-accent">RO ON RENT</span>
           </h1>
           <p className="hb-sub">
-            No Upfront Cost <span className="hb-pipe">|</span> Lifetime free maintenance <span className="hb-pipe">|</span> Easy Monthly Subscription
+            1–12 month plans <span className="hb-pipe">|</span> Filters &amp; service included <span className="hb-pipe">|</span> 48-hour installation
           </p>
           <motion.button
             type="button"
@@ -59,28 +59,6 @@ export default function HeroBanner() {
               <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </motion.button>
-
-        </motion.div>
-
-        {/* Festive sale block */}
-        <motion.div
-          className="hb-festive"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.4, ease: 'easeOut' }}
-          whileHover={{ scale: 1.04, transition: { duration: 0.25 } }}
-        >
-          <span className="hb-festive-eyebrow">FESTIVE SALE</span>
-          <h2 className="hb-festive-headline">
-            PURIFIER <span className="hb-festive-at">@</span> <span className="hb-festive-price">₹599</span>
-          </h2>
-          <div className="hb-festive-divider" />
-          <p className="hb-festive-tagline">
-            Lights are up. Prices aren&apos;t.
-          </p>
-          <p className="hb-festive-sub">
-            Imperial Aqua Purifier on a <strong>festive offer</strong>.
-          </p>
         </motion.div>
       </div>
 
@@ -217,100 +195,6 @@ export default function HeroBanner() {
           color: rgba(103, 232, 249, 0.85);
         }
 
-        /* Festive sale on mobile — overlaid on right empty area of image */
-        .hb-festive {
-          display: block;
-          position: absolute;
-          top: 110px;
-          right: 12px;
-          left: auto;
-          bottom: auto;
-          width: max-content;
-          padding: 8px 14px 10px;
-          text-align: center;
-          z-index: 2;
-          background:
-            linear-gradient(#ffffff, #ffffff) padding-box,
-            linear-gradient(135deg, #FCD34D 0%, #D4AF37 45%, #B8860B 70%, #F4D58A 100%) border-box;
-          border: 1.5px solid transparent;
-          border-radius: 11px;
-          box-shadow:
-            0 10px 22px rgba(8, 23, 42, 0.4),
-            0 0 0 3px rgba(252, 211, 77, 0.18),
-            inset 0 1px 0 rgba(255, 255, 255, 0.9);
-          max-width: 180px;
-        }
-        .hb-festive::before {
-          content: '';
-          position: absolute;
-          top: -6px;
-          left: 50%;
-          transform: translateX(-50%) rotate(45deg);
-          width: 9px;
-          height: 9px;
-          background: linear-gradient(135deg, #FCD34D, #D4AF37);
-          border-radius: 2px;
-          box-shadow: 0 2px 4px rgba(180, 130, 0, 0.4);
-        }
-        .hb-festive-eyebrow {
-          display: inline-block;
-          font-size: 6.5px;
-          font-weight: 800;
-          letter-spacing: 1.5px;
-          color: #ffffff;
-          background: linear-gradient(135deg, #B91C1C 0%, #991B1B 100%);
-          padding: 2px 7px;
-          border-radius: 3px;
-          margin-bottom: 5px;
-          text-transform: uppercase;
-          box-shadow: 0 2px 6px rgba(185, 28, 28, 0.3);
-        }
-        .hb-festive-headline {
-          margin: 0;
-          font-family: 'DM Sans', sans-serif;
-          font-weight: 800;
-          font-size: clamp(12px, 3.6vw, 15px);
-          line-height: 1.05;
-          letter-spacing: 0.2px;
-          text-transform: uppercase;
-          color: #0a2540;
-          white-space: nowrap;
-        }
-        .hb-festive-at { color: #94A3B8; font-weight: 700; margin: 0 2px; }
-        .hb-festive-price {
-          background: linear-gradient(135deg, #D4AF37 0%, #B8860B 50%, #FCD34D 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .hb-festive-divider {
-          height: 1px;
-          width: 50%;
-          margin: 5px auto 4px;
-          background: linear-gradient(90deg, transparent, rgba(212,175,55,0.7), transparent);
-        }
-        .hb-festive-tagline {
-          margin: 0 0 2px;
-          font-size: 7.5px;
-          font-weight: 600;
-          line-height: 1.3;
-          color: #0a2540;
-          font-style: italic;
-        }
-        .hb-festive-sub {
-          margin: 0;
-          font-size: 6.5px;
-          line-height: 1.35;
-          color: #475569;
-        }
-        .hb-festive-sub strong {
-          background: linear-gradient(135deg, #B8860B, #D4AF37);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          font-weight: 800;
-        }
-
         @media (min-width: 900px) {
           .hb-nav-spacer { height: 80px; }
 
@@ -437,117 +321,10 @@ export default function HeroBanner() {
             letter-spacing: 2.6px;
             color: rgba(103, 232, 249, 0.85);
           }
-
-          /* Festive sale badge — right side */
-          .hb-festive {
-            display: block;
-            position: absolute;
-            top: 20%;
-            right: 5%;
-            z-index: 2;
-            padding: 20px 28px 22px;
-            text-align: center;
-            background:
-              linear-gradient(#ffffff, #ffffff) padding-box,
-              linear-gradient(135deg, #FCD34D 0%, #D4AF37 45%, #B8860B 70%, #F4D58A 100%) border-box;
-            border: 3px solid transparent;
-            border-radius: 22px;
-            box-shadow:
-              0 30px 80px rgba(8, 23, 42, 0.42),
-              0 0 0 8px rgba(252, 211, 77, 0.18),
-              inset 0 1px 0 rgba(255, 255, 255, 0.9);
-            max-width: 310px;
-            cursor: pointer;
-            will-change: transform;
-          }
-          .hb-festive::before {
-            content: '';
-            position: absolute;
-            top: -10px;
-            left: 50%;
-            transform: translateX(-50%) rotate(45deg);
-            width: 14px;
-            height: 14px;
-            background: linear-gradient(135deg, #FCD34D, #D4AF37);
-            border-radius: 4px;
-            box-shadow: 0 3px 8px rgba(180, 130, 0, 0.45);
-          }
-          .hb-festive::after {
-            content: '';
-            position: absolute;
-            inset: -4px;
-            border-radius: 22px;
-            background: radial-gradient(ellipse at 50% 50%, rgba(252, 211, 77, 0.28) 0%, transparent 70%);
-            z-index: -1;
-            pointer-events: none;
-          }
-          .hb-festive-eyebrow {
-            display: inline-block;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 2.5px;
-            color: #ffffff;
-            background: linear-gradient(135deg, #B91C1C 0%, #991B1B 100%);
-            padding: 4px 12px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            box-shadow: 0 4px 10px rgba(185, 28, 28, 0.3);
-            text-transform: uppercase;
-          }
-          .hb-festive-headline {
-            margin: 0;
-            font-family: 'DM Sans', sans-serif;
-            font-weight: 800;
-            font-size: clamp(22px, 2.2vw, 28px);
-            line-height: 1.05;
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
-            white-space: nowrap;
-            color: #0a2540;
-          }
-          .hb-festive-at {
-            color: #94A3B8;
-            font-weight: 700;
-            margin: 0 4px;
-          }
-          .hb-festive-price {
-            background: linear-gradient(135deg, #D4AF37 0%, #B8860B 50%, #FCD34D 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-          }
-          .hb-festive-divider {
-            height: 1.5px;
-            width: 60%;
-            margin: 12px auto 10px;
-            background: linear-gradient(90deg, transparent, rgba(212,175,55,0.7), transparent);
-          }
-          .hb-festive-tagline {
-            margin: 0 0 4px;
-            font-size: clamp(12px, 0.95vw, 14px);
-            font-weight: 600;
-            line-height: 1.35;
-            color: #0a2540;
-            font-style: italic;
-          }
-          .hb-festive-sub {
-            margin: 0;
-            font-size: clamp(11px, 0.85vw, 12.5px);
-            line-height: 1.4;
-            color: #475569;
-          }
-          .hb-festive-sub strong {
-            background: linear-gradient(135deg, #B8860B, #D4AF37);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-weight: 800;
-          }
         }
 
         @media (min-width: 1280px) {
           .hb-overlay { left: 3%; max-width: 46%; }
-          .hb-festive { right: 6%; top: 22%; max-width: 340px; padding: 22px 32px 24px; }
         }
       `}</style>
     </section>

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const highlights = [
-  { text: 'No upfront cost', icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#22C55E" strokeWidth="1.5"/><path d="M5 8L7 10L11 6" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { text: 'Lifetime free maintenance', icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#22C55E" strokeWidth="1.5"/><path d="M5 8L7 10L11 6" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { text: 'Easy monthly subscription', icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#22C55E" strokeWidth="1.5"/><path d="M5 8L7 10L11 6" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  { text: '7-day trial, full refund', icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#22C55E" strokeWidth="1.5"/><path d="M5 8L7 10L11 6" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  { text: 'Filters & servicing included', icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#22C55E" strokeWidth="1.5"/><path d="M5 8L7 10L11 6" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  { text: '1, 3, 6 or 12-month plans', icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#22C55E" strokeWidth="1.5"/><path d="M5 8L7 10L11 6" stroke="#22C55E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
 ];
 
 const waterTypes = [
@@ -194,8 +194,9 @@ export default function Hero() {
               maxWidth: '500px',
             }}
           >
-            Experience next-generation RO water purification with real-time monitoring, 
-            IoT-connectivity, and hassle-free monthly subscription. Pure water for your family — always.
+            Rent a smart RO water purifier on a 1, 3, 6 or 12-month plan. Pay online through Razorpay:
+            the rent for your plan term plus a refundable security deposit. Installation, filters and
+            servicing are included.
           </motion.p>
 
           {/* Stats row */}
@@ -206,9 +207,9 @@ export default function Hero() {
             style={{ display: 'flex', gap: '32px', marginBottom: '36px', flexWrap: 'wrap' }}
           >
             {[
-              { value: '10K+', label: 'Happy Families' },
-              { value: '7-Stage', label: 'Purification' },
-              { value: '99.9%', label: 'Pure Water' },
+              { value: 'Since 2011', label: 'In Business' },
+              { value: '48 hrs', label: 'Usual Installation' },
+              { value: '7-Day', label: 'Trial, Full Refund' },
             ].map((stat) => (
               <div key={stat.label}>
                 <div style={{ color: '#22D3EE', fontWeight: 800, fontSize: '24px', fontFamily: "'DM Sans', sans-serif" }}>{stat.value}</div>
@@ -422,8 +423,8 @@ export default function Hero() {
           {/* Floating badges */}
           {[
             { text: 'IoT Connected', top: '5%', right: '-10%' },
-            { text: '99.9% Pure', bottom: '20%', left: '-18%' },
-            { text: 'BIS Certified', top: '40%', right: '-22%' },
+            { text: 'Filters Included', bottom: '20%', left: '-18%' },
+            { text: 'Razorpay Secure', top: '40%', right: '-22%' },
           ].map((badge) => (
             <motion.div
               key={badge.text}

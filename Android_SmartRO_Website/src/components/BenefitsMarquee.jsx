@@ -1,10 +1,10 @@
 import { IndianRupee, ShieldCheck, CalendarCheck, Truck } from 'lucide-react';
 
 const items = [
-  { Icon: IndianRupee, label: 'Zero Machine Cost' },
-  { Icon: ShieldCheck, label: 'Lifetime free maintenance' },
-  { Icon: CalendarCheck, label: '7-day risk-free trial' },
-  { Icon: Truck, label: 'Free Relocation' },
+  { Icon: IndianRupee, label: 'Rent the purifier, don’t buy it' },
+  { Icon: ShieldCheck, label: 'Filters, servicing & repairs included' },
+  { Icon: CalendarCheck, label: '7-day trial: cancel for a full refund' },
+  { Icon: Truck, label: 'Installed within 48 hours' },
 ];
 
 export default function BenefitsMarquee() {
