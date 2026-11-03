@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 // Where a shipped build talks to when nothing else is configured.
-const PRODUCTION_API_URL = 'https://water-production-278c.up.railway.app/api/v1';
+const PRODUCTION_API_URL = 'https://srv2122898.hstgr.cloud/api/v1';
 
 // On Android emulator, localhost on the host machine is reachable as 10.0.2.2
 // On iOS simulator + web, localhost works.

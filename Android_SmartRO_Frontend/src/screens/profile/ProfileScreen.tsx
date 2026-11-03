@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-import { confirmAction, notify } from '../../utils/confirm';
+import { confirmAction, showDialog, toast } from '../../utils/messages';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -17,10 +17,12 @@ import {
   MessageCircle,
   Server,
   ShieldCheck,
+  Trash2,
   User,
   ChevronRight,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../store/auth';
+import { openLegal } from '../../utils/legal';
 import { Auth, Kyc, Referrals, ReferralInfo } from '../../api/endpoints';
 import { apiBaseUrl, apiErrorMessage } from '../../api/client';
 import { tokens } from '@theme/tokens';
@@ -64,7 +66,7 @@ export function ProfileScreen() {
     try {
       await Share.share({ message: msg });
     } catch (e) {
-      notify('Could not share', apiErrorMessage(e));
+      toast.error('Could not share', apiErrorMessage(e));
     }
   }
 
@@ -89,6 +91,42 @@ export function ProfileScreen() {
       destructive: true,
     });
     if (ok) await signOut();
+  }
+
+  // A ref, not just state: a second tap lands before the re-render that
+  // would show the first one is already in flight.
+  const deletingRef = React.useRef(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  async function confirmDeleteAccount() {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    try {
+      const ok = await confirmAction({
+        title: 'Delete your account?',
+        message:
+          'This erases your name, phone number, email, saved addresses, KYC details and notifications, and signs you out on every device. It cannot be undone.\n\n' +
+          'Payment records and invoices are kept, as Indian tax law requires.\n\n' +
+          'If your purifier plan is still running, cancel it first from My Plan — we collect the purifier and refund your deposit.',
+        confirmLabel: 'Delete account',
+        destructive: true,
+      });
+      if (!ok) return;
+      setDeleting(true);
+      await Auth.deleteAccount();
+      await signOut();
+      toast.success('Account deleted', 'Your personal details have been erased.');
+    } catch (e) {
+      if ((e as { response?: { status?: number } })?.response?.status === 409) {
+        // Running plan or a refund still on its way: the server says which.
+        await showDialog({ title: "Your account can't be deleted yet", message: apiErrorMessage(e) });
+      } else {
+        toast.error('Could not delete your account', apiErrorMessage(e));
+      }
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
+    }
   }
 
   return (
@@ -207,7 +245,10 @@ export function ProfileScreen() {
               title="Help center"
               onPress={() => nav.navigate('Help')}
             />
-            <ListRow leading={<FileText size={16} color={tokens.color.accentInk} />} title="Legal" subtitle="Terms, Privacy, Refunds" onPress={() => {}} />
+            {/* These rows did nothing before; the pages now exist on the website. */}
+            <ListRow leading={<FileText size={16} color={tokens.color.accentInk} />} title="Terms & Conditions" onPress={() => void openLegal('terms')} />
+            <ListRow leading={<FileText size={16} color={tokens.color.accentInk} />} title="Privacy Policy" onPress={() => void openLegal('privacy')} />
+            <ListRow leading={<FileText size={16} color={tokens.color.accentInk} />} title="Cancellation & Refunds" onPress={() => void openLegal('refund')} />
           </ListGroup>
         </View>
 
@@ -226,6 +267,19 @@ export function ProfileScreen() {
               title="App version"
               trailing={<Text style={styles.aboutMeta}>2.4.1 (build 482)</Text>}
               showChevron={false}
+            />
+          </ListGroup>
+        </View>
+
+        {/* Delete account — Google Play requires it in the app */}
+        <View style={styles.section}>
+          <ListGroup>
+            <ListRow
+              leading={<Trash2 size={16} color={tokens.color.danger} />}
+              title="Delete account"
+              subtitle={deleting ? 'Deleting…' : 'Erase your profile and personal data'}
+              destructive
+              onPress={confirmDeleteAccount}
             />
           </ListGroup>
         </View>

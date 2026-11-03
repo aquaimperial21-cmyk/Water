@@ -22,6 +22,10 @@ export function ProgressRing({
   caption,
   pulse = true,
 }: Props) {
+  // One gradient id per ring. On web every ring shared "ringGrad"; the first
+  // definition sat in a hidden tab (display: none), and a browser won't paint
+  // a gradient from a hidden subtree, so the visible ring drew no arc at all.
+  const gradId = `ringGrad-${React.useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(1, progress));
@@ -41,7 +45,7 @@ export function ProgressRing({
       >
         <Svg width={size} height={size}>
           <Defs>
-            <LinearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <LinearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
               <Stop offset="0" stopColor={tokens.color.accent} />
               <Stop offset="1" stopColor={tokens.color.accentGlow} />
             </LinearGradient>
@@ -54,17 +58,20 @@ export function ProgressRing({
             strokeWidth={stroke}
             fill="none"
           />
+          {/* Nothing left: no arc. A zero-length round-capped stroke still drew a dot. */}
+          {dash > 0 ? (
           <Circle
             cx={size / 2}
             cy={size / 2}
             r={r}
-            stroke="url(#ringGrad)"
+            stroke={`url(#${gradId})`}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${dash} ${c - dash}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
             fill="none"
           />
+          ) : null}
         </Svg>
       </MotiView>
       <View style={styles.center} pointerEvents="none">

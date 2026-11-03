@@ -18,7 +18,7 @@ import { Auth } from '../../api/endpoints';
 import { apiErrorMessage } from '../../api/client';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import type { RootStackParamList } from '../../navigation';
 
 const MIN_LENGTH = 8;
@@ -48,13 +48,13 @@ export function SetPasswordScreen() {
     setSaving(true);
     try {
       await Auth.setPassword(next, hasPassword ? current : undefined);
-      notify(
+      toast.success(
         hasPassword ? 'Password changed' : 'Password set',
         'You can now sign in with your mobile number and this password.'
       );
       nav.goBack();
     } catch (e) {
-      notify('Could not save', apiErrorMessage(e));
+      toast.error('Could not save', apiErrorMessage(e));
       setSaving(false);
     }
   }

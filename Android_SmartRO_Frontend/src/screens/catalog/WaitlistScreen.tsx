@@ -18,7 +18,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Bell } from 'lucide-react-native';
 import { Support } from '../../api/endpoints';
 import { apiErrorMessage } from '../../api/client';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
 import type { RootStackParamList } from '../../navigation';
@@ -32,14 +32,14 @@ export function WaitlistScreen({ route, navigation }: Props) {
   const [busy, setBusy] = React.useState(false);
 
   async function submit() {
-    if (!/^\d{10}$/.test(phone)) return notify('Phone', 'Enter your 10-digit mobile number');
+    if (!/^\d{10}$/.test(phone)) return toast.warning('Phone', 'Enter your 10-digit mobile number');
     setBusy(true);
     try {
       await Support.waitlist({ phone: `+91${phone}`, cityName, pincode: pincode || undefined });
-      notify("You're on the list", `We'll text you the moment we launch in ${cityName}.`);
+      toast.success("You're on the list", `We'll text you the moment we launch in ${cityName}.`);
       navigation.goBack();
     } catch (e) {
-      notify('Could not submit', apiErrorMessage(e));
+      toast.error('Could not submit', apiErrorMessage(e));
     } finally {
       setBusy(false);
     }

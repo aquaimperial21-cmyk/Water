@@ -17,7 +17,7 @@ import { useAuthStore } from '../../store/auth';
 import { apiErrorMessage } from '../../api/client';
 import { tokens } from '@theme/tokens';
 import { Aurora, WaterDropLogo } from '@ui/index';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Password'>;
@@ -51,7 +51,7 @@ export function PasswordScreen({ navigation, route }: Props) {
       await signInWithPassword(`+91${phone}`, password);
       // The navigator swaps stacks as soon as the store holds a user.
     } catch (e) {
-      notify('Could not sign in', apiErrorMessage(e));
+      toast.error('Could not sign in', apiErrorMessage(e));
       setLoading(false);
     }
   }

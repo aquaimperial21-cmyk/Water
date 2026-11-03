@@ -92,6 +92,9 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
               }}
               style={[styles.tab, isFocused && { flex: 1.7 }]}
               accessibilityRole="button"
+              // Unfocused tabs are icon-only; without this a screen reader
+              // announced four unnamed buttons.
+              accessibilityLabel={item.label}
               accessibilityState={{ selected: isFocused }}
             >
               <MotiView

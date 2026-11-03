@@ -5,9 +5,12 @@
 // pair, which is what every other API call uses.
 //
 // Requires a dev/preview build — this does NOT work in Expo Go.
+// The browser build uses firebasePhone.web.ts instead (backend OTP, no Firebase).
+// Keep the two files exporting the same functions.
 
 import auth from '@react-native-firebase/auth';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { Auth, type Session } from '../api/endpoints';
 
 // The confirmation object cannot cross a navigation param (it is not
 // serialisable), so it lives here between the phone screen and the code screen.
@@ -60,6 +63,22 @@ export function onAutoVerified(e164: string, cb: () => void): () => void {
   return auth().onAuthStateChanged((user) => {
     if (user?.phoneNumber === e164) cb();
   });
+}
+
+/** Native never gets the code from the API; it arrives by SMS. */
+export function getDevCode(): string | null {
+  return null;
+}
+
+/** Confirms the SMS code with Firebase, then swaps the ID token for a SmartRO session. */
+export async function exchangeCodeForSession(
+  code: string,
+  e164: string,
+  fullName?: string,
+  referralCode?: string
+): Promise<Session> {
+  const idToken = await confirmPhoneCode(code, e164);
+  return Auth.firebaseLogin(idToken, fullName, referralCode);
 }
 
 /** Call once SmartRO's own tokens are issued. */

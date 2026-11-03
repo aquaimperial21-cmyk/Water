@@ -13,6 +13,8 @@ type Props = {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm?: () => void;
+  /** Show only the confirm button (an acknowledgement, not a choice). */
+  hideCancel?: boolean;
   children?: React.ReactNode;
 };
 
@@ -25,6 +27,7 @@ export function Dialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   onConfirm,
+  hideCancel,
   children,
 }: Props) {
   return (
@@ -53,7 +56,9 @@ export function Dialog({
                 {description ? <Text style={styles.desc}>{description}</Text> : null}
                 {children ? <View style={{ marginTop: tokens.space['3'] }}>{children}</View> : null}
                 <View style={styles.actions}>
-                  <Button title={cancelLabel} variant="outline" size="md" onPress={onClose} />
+                  {hideCancel ? null : (
+                    <Button title={cancelLabel} variant="outline" size="md" onPress={onClose} />
+                  )}
                   <Button
                     title={confirmLabel}
                     variant={destructive ? 'destructive' : 'primary'}

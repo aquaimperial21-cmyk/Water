@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { MotiView } from 'moti';
+import { Check } from 'lucide-react-native';
 import { tokens } from '@theme/tokens';
 
 type Props = {
@@ -35,7 +36,11 @@ export function Stepper({ steps, current }: Props) {
                   active && styles.dotActive,
                 ]}
               >
-                <Text style={[styles.dotText, (done || active) && { color: '#FFF' }]}>{i + 1}</Text>
+                {done ? (
+                  <Check size={12} color="#FFF" strokeWidth={3} />
+                ) : (
+                  <Text style={[styles.dotText, active && { color: '#FFF' }]}>{i + 1}</Text>
+                )}
               </View>
               <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
                 {label}

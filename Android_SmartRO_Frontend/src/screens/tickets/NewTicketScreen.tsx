@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -72,9 +72,9 @@ export function NewTicketScreen({ route, navigation }: Props) {
   }
 
   async function submit() {
-    if (!issueKey) return notify('Pick an issue', 'Choose what kind of help you need.');
+    if (!issueKey) return toast.warning('Pick an issue', 'Choose what kind of help you need.');
     if (description.trim().length < 10)
-      return notify('Tell us more', 'Add at least a sentence describing the problem.');
+      return toast.warning('Tell us more', 'Add at least a sentence describing the problem.');
     const issue = ISSUES.find((i) => i.key === issueKey);
     setLoading(true);
     try {
@@ -84,10 +84,10 @@ export function NewTicketScreen({ route, navigation }: Props) {
         description: description.trim(),
         priority,
       });
-      notify('Ticket raised', 'A technician will reach out shortly.');
+      toast.success('Ticket raised', 'A technician will reach out shortly.');
       navigation.goBack();
     } catch (e) {
-      notify('Could not submit', apiErrorMessage(e));
+      toast.error('Could not submit', apiErrorMessage(e));
     } finally {
       setLoading(false);
     }

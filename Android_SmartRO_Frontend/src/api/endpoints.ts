@@ -1,7 +1,7 @@
 import { api } from './client';
 
 export interface City { id: string; name: string; state: string; isServiceable: boolean; }
-export interface Plan { id: string; name: string; durationDays: number; }
+export interface Plan { id: string; name: string; durationMonths: number; isActive?: boolean; }
 export interface PlanCityPrice {
   id: string; planId: string; cityId: string; productId: string;
   monthlyPricePaise: number; depositPaise: number; plan?: Plan;
@@ -27,19 +27,52 @@ export interface Booking {
   product?: Product; plan?: Plan; city?: City;
   jobs?: { id: string; type: string; scheduledFor: string; status: string; technician?: { id: string; user?: { fullName?: string | null; phone?: string | null } } }[];
 }
+/**
+ * The server sends only these. "Expired" is not a status: it is ACTIVE with
+ * expiresAt <= now (see utils/planState.ts).
+ */
+export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CLOSED';
+/**
+ * CREATED: authorisation not finished · PENDING: a debit failed, Razorpay is
+ * retrying · HALTED: Razorpay gave up · CANCEL_FAILED: we couldn't stop the
+ * mandate (support must) · COMPLETED: the mandate ran out.
+ */
+export type AutopayStatus =
+  | 'CREATED' | 'ACTIVE' | 'PAUSED' | 'PENDING' | 'HALTED' | 'CANCELLED' | 'CANCEL_FAILED' | 'COMPLETED';
+export interface SubscriptionRefund { amountPaise: number; status: 'INITIATED' | 'SUCCESS'; createdAt: string; }
+export interface SubscriptionVisit { scheduledFor: string; type: string; } // type: INSTALL | SERVICE | FILTER | PICKUP
 export interface Subscription {
   id: string; userId: string; productId: string; planId: string;
-  status: 'ACTIVE' | 'TRIAL' | 'PAUSED' | 'GRACE' | 'SUSPENDED' | 'CLOSED';
-  startedAt: string; expiresAt: string; lockInUntil: string;
+  status: SubscriptionStatus;
+  startedAt: string; expiresAt: string;
+  /** End of the first term; cancel is refused between trial end and this. */
+  lockInUntil: string;
+  /** startedAt + 7 days; a cancel before it refunds deposit + first payment. */
   trialEndsAt?: string | null;
+  /** Set while PAUSED; on resume the paused time is added back to expiresAt. */
   pausedAt?: string | null;
   cancelledAt?: string | null;
   autopayId?: string | null;
-  autopayStatus?: 'CREATED' | 'ACTIVE' | 'PAUSED' | 'CANCELLED' | 'HALTED' | null;
+  autopayStatus?: AutopayStatus | null;
   product?: Product; plan?: Plan;
-  device?: { serial: string; lastHeartbeatAt?: string | null; firmwareVersion?: string | null };
+  /** Paired at installation; null before it. */
+  device?: { serial: string; lastHeartbeatAt?: string | null; firmwareVersion?: string | null } | null;
   booking?: Booking;
+  refund?: SubscriptionRefund | null;
+  nextVisit?: SubscriptionVisit | null;
 }
+export type AutopayCreateResult =
+  | { alreadyActive: true; autopayId?: string | null }
+  | {
+      alreadyActive?: false;
+      keyId: string;
+      autopayId: string;
+      shortUrl?: string | null;
+      amountPaise: number;
+      period: 'monthly' | 'yearly';
+      /** First debit on the renewal date; null = immediately after authorising. */
+      firstDebitAt?: string | null;
+    };
 export interface DeviceHealth {
   serial: string;
   isOnline: boolean;
@@ -51,6 +84,16 @@ export interface DeviceHealth {
   subscriptionStatus: string;
   expiresAt: string;
   planName: string;
+}
+/** GET /devices/me/local-access — what the app needs to switch the purifier over home Wi-Fi. */
+export interface LocalAccess {
+  serial: string;
+  /** IPv4 the purifier reported in its last heartbeat. */
+  localIp: string | null;
+  /** 64-char hex key for signing on/off commands; null if the device has no token yet. */
+  localKey: string | null;
+  lastHeartbeatAt: string | null;
+  isOnline: boolean;
 }
 export interface DeviceReading {
   id: string; kind: string;
@@ -120,6 +163,10 @@ export const Auth = {
       .then((r) => r.data.data as { ok: boolean; hasPassword: boolean }),
   me: () => api.get('/auth/me').then((r) => r.data.data),
   logout: (refreshToken?: string) => api.post('/auth/logout', { refreshToken }),
+  // Erases the account. 409 ACCOUNT_HAS_ACTIVE_PLAN / ACCOUNT_REFUND_PENDING
+  // carry a message meant for the customer.
+  deleteAccount: () =>
+    api.post('/auth/account/delete', { confirm: 'DELETE' }).then((r) => r.data.data as { deleted: true }),
 };
 
 export const Catalog = {
@@ -168,15 +215,24 @@ export const Subscriptions = {
 };
 
 export const Payments = {
+  // Which gateway the server runs: 'razorpay' → Checkout flow below; 'stub' → Bookings.pay / Subscriptions.recharge.
+  config: () =>
+    api.get('/payments/config').then((r) => r.data.data as { driver: 'stub' | 'razorpay'; keyId: string | null }),
   createBookingOrder: (bookingId: string) =>
     api.post(`/payments/bookings/${bookingId}/order`).then((r) => r.data.data as { keyId: string; orderId: string; amount: number; currency: string; paymentId: string }),
   createRechargeOrder: (subscriptionId: string, planId?: string) =>
     api.post(`/payments/subscriptions/${subscriptionId}/order`, { planId }).then((r) => r.data.data as { keyId: string; orderId: string; amount: number; currency: string; paymentId: string; planId: string }),
   verify: (input: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
     api.post('/payments/verify', input).then((r) => r.data.data),
+  // Asks Razorpay for this order's payments and settles a captured one: for when
+  // Checkout's answer never reached /verify or can't be trusted. settled → our row is SUCCESS.
+  sync: (orderId: string) =>
+    api.post(`/payments/orders/${orderId}/sync`).then((r) => r.data.data as { status: 'SUCCESS' | 'INITIATED' | 'FAILED'; settled: boolean }),
   autopay: {
+    // ACTIVE → { alreadyActive: true }; CREATED → the stale mandate is replaced.
+    // Refused for PAUSED/CLOSED plans, and 409 RAZORPAY_DISABLED on the stub gateway.
     create: (subscriptionId: string) =>
-      api.post(`/payments/subscriptions/${subscriptionId}/autopay`).then((r) => r.data.data as { keyId: string; autopayId: string; shortUrl?: string; amountPaise: number; period: 'monthly' | 'yearly' }),
+      api.post(`/payments/subscriptions/${subscriptionId}/autopay`).then((r) => r.data.data as AutopayCreateResult),
     cancel: (subscriptionId: string, atCycleEnd = false) =>
       api.post(`/payments/subscriptions/${subscriptionId}/autopay/cancel`, { atCycleEnd }).then((r) => r.data.data),
     pause: (subscriptionId: string) =>
@@ -195,6 +251,8 @@ export const DeviceHealthApi = {
   me: () => api.get('/devices/me/health').then((r) => r.data.data as DeviceHealth | null),
   readings: (kind?: string, limit = 50) =>
     api.get('/devices/me/readings', { params: { kind, limit } }).then((r) => r.data.data as DeviceReading[]),
+  /** null when no purifier is paired with the customer yet. */
+  localAccess: () => api.get('/devices/me/local-access').then((r) => r.data.data as LocalAccess | null),
   registerPushToken: (token: string, platform: 'EXPO' | 'FCM' | 'APNS' = 'EXPO', deviceLabel?: string) =>
     api.post('/devices/me/push-token', { token, platform, deviceLabel }).then((r) => r.data.data),
 };

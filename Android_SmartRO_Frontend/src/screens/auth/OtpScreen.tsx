@@ -16,17 +16,17 @@ import { MotiView } from 'moti';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/auth';
 import { apiErrorMessage, isNetworkError, setStoredUser, setTokens } from '../../api/client';
-import { Auth } from '../../api/endpoints';
 import {
-  confirmPhoneCode,
+  exchangeCodeForSession,
   finishPhoneSignIn,
   firebaseErrorMessage,
+  getDevCode,
   onAutoVerified,
   sendPhoneCode,
 } from '../../utils/firebasePhone';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Otp'>;
@@ -56,7 +56,8 @@ Check your internet connection and tap Verify again — your code is still valid
 
 export function OtpScreen({ navigation, route }: Props) {
   const { phone } = route.params;
-  const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
+  // Web preview: the dev backend hands back the code, so fill it in.
+  const [digits, setDigits] = useState<string[]>(() => getDevCode()?.split('') ?? ['', '', '', '', '', '']);
   const [name, setName] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -101,24 +102,24 @@ export function OtpScreen({ navigation, route }: Props) {
 
   async function onVerify() {
     const otp = digits.join('');
-    if (!autoVerified && otp.length !== 6) return notify('Invalid OTP', 'Enter the 6-digit code.');
-    if (name.trim().length < 2) return notify('Name needed', 'Tell us your name to continue.');
+    if (!autoVerified && otp.length !== 6) return toast.warning('Invalid OTP', 'Enter the 6-digit code.');
+    if (name.trim().length < 2) return toast.warning('Name needed', 'Tell us your name to continue.');
     const referral = referralCode.trim();
     // Shorter than 3 characters, the API rejects the whole login with a bare
     // "Invalid request" that names nothing — catch it where the field is.
     if (referral && referral.length < 3) {
-      return notify(
+      return toast.warning(
         'Check the referral code',
         'A referral code is at least 3 characters. Clear the field if you don’t have one.'
       );
     }
     setLoading(true);
     try {
-      // Firebase proves the number; our API turns that into a SmartRO session.
-      const idToken = await confirmPhoneCode(otp, phone);
+      // Native: Firebase proves the number and our API turns that into a
+      // SmartRO session. Web: the backend checks its own OTP.
       // Call the API directly so we can play the success animation BEFORE
       // committing the user to the auth store (which swaps nav stacks).
-      const data = await Auth.firebaseLogin(idToken, name.trim(), referral || undefined);
+      const data = await exchangeCodeForSession(otp, phone, name.trim(), referral || undefined);
       void finishPhoneSignIn();
       setVerified(true);
       // Let the success animation play, then commit session.
@@ -128,7 +129,7 @@ export function OtpScreen({ navigation, route }: Props) {
         useAuthStore.setState({ user: data.user });
       }, 900);
     } catch (e) {
-      notify('Verification failed', verifyErrorMessage(e));
+      toast.error('Verification failed', verifyErrorMessage(e));
       setLoading(false);
     }
   }
@@ -137,9 +138,11 @@ export function OtpScreen({ navigation, route }: Props) {
     if (seconds > 0) return;
     try {
       await sendPhoneCode(phone, true);
+      const devCode = getDevCode();
+      if (devCode) setDigits(devCode.split(''));
       setSeconds(RESEND_SECONDS);
     } catch (e) {
-      notify('Could not resend', firebaseErrorMessage(e));
+      toast.error('Could not resend', firebaseErrorMessage(e));
     }
   }
 
@@ -488,7 +491,7 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: { shadowOpacity: 0, elevation: 0 },
   // Visually hint "fields incomplete" but keep the button tappable so validation
-  // can surface a helpful notify message instead of a silent dead button.
+  // can surface a helpful warning toast instead of a silent dead button.
   ctaDim: { opacity: 0.6 },
   ctaText: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16, color: '#FFFFFF', letterSpacing: 0.2 },
 

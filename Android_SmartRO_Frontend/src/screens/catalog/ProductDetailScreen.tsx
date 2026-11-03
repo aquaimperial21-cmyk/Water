@@ -19,6 +19,7 @@ import { tokens } from '@theme/tokens';
 import { Aurora, Pill, Skeleton, WaterDrop } from '@ui/index';
 import { paiseToInr } from '../../utils/format';
 import { getDefaultCity } from '../../utils/city';
+import { planLabel, termLength, termPricePaise } from '../../utils/plans';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProductDetail'>;
@@ -41,7 +42,7 @@ const INCLUDED = [
 ];
 
 const FAQS = [
-  { q: 'Is there a deposit?', a: 'A small refundable deposit secures the device. It is fully returned when you end your subscription.' },
+  { q: 'Is there a deposit?', a: 'Yes. You pay your plan\'s full rent upfront plus a refundable security deposit, online via Razorpay. The deposit is refunded after the purifier is picked up and inspected when your subscription ends.' },
   { q: 'What if I move cities?', a: 'We support free relocation once per year across all serviceable cities.' },
   { q: 'Who pays for filters?', a: 'We do. Every replacement filter is included for the lifetime of your subscription.' },
   { q: 'How fast is service?', a: 'Most service requests are resolved within 24 hours. Emergencies within 4 hours.' },
@@ -81,9 +82,8 @@ export function ProductDetailScreen({ route, navigation }: Props) {
         const cityPrices = await Catalog.pricing(p.id, city.id);
         if (!alive) return;
         setPrices(cityPrices);
-        // Pick the 6-month-ish plan if available
-        const popular =
-          cityPrices.find((c) => Math.round((c.plan?.durationDays ?? 30) / 30) === 6) ?? cityPrices[0];
+        // Pick the 6-month plan if available
+        const popular = cityPrices.find((c) => monthsOf(c) === 6) ?? cityPrices[0];
         setSelectedPriceId(popular?.id ?? null);
       } finally {
         if (alive) setLoading(false);
@@ -116,7 +116,11 @@ export function ProductDetailScreen({ route, navigation }: Props) {
   }
 
   const selected = prices.find((p) => p.id === selectedPriceId);
-  const subtotal = selected ? selected.monthlyPricePaise + selected.depositPaise : 0;
+  // What booking will charge: deposit + the whole term (server: termPricePaise).
+  // One month + deposit understated a 6-month plan by more than half.
+  const subtotal = selected
+    ? termPricePaise(selected.monthlyPricePaise, monthsOf(selected)) + selected.depositPaise
+    : 0;
 
   const warrantyYrs = Math.max(1, Math.round(product.warrantyMonths / 12));
   const mountingLabel = product.mounting
@@ -380,6 +384,8 @@ export function ProductDetailScreen({ route, navigation }: Props) {
   );
 }
 
+const monthsOf = (p: PlanCityPrice) => p.plan?.durationMonths ?? 1;
+
 /* ──────────────────────────────────────────────────────────────
    PlanPicker — 2-step tenure toggle inspired by competitor UX.
    Step 1: pill row of tenures (sorted by duration).
@@ -396,23 +402,22 @@ function PlanPicker({
 }) {
   if (!prices.length) return null;
 
-  // Sort by duration ascending so Monthly is leftmost.
-  const sorted = [...prices].sort(
-    (a, b) => (a.plan?.durationDays ?? 30) - (b.plan?.durationDays ?? 30)
-  );
-  const monthly = sorted[0];
+  // Sort by duration ascending so the shortest plan (Monthly) is leftmost.
+  const sorted = [...prices].sort((a, b) => monthsOf(a) - monthsOf(b));
   const selected = sorted.find((p) => p.id === selectedPriceId) ?? sorted[0];
-  const months = Math.max(1, Math.round((selected.plan?.durationDays ?? 30) / 30));
+  const months = monthsOf(selected);
 
-  // Savings vs the monthly (shortest) plan, computed per /mo and over the cycle.
-  const baseMonthly = monthly.monthlyPricePaise;
+  // Savings vs the 1-month plan (else the shortest plan), per month and over
+  // the whole term.
+  const base = sorted.find((p) => monthsOf(p) === 1) ?? sorted[0];
+  const baseMonthly = base?.monthlyPricePaise ?? 0;
   const savePerMonth = Math.max(0, baseMonthly - selected.monthlyPricePaise);
   const totalSave = savePerMonth * months;
   const savePct = baseMonthly > 0 ? Math.round((savePerMonth / baseMonthly) * 100) : 0;
 
   // Pick a "most popular" — the longest plan with a real discount, else 6mo.
-  // (Manual reverse-find so we don't depend on Array.prototype.findLast,
-  //  which isn't available on every Hermes / older browser yet.)
+  // (Manual reverse-find so we don't depend on Array.prototype.findLast, which
+  // isn't available on every Hermes / older browser yet.)
   let popularId: string | null = null;
   for (let i = sorted.length - 1; i >= 0; i--) {
     if (sorted[i].monthlyPricePaise < baseMonthly) {
@@ -421,7 +426,7 @@ function PlanPicker({
     }
   }
   if (!popularId) {
-    const sixMo = sorted.find((p) => Math.round((p.plan?.durationDays ?? 30) / 30) === 6);
+    const sixMo = sorted.find((p) => monthsOf(p) === 6);
     popularId = sixMo?.id ?? null;
   }
 
@@ -434,9 +439,9 @@ function PlanPicker({
       <View style={pickerStyles.pillRow}>
         {sorted.map((p) => {
           const isSel = p.id === selected.id;
-          const m = Math.max(1, Math.round((p.plan?.durationDays ?? 30) / 30));
-          const label = m === 1 ? 'Monthly' : m === 12 ? 'Annual' : `${m} months`;
-          const sub = `${p.plan?.durationDays ?? 30} days`;
+          const m = monthsOf(p);
+          const label = planLabel(m);
+          const sub = termLength(m);
           const isPop = popularId === p.id;
           return (
             <Pressable
@@ -469,8 +474,10 @@ function PlanPicker({
       {/* Step 2 — selected price + savings */}
       <View style={pickerStyles.priceCard}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
-          <Text style={pickerStyles.priceValue}>{paiseToInr(selected.monthlyPricePaise)}</Text>
-          <Text style={pickerStyles.pricePer}>/month</Text>
+          <Text style={pickerStyles.priceValue}>
+            {paiseToInr(selected.monthlyPricePaise)}
+          </Text>
+          <Text style={pickerStyles.pricePer}>/mo</Text>
           {savePct > 0 ? (
             <View style={pickerStyles.saveBadge}>
               <Text style={pickerStyles.saveBadgeText}>
@@ -489,14 +496,6 @@ function PlanPicker({
             : `Refundable deposit ${paiseToInr(selected.depositPaise)}`}
           {' · '}
           {months}-month lock-in
-        </Text>
-      </View>
-
-      {/* Promo hint — kept generic; admin can later push offers via banners */}
-      <View style={pickerStyles.promo}>
-        <Text style={pickerStyles.promoIcon}>%</Text>
-        <Text style={pickerStyles.promoText} numberOfLines={2}>
-          Use code <Text style={{ fontFamily: 'Manrope_800ExtraBold' }}>FLAT100</Text> at checkout to save up to ₹100 more.
         </Text>
       </View>
     </View>
@@ -603,36 +602,6 @@ const pickerStyles = StyleSheet.create({
     fontFamily: 'Manrope_600SemiBold',
     fontSize: 12,
     color: tokens.color.textMuted,
-  },
-
-  promo: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: tokens.color.successSoft,
-    borderWidth: 1,
-    borderColor: tokens.color.success,
-    borderStyle: 'dashed',
-  },
-  promoIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: tokens.color.success,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    lineHeight: 26,
-    fontFamily: 'Manrope_800ExtraBold',
-  },
-  promoText: {
-    flex: 1,
-    fontFamily: 'Manrope_600SemiBold',
-    fontSize: 13,
-    color: tokens.color.success,
   },
 });
 

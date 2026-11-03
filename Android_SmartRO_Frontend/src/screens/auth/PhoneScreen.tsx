@@ -17,7 +17,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { firebaseErrorMessage, sendPhoneCode } from '../../utils/firebasePhone';
 import { tokens } from '@theme/tokens';
 import { Aurora, WaterDrop, WaterDropLogo } from '@ui/index';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
+import { openLegal } from '../../utils/legal';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Phone'>;
@@ -46,7 +47,7 @@ export function PhoneScreen({ navigation }: Props) {
   async function onContinue() {
     const e164 = `+91${phone.replace(/\s+/g, '')}`;
     if (!/^\+\d{10,15}$/.test(e164)) {
-      notify('Invalid number', 'Enter a valid 10-digit Indian mobile number.');
+      toast.warning('Invalid number', 'Enter a valid 10-digit Indian mobile number.');
       return;
     }
     setLoading(true);
@@ -54,7 +55,7 @@ export function PhoneScreen({ navigation }: Props) {
       await sendPhoneCode(e164);
       navigation.navigate('Otp', { phone: e164 });
     } catch (e) {
-      notify('Could not send code', firebaseErrorMessage(e));
+      toast.error('Could not send code', firebaseErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -194,8 +195,8 @@ export function PhoneScreen({ navigation }: Props) {
           {/* mt-6 text-center text-xs text-muted-foreground leading-relaxed */}
           <Text style={styles.terms}>
             By continuing you agree to ImperialAqua's{' '}
-            <Text style={styles.link}>Terms</Text> and{' '}
-            <Text style={styles.link}>Privacy Policy</Text>.
+            <Text style={styles.link} onPress={() => void openLegal('terms')} accessibilityRole="link">Terms</Text> and{' '}
+            <Text style={styles.link} onPress={() => void openLegal('privacy')} accessibilityRole="link">Privacy Policy</Text>.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

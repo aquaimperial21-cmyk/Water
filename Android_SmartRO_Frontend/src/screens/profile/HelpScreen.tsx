@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Headphones, MessageCircle, Phone, HelpCircle } from 'lucide-react-native';
 import { Support } from '../../api/endpoints';
 import { apiErrorMessage } from '../../api/client';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
 
@@ -27,21 +27,21 @@ export function HelpScreen() {
       await Support.createHelpRequest({ channel, topic });
       if (target) await Linking.openURL(target);
     } catch (e) {
-      notify('Could not start support', apiErrorMessage(e));
+      toast.error('Could not start support', apiErrorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
   async function submitMessage() {
-    if (message.trim().length < 5) return notify('Message', 'Add a short description so we can help faster.');
+    if (message.trim().length < 5) return toast.warning('Message', 'Add a short description so we can help faster.');
     setBusy(true);
     try {
       await Support.createHelpRequest({ channel: 'CHAT', topic, message: message.trim() });
-      notify('Message sent', 'Our team will get back within a few minutes.');
+      toast.success('Message sent', 'Our team will get back within a few minutes.');
       setMessage('');
     } catch (e) {
-      notify('Could not send', apiErrorMessage(e));
+      toast.error('Could not send', apiErrorMessage(e));
     } finally {
       setBusy(false);
     }

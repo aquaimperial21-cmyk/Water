@@ -9,7 +9,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Calendar, Check } from 'lucide-react-native';
 import { Bookings, InstallSlot } from '../../api/endpoints';
 import { apiErrorMessage } from '../../api/client';
-import { notify } from '../../utils/confirm';
+import { toast } from '../../utils/messages';
 import { tokens } from '@theme/tokens';
 import { Aurora } from '@ui/index';
 import type { RootStackParamList } from '../../navigation';
@@ -28,7 +28,7 @@ export function InstallSlotScreen({ route, navigation }: Props) {
         const s = await Bookings.installSlots(bookingId);
         setSlots(s);
       } catch (e) {
-        notify('Could not load slots', apiErrorMessage(e));
+        toast.error('Could not load slots', apiErrorMessage(e));
       }
     })();
   }, [bookingId]);
@@ -38,10 +38,10 @@ export function InstallSlotScreen({ route, navigation }: Props) {
     setSubmitting(true);
     try {
       await Bookings.setInstallSlot(bookingId, picked);
-      notify('Installation scheduled', 'A technician will arrive in the selected window.');
+      toast.success('Installation scheduled', 'A technician will arrive in the selected window.');
       navigation.goBack();
     } catch (e) {
-      notify('Could not book slot', apiErrorMessage(e));
+      toast.error('Could not book slot', apiErrorMessage(e));
     } finally {
       setSubmitting(false);
     }

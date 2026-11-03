@@ -15,6 +15,7 @@ export { Tabs } from './Tabs';
 export { SegmentedControl } from './SegmentedControl';
 export { Sheet } from './Sheet';
 export { Dialog } from './Dialog';
+export { MessageHost } from './MessageHost';
 export { EmptyState } from './EmptyState';
 export { ListRow, ListGroup } from './ListRow';
 export { Aurora } from './Aurora';

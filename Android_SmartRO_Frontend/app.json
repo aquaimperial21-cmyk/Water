@@ -13,7 +13,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "in.smartro.customer"
+      "bundleIdentifier": "in.smartro.customer",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "SmartRO connects to your purifier on your home Wi-Fi to turn the water on and off.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "package": "in.smartro.customer",
@@ -37,7 +43,8 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "usesCleartextTraffic": true
           },
           "ios": {
             "useFrameworks": "static"

@@ -12,6 +12,7 @@ import {
   Manrope_800ExtraBold,
 } from '@expo-google-fonts/manrope';
 import { RootNavigator } from './src/navigation';
+import { MessageHost } from './src/components/ui/MessageHost';
 import { tokens } from './src/theme';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <RootNavigator />
+        <MessageHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

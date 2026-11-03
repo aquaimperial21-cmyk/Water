@@ -26,6 +26,8 @@ import {
   Banners,
   Banner as BannerT,
   Catalog,
+  DeviceHealth,
+  DeviceHealthApi,
   Notifications,
   Product,
   Subscriptions,
@@ -43,7 +45,15 @@ import {
 } from '@ui/index';
 import { useAuthStore } from '../../store/auth';
 import type { RootStackParamList } from '../../navigation';
-import { daysFromNow, paiseToInr, formatDate } from '../../utils/format';
+import { paiseToInr, formatDate } from '../../utils/format';
+import { planTermLabel } from '../../utils/plans';
+import {
+  pastPlanSummary,
+  pickDefaultSubscription,
+  planKind,
+  planMonths,
+  planView,
+} from '../../utils/planState';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Filter = 'HOME' | 'COMMERCIAL';
@@ -61,7 +71,7 @@ const TESTIMONIAL = {
 const HOW_STEPS = [
   { Icon: ClipboardList, title: 'Book the perfect plan for you', sub: 'Pick a purifier and rental cycle.' },
   { Icon: UserCheck, title: 'Submit your details', sub: 'Address & quick KYC in 2 minutes.' },
-  { Icon: CreditCard, title: 'Make the payment', sub: 'UPI, card or net-banking. Refundable deposit only.' },
+  { Icon: CreditCard, title: 'Make the payment', sub: 'Plan rent upfront + a refundable deposit, securely via Razorpay.' },
   { Icon: Wrench, title: 'Get ImperialAqua installed in 48 hours', sub: 'Free pro install. Sip clean water.' },
 ];
 
@@ -75,8 +85,8 @@ type CompareRow = {
 };
 
 const COMPARE_ROWS: CompareRow[] = [
-  { feature: 'Machine cost', ours: '₹0', theirs: '₹15,000–₹20,000', advantage: '₹0 machine & installation cost', oursPositive: true, theirsPositive: false },
-  { feature: 'Monthly rental plan', ours: 'Present', theirs: 'Absent', advantage: 'Rental plan starting at just ₹349*', oursPositive: true, theirsPositive: false },
+  { feature: 'Machine cost', ours: 'Rented', theirs: '₹15,000–₹20,000', advantage: 'No machine to buy — plan rent + a refundable deposit', oursPositive: true, theirsPositive: false },
+  { feature: 'Rental plans', ours: '1–12 months', theirs: 'Absent', advantage: 'Rent for 1, 3, 6 or 12 months, paid upfront', oursPositive: true, theirsPositive: false },
   { feature: 'Purification technology', ours: 'RO + UV Lamp', theirs: 'RO + UV LED', advantage: 'Suitable for all types of water', oursPositive: true },
   { feature: 'UV technology', ours: '4 W UV lamp', theirs: '0.7 W in-tank UV LED', advantage: 'High-powered UV lamp', oursPositive: true },
   { feature: 'Copper-impregnated post-carbon', ours: 'Present', theirs: 'Absent', advantage: 'Antimicrobial & health benefits of copper', oursPositive: true, theirsPositive: false },
@@ -93,36 +103,61 @@ export function HomeScreen() {
 
   const [filter, setFilter] = React.useState<Filter>('HOME');
   const [products, setProducts] = React.useState<Product[]>([]);
-  const [subs, setSubs] = React.useState<Subscription[]>([]);
+  // null until the first successful load: an unknown plan is not "no plan".
+  const [subs, setSubs] = React.useState<Subscription[] | null>(null);
+  const [health, setHealth] = React.useState<DeviceHealth | null>(null);
   const [banners, setBanners] = React.useState<BannerT[]>([]);
   const [unread, setUnread] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
+  const [now, setNow] = React.useState(() => new Date());
   const galleryY = React.useRef(0);
   const scrollRef = React.useRef<ScrollView>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [ps, ss, bs, ns] = await Promise.all([
-        Catalog.products(undefined, filter),
-        Subscriptions.mine().catch(() => [] as Subscription[]),
+      const [ps, ss, bs, ns, hs] = await Promise.all([
+        Catalog.products(undefined, filter).catch(() => null),
+        // A failed fetch keeps the last known plans rather than showing "no plan".
+        Subscriptions.mine().catch(() => null),
         Banners.list().catch(() => [] as BannerT[]),
         Notifications.mine().catch(() => ({ items: [], unreadCount: 0 })),
+        DeviceHealthApi.me().catch(() => null),
       ]);
-      setProducts(ps);
-      setSubs(ss);
+      if (ps) setProducts(ps);
+      if (ss) setSubs(ss);
+      setHealth(hs);
       setBanners(bs);
       setUnread(ns.unreadCount);
+      setNow(new Date());
     } finally {
       setLoading(false);
     }
   }, [filter]);
 
-  useFocusEffect(React.useCallback(() => { void refresh(); }, [refresh]));
+  useFocusEffect(
+    React.useCallback(() => {
+      void refresh();
+      // Days left and the expired switch move with the clock (as on My Plan).
+      const tick = setInterval(() => setNow(new Date()), 60_000);
+      return () => clearInterval(tick);
+    }, [refresh])
+  );
   React.useEffect(() => { void refresh(); }, [refresh]);
 
-  const activeSub = subs.find((s) => s.status === 'ACTIVE') ?? subs[0];
-  const hasSubscription = !!activeSub;
+  // Same pick as My Plan: running > paused > expired > closed, newest first.
+  const featured = React.useMemo(() => (subs ? pickDefaultSubscription(subs, now) : null), [subs, now]);
+  const openPlan = featured && featured.status !== 'CLOSED' ? featured : null;
+  // Only closed plans left: no plan, but say when the last one ended.
+  const lastPlan = featured && featured.status === 'CLOSED' ? featured : null;
+
+  // The server's EXPIRING segment looks only at the newest plan's end date, so
+  // it also matches cancelled plans and ones autopay is about to renew — where
+  // a "renew now" offer would mislead or double-charge.
+  const renewalDue = (subs ?? []).some(
+    (s) => planKind(s, now) === 'expiring' && s.autopayStatus !== 'ACTIVE'
+  );
+  const visibleBanners = banners.filter((b) => b.audience !== 'EXPIRING' || renewalDue);
 
   const scrollToGallery = () => {
     scrollRef.current?.scrollTo({ y: Math.max(galleryY.current - 12, 0), animated: true });
@@ -160,14 +195,23 @@ export function HomeScreen() {
         </View>
 
         {/* Banner carousel — admin-pushed offers */}
-        {banners.length > 0 ? <BannerCarousel banners={banners} /> : null}
+        {visibleBanners.length > 0 ? <BannerCarousel banners={visibleBanners} /> : null}
 
         {/* Subscription hero or browse CTA */}
-        {hasSubscription ? (
-          <SubscriptionHero sub={activeSub!} onManage={() => (navigation as any).navigate('MyPlan')} />
-        ) : (
-          <BrowseCTA onBrowse={scrollToGallery} />
-        )}
+        {openPlan ? (
+          <SubscriptionHero
+            sub={openPlan}
+            now={now}
+            health={health}
+            onManage={() => (navigation as any).navigate('MyPlan')}
+          />
+        ) : subs ? (
+          <BrowseCTA onBrowse={scrollToGallery} lastPlan={lastPlan} />
+        ) : loading ? (
+          <View style={[styles.heroCard, { padding: 20 }]}>
+            <Skeleton height={92} radius={20} />
+          </View>
+        ) : null}
 
         {/* Product gallery */}
         <View
@@ -288,7 +332,7 @@ export function HomeScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.savingsHeading}>By renting, not buying</Text>
               <Text style={styles.savingsBody}>
-                Zero upfront. All filters & service included for life.
+                Pay for your plan upfront plus a refundable deposit — filters, service and installation included.
               </Text>
             </View>
           </View>
@@ -355,9 +399,9 @@ export function HomeScreen() {
           <View style={styles.trustCell}>
             <View style={styles.trustValueRow}>
               <Wallet size={14} color={tokens.color.accentGlow} />
-              <Text style={styles.trustValue}>₹0</Text>
+              <Text style={styles.trustValue}>7-day</Text>
             </View>
-            <Text style={styles.trustSub}>Upfront cost</Text>
+            <Text style={styles.trustSub}>Full-refund trial</Text>
           </View>
         </View>
 
@@ -382,6 +426,15 @@ export function HomeScreen() {
 
 /* -------------------- pieces -------------------- */
 
+/** The banner's targeting code ('ALL', 'CITY:<id>'…) in customer words. */
+function audienceLabel(audience: string): string {
+  if (audience === 'HOME') return 'For homes';
+  if (audience === 'COMMERCIAL') return 'For offices';
+  if (audience === 'EXPIRING') return 'Before your plan ends';
+  if (audience.startsWith('CITY:')) return 'In your city';
+  return 'Offer';
+}
+
 function BannerCarousel({ banners }: { banners: BannerT[] }) {
   return (
     <ScrollView
@@ -398,7 +451,7 @@ function BannerCarousel({ banners }: { banners: BannerT[] }) {
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFillObject}
           />
-          <Text style={bannerStyles.audience}>{b.audience}</Text>
+          <Text style={bannerStyles.audience}>{audienceLabel(b.audience)}</Text>
           <Text style={bannerStyles.title} numberOfLines={2}>{b.title}</Text>
           {b.body ? (
             <Text style={bannerStyles.body} numberOfLines={3}>{b.body}</Text>
@@ -461,16 +514,35 @@ const bannerStyles = StyleSheet.create({
   ctaText: { color: '#FFFFFF', fontFamily: 'Manrope_800ExtraBold', fontSize: 11 },
 });
 
-function SubscriptionHero({ sub, onManage }: { sub: Subscription; onManage: () => void }) {
-  const startMs = new Date(sub.startedAt).getTime();
-  const endMs = new Date(sub.expiresAt).getTime();
-  const now = Date.now();
-  const total = Math.max(1, endMs - startMs);
-  const remaining = Math.max(0, endMs - now);
-  const pct = Math.max(0, Math.min(1, remaining / total));
-  const daysLeft = Math.max(0, daysFromNow(sub.expiresAt));
+/** Featured open plan (never CLOSED). Every word comes from planView, so it agrees with My Plan. */
+function SubscriptionHero({
+  sub,
+  now,
+  health,
+  onManage,
+}: {
+  sub: Subscription;
+  now: Date;
+  health: DeviceHealth | null;
+  onManage: () => void;
+}) {
+  // autopayAvailable only shapes autopay wording, which this card doesn't show.
+  const view = planView(sub, now, { autopayAvailable: null });
   const productName = sub.product?.name ?? 'Smart RO Plan';
-  const serial = sub.device?.serial ?? sub.id.slice(-8).toUpperCase();
+  // Only a paired purifier has a serial; before installation there is none.
+  const serial = sub.device?.serial ?? null;
+  // "Renews on" (autopay on) · "Ends on" · "Ended on" · "Paused on".
+  const dateRow = view.rows.find((r) => r.key === 'renew' || r.key === 'end' || r.key === 'paused');
+  const visitRow = view.rows.find((r) => r.key === 'visit');
+  // undefined = the server didn't say; null = nothing booked.
+  const visitKnown = sub.nextVisit !== undefined;
+  // /devices/me/health reports a single purifier (the newest open plan's):
+  // trust it only when it is this plan's purifier.
+  const reported = serial !== null && health?.serial === serial ? health.filterLifePct : null;
+  const filterPct = typeof reported === 'number' && Number.isFinite(reported)
+    ? Math.max(0, Math.min(100, Math.round(reported)))
+    : null;
+  const filterColor = filterPct !== null && filterPct <= 15 ? tokens.color.warn : tokens.color.success;
 
   return (
     <View style={styles.heroCard}>
@@ -482,41 +554,57 @@ function SubscriptionHero({ sub, onManage }: { sub: Subscription; onManage: () =
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.heroTopRow}>
-          <Pill tone="ink" dot>Active</Pill>
-          <Text style={styles.heroSerial}>{serial}</Text>
+          <Pill tone={view.pill.tone} dot>{view.pill.label}</Pill>
+          {serial ? <Text style={styles.heroSerial}>{serial}</Text> : null}
         </View>
         <View style={styles.heroBody}>
           <ProgressRing
-            progress={pct}
-            size={92}
+            progress={view.ring.progress}
+            size={96}
             stroke={8}
-            label={String(daysLeft)}
-            caption="DAYS"
+            label={view.ring.label}
+            caption={view.ring.caption}
             pulse={false}
           />
           <View style={{ flex: 1, minWidth: 0, paddingLeft: 12 }}>
-            <Text style={styles.heroEyebrow}>Current cycle</Text>
+            <Text style={styles.heroEyebrow}>{planTermLabel(planMonths(sub))}</Text>
             <Text style={styles.heroProduct} numberOfLines={1}>{productName}</Text>
-            <Text style={styles.heroRenews}>Renews {formatDate(sub.expiresAt)}</Text>
+            <Text style={styles.heroRenews}>
+              {dateRow ? `${dateRow.label} ${dateRow.value}` : view.daysLeftText}
+            </Text>
           </View>
         </View>
+        <Text style={styles.heroHeadline}>{view.headline}</Text>
       </View>
 
-      <View style={styles.heroMetaRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.metaTitle}>Filter health</Text>
-          <View style={styles.healthBarRow}>
-            <View style={styles.healthBarTrack}>
-              <View style={[styles.healthBarFill, { width: '78%' }]} />
+      {filterPct !== null || visitKnown ? (
+        <View style={styles.heroMetaRow}>
+          {filterPct !== null ? (
+            <View style={{ flex: 1 }}>
+              <Text style={styles.metaTitle}>Filter health</Text>
+              <View style={styles.healthBarRow}>
+                <View style={styles.healthBarTrack}>
+                  <View
+                    style={[
+                      styles.healthBarFill,
+                      { width: `${filterPct}%` as `${number}%`, backgroundColor: filterColor },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.healthValue, { color: filterColor }]}>{filterPct}%</Text>
+              </View>
             </View>
-            <Text style={styles.healthValue}>78%</Text>
-          </View>
+          ) : null}
+          {visitKnown ? (
+            <View style={{ flex: 1 }}>
+              <Text style={styles.metaTitle}>Next visit</Text>
+              <Text style={styles.metaValueLarge} numberOfLines={2}>
+                {visitRow ? visitRow.value : 'None scheduled'}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.metaTitle}>Next service</Text>
-          <Text style={styles.metaValueLarge}>{formatDate(new Date(Date.now() + 8 * 86400000))}</Text>
-        </View>
-      </View>
+      ) : null}
 
       <Pressable onPress={onManage} style={styles.manageRow}>
         <Text style={styles.manageText}>Manage subscription</Text>
@@ -526,7 +614,13 @@ function SubscriptionHero({ sub, onManage }: { sub: Subscription; onManage: () =
   );
 }
 
-function BrowseCTA({ onBrowse }: { onBrowse: () => void }) {
+function BrowseCTA({ onBrowse, lastPlan }: { onBrowse: () => void; lastPlan: Subscription | null }) {
+  // Same end date as My Plan's "Past plans": cancelledAt, else expiresAt.
+  const past = lastPlan ? pastPlanSummary(lastPlan) : null;
+  const lastEnded = lastPlan
+    ? `Your last plan ${lastPlan.cancelledAt ? 'was cancelled' : 'ended'} on ${formatDate(lastPlan.cancelledAt ?? lastPlan.expiresAt)}.`
+    : null;
+
   return (
     <View style={[styles.heroCard, { borderColor: tokens.color.accentSoft }]}>
       <View style={styles.browseTop}>
@@ -535,11 +629,18 @@ function BrowseCTA({ onBrowse }: { onBrowse: () => void }) {
           <Pill tone="accent" dot>No active plan</Pill>
           <WaterDrop size={32} />
         </View>
+        {lastEnded ? (
+          <Text style={styles.browseLast}>
+            {lastEnded}
+            {past?.refund ? ` ${past.refund}.` : ''}
+          </Text>
+        ) : null}
+        {past?.warning ? <Text style={styles.browseWarn}>{past.warning}</Text> : null}
         <Text style={styles.browseHeading}>
           Get clean water flowing{'\n'}in 48 hours.
         </Text>
         <Text style={styles.browseSub}>
-          Zero upfront cost. All filters, service & installation included.
+          Pay for your plan upfront plus a refundable deposit — filters, service and installation included.
         </Text>
 
         <Pressable onPress={onBrowse} style={styles.browseCta}>
@@ -556,18 +657,18 @@ function BrowseCTA({ onBrowse }: { onBrowse: () => void }) {
 
       <View style={styles.browseStats}>
         <View style={styles.browseStatCell}>
-          <Text style={styles.browseStatValue}>₹0</Text>
-          <Text style={styles.browseStatLabel}>Upfront</Text>
-        </View>
-        <View style={styles.browseStatDivider} />
-        <View style={styles.browseStatCell}>
           <Text style={styles.browseStatValue}>48h</Text>
           <Text style={styles.browseStatLabel}>Install</Text>
         </View>
         <View style={styles.browseStatDivider} />
         <View style={styles.browseStatCell}>
-          <Text style={styles.browseStatValue}>∞</Text>
+          <Text style={styles.browseStatValue}>Included</Text>
           <Text style={styles.browseStatLabel}>Service</Text>
+        </View>
+        <View style={styles.browseStatDivider} />
+        <View style={styles.browseStatCell}>
+          <Text style={styles.browseStatValue}>Razorpay</Text>
+          <Text style={styles.browseStatLabel}>Secure pay</Text>
         </View>
       </View>
     </View>
@@ -580,10 +681,11 @@ function ProductCard({ product, onPress }: { product: Product; onPress: () => vo
   // with installs that haven't run the rollup yet.
   const cheapest = product.lowestMonthlyPaise ?? (
     product.prices?.length
-      ? product.prices.reduce(
-          (min, x) => (x.monthlyPricePaise < min ? x.monthlyPricePaise : min),
-          Number.POSITIVE_INFINITY,
-        )
+      ? product.prices
+          .reduce(
+            (min, x) => (x.monthlyPricePaise < min ? x.monthlyPricePaise : min),
+            Number.POSITIVE_INFINITY,
+          )
       : undefined
   );
   const tagline = product.technology;
@@ -638,7 +740,7 @@ function ProductCard({ product, onPress }: { product: Product; onPress: () => vo
           </Text>
           <Text style={styles.cardPerMo}>/mo</Text>
         </View>
-        <Text style={styles.cardSubLine}>{warranty}-year warranty · ₹0 upfront</Text>
+        <Text style={styles.cardSubLine}>{warranty}-year warranty · Service included</Text>
 
         <View style={styles.cardCta}>
           <LinearGradient
@@ -759,6 +861,7 @@ const styles = StyleSheet.create({
   heroEyebrow: { color: 'rgba(255,255,255,0.75)', fontFamily: 'Manrope_700Bold', fontSize: 10.5, letterSpacing: 1.2, textTransform: 'uppercase' },
   heroProduct: { color: '#FFFFFF', fontFamily: 'Manrope_800ExtraBold', fontSize: 18, marginTop: 2 },
   heroRenews: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Manrope_600SemiBold', fontSize: 12, marginTop: 2 },
+  heroHeadline: { color: 'rgba(255,255,255,0.95)', fontFamily: 'Manrope_600SemiBold', fontSize: 13, lineHeight: 18, marginTop: 14 },
 
   heroMetaRow: { flexDirection: 'row', padding: 16, gap: 16 },
   metaTitle: { ...tokens.text.label, color: tokens.color.textSubtle, marginBottom: 6 },
@@ -781,6 +884,8 @@ const styles = StyleSheet.create({
 
   /* Browse CTA */
   browseTop: { padding: 20, position: 'relative' },
+  browseLast: { marginTop: 14, ...tokens.text.bodySm, color: tokens.color.inkSoft, fontFamily: 'Manrope_600SemiBold' },
+  browseWarn: { marginTop: 6, ...tokens.text.bodySm, color: tokens.color.danger, fontFamily: 'Manrope_700Bold' },
   browseHeading: {
     marginTop: 16,
     fontFamily: 'Manrope_800ExtraBold',

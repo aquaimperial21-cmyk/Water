@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -7,28 +8,62 @@ import {
   Text,
   View,
 } from 'react-native';
-import { confirmAction, notify } from '../../utils/confirm';
+import type { AxiosError } from 'axios';
+import { confirmAction, showDialog, toast } from '../../utils/messages';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Beaker,
   Calendar,
+  CalendarClock,
+  Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
+  CreditCard,
+  Info,
   Lock,
   Pause,
+  Play,
+  Power,
+  RefreshCw,
+  ShoppingBag,
+  TriangleAlert,
+  Undo2,
   Wrench,
   Zap,
-  Check,
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Invoice, Invoices, Subscription, Subscriptions, Ticket, Tickets, Payments } from '../../api/endpoints';
-import { Linking } from 'react-native';
+import {
+  Catalog,
+  Invoice,
+  Invoices,
+  Payments,
+  PlanCityPrice,
+  Subscription,
+  Subscriptions,
+  Ticket,
+  Tickets,
+} from '../../api/endpoints';
 import { tokens } from '@theme/tokens';
-import { Aurora, EmptyState, Pill, ProgressRing, Skeleton, WaterDrop } from '@ui/index';
-import { daysFromNow, formatDate, paiseToInr } from '../../utils/format';
+import { Aurora, Button, Chip, EmptyState, Pill, ProgressRing, Skeleton } from '@ui/index';
+import { formatDate, paiseToInr } from '../../utils/format';
 import { apiErrorMessage } from '../../api/client';
+import { PaymentCancelledError, PaymentFailedError, payRecharge } from '../../utils/payments';
+import { cycleLabel, termLength, termPricePaise } from '../../utils/plans';
+import {
+  pastPlanSummary,
+  pickDefaultSubscription,
+  planMonths,
+  planView,
+  rechargeEndDate,
+  resumeEndDate,
+  type PlanRowIcon,
+  type PlanView,
+} from '../../utils/planState';
 import type { RootStackParamList } from '../../navigation';
+import { getCachedAccess } from '../../utils/localPurifier';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -61,33 +96,110 @@ function ticketsToTimeline(tickets: Ticket[]): TimelineItem[] {
   }));
 }
 
+function apiError(e: unknown): { status?: number; code?: string } {
+  const res = (e as AxiosError<{ error?: { code?: string } }> | undefined)?.response;
+  return { status: res?.status, code: res?.data?.error?.code };
+}
+
+const priceKey = (productId: string, cityId: string) => `${productId}:${cityId}`;
+
+const AUTOPAY_UNAVAILABLE = 'Autopay is not available yet. Recharge manually before your plan ends.';
+
+type BusyKey = 'recharge' | 'pause' | 'resume' | 'autopay' | 'cancel' | 'waterTest';
+
 export function MyPlanScreen() {
   const navigation = useNavigation<Nav>();
   const [subs, setSubs] = React.useState<Subscription[] | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [pricing, setPricing] = React.useState<Record<string, PlanCityPrice[]>>({});
+  const [driver, setDriver] = React.useState<'stub' | 'razorpay' | null>(null);
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [timeline, setTimeline] = React.useState<TimelineItem[]>([]);
   const [refreshing, setRefreshing] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
+  const [busy, setBusy] = React.useState<BusyKey | null>(null);
+  const [showPast, setShowPast] = React.useState(false);
+  // The water switch talks to the purifier over Wi-Fi, so it still works when this screen can't load.
+  const [hasLocalSwitch, setHasLocalSwitch] = React.useState(false);
+  const [now, setNow] = React.useState(() => new Date());
+  const subsRef = React.useRef<Subscription[] | null>(null);
+  // Held from the first tap (confirm dialog included) until the action ends,
+  // so a double tap can't queue a second dialog or a second request.
+  const lockRef = React.useRef(false);
 
   const load = React.useCallback(async () => {
     setRefreshing(true);
+    setNow(new Date());
     try {
-      setSubs(await Subscriptions.mine());
+      const list = await Subscriptions.mine();
+      subsRef.current = list;
+      setSubs(list);
+      setLoadError(null);
+      // Current monthly price per product + city: the recharge amount, and the
+      // price shown on the card even after a plan switch.
+      const wanted = new Map<string, { productId: string; cityId: string }>();
+      list.forEach((s) => {
+        if (s.status !== 'CLOSED' && s.booking?.cityId) {
+          wanted.set(priceKey(s.productId, s.booking.cityId), { productId: s.productId, cityId: s.booking.cityId });
+        }
+      });
+      wanted.forEach(({ productId, cityId }, key) => {
+        Catalog.pricing(productId, cityId)
+          .then((prices) => setPricing((p) => ({ ...p, [key]: prices })))
+          .catch(() => {});
+      });
     } catch (e) {
-      notify('Error', apiErrorMessage(e));
+      const message = apiErrorMessage(e);
+      setLoadError(message);
+      if (subsRef.current) toast.error('Could not refresh your plan', message);
+      void getCachedAccess().then((a) => setHasLocalSwitch(!!a));
     } finally {
       setRefreshing(false);
     }
-    // Bills and history are secondary: a failure here hides those sections
-    // rather than blocking the plan itself.
+    // Secondary: a failure hides these rather than blocking the plan itself.
+    Payments.config().then((c) => setDriver(c.driver)).catch(() => {});
     Invoices.mine().then(setInvoices).catch(() => setInvoices([]));
     Tickets.mine().then((t) => setTimeline(ticketsToTimeline(t))).catch(() => setTimeline([]));
   }, []);
 
-  useFocusEffect(React.useCallback(() => { void load(); }, [load]));
-  React.useEffect(() => { void load(); }, [load]);
+  useFocusEffect(
+    React.useCallback(() => {
+      void load();
+      // Days/hours left and the expired switch move with the clock.
+      const tick = setInterval(() => setNow(new Date()), 60_000);
+      return () => clearInterval(tick);
+    }, [load])
+  );
 
-  const sub = subs?.find((s) => s.status === 'ACTIVE') ?? subs?.[0];
+  const selected = React.useMemo(() => {
+    if (!subs) return null;
+    const chosen = subs.find((s) => s.id === selectedId);
+    // A plan the customer just cancelled moves to "Past plans" while others are still open.
+    const keep = chosen && (chosen.status !== 'CLOSED' || subs.every((s) => s.status === 'CLOSED'));
+    return keep ? chosen : pickDefaultSubscription(subs, now);
+  }, [subs, selectedId, now]);
+  const view = React.useMemo(
+    () =>
+      selected
+        ? planView(selected, now, { autopayAvailable: driver === null ? null : driver === 'razorpay' })
+        : null,
+    [selected, now, driver]
+  );
+  const openSubs = React.useMemo(() => (subs ?? []).filter((s) => s.status !== 'CLOSED'), [subs]);
+  const pastSubs = React.useMemo(
+    () => (subs ?? []).filter((s) => s.status === 'CLOSED' && s.id !== selected?.id),
+    [subs, selected]
+  );
+
+  /** Today's listed monthly price for this subscription's plan, or null if unknown. */
+  const listedMonthly = React.useCallback(
+    (sub: Subscription): number | null => {
+      const cityId = sub.booking?.cityId;
+      const prices = cityId ? pricing[priceKey(sub.productId, cityId)] : undefined;
+      return prices?.find((p) => p.planId === sub.planId)?.monthlyPricePaise ?? null;
+    },
+    [pricing]
+  );
 
   // Oldest to newest, last six — the chart reads left to right.
   const bills = React.useMemo(
@@ -103,141 +215,277 @@ export function MyPlanScreen() {
     [invoices]
   );
 
-  const onRecharge = React.useCallback(async () => {
-    if (!sub) return;
-    const ok = await confirmAction({
-      title: 'Recharge plan',
-      message: 'Renew your subscription for another cycle?',
-      confirmLabel: 'Recharge',
-    });
-    if (!ok) return;
-    setBusy(true);
+  const act = React.useCallback(async (key: BusyKey, fn: (start: () => void) => Promise<void>) => {
+    if (lockRef.current) return;
+    lockRef.current = true;
     try {
-      await Subscriptions.recharge(sub.id);
-      await load();
-      notify('Renewed', 'Your subscription has been recharged.');
-    } catch (e) {
-      notify('Recharge failed', apiErrorMessage(e));
+      await fn(() => setBusy(key));
     } finally {
-      setBusy(false);
+      lockRef.current = false;
+      setBusy(null);
     }
-  }, [sub, load]);
+  }, []);
 
-  const onQuickFilter = React.useCallback(async () => {
-    if (!sub) return;
-    setBusy(true);
-    try {
-      await Tickets.create({
-        subscriptionId: sub.id,
-        category: 'FILTER',
-        description: 'Quick filter / water-quality check requested from My Plan.',
-      });
-      notify('Ticket raised', 'A technician will reach out shortly.');
-    } catch (e) {
-      notify('Could not raise ticket', apiErrorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [sub]);
+  const onRecharge = React.useCallback(
+    (sub: Subscription) =>
+      act('recharge', async (start) => {
+        const at = new Date();
+        const months = planMonths(sub);
+        const monthly = listedMonthly(sub);
+        const amount = monthly === null ? null : termPricePaise(monthly, months);
+        const amountText = amount === null ? 'the plan amount' : paiseToInr(amount);
+        const newEnd = rechargeEndDate(sub, at);
+        const running = new Date(sub.expiresAt).getTime() > at.getTime();
+        const parts = [
+          `${amount === null ? 'Price shown at checkout' : paiseToInr(amount)} for ${termLength(months)} · new end date ${formatDate(newEnd)}`,
+        ];
+        if (!running) parts.push('Water comes back on as soon as the payment is confirmed.');
+        if (running && sub.autopayStatus === 'ACTIVE') {
+          parts.push(
+            `Autopay is on, so it will also debit ${amountText} on your renewal date (${formatDate(sub.expiresAt)}). Turn autopay off first if you only want to pay once.`
+          );
+        }
+        const ok = await confirmAction({
+          title: 'Recharge plan',
+          message: parts.join('\n\n'),
+          confirmLabel: amount === null ? 'Recharge' : `Pay ${paiseToInr(amount)}`,
+        });
+        if (!ok) return;
+        start();
+        try {
+          const outcome = await payRecharge(sub.id, `${sub.plan?.name ?? 'Plan'} recharge`);
+          await load();
+          if (outcome === 'pending') {
+            void showDialog({
+              title: 'Payment received',
+              message: 'We are confirming it with your bank. Your new end date shows within a few minutes.',
+            });
+          } else {
+            toast.success('Recharged', `Your plan now runs until ${formatDate(newEnd)}.`);
+          }
+        } catch (e) {
+          if (e instanceof PaymentCancelledError) {
+            toast.info('Payment cancelled', 'If you finished paying in your UPI app, your plan updates here within a few minutes.');
+          } else if (e instanceof PaymentFailedError) {
+            void showDialog({
+              title: 'Payment failed',
+              message: e.maybeCharged ? e.message : `${e.message}\n\nYou have not been charged.`,
+            });
+          } else {
+            // Thrown before Checkout takes any money (config, order, stub recharge).
+            toast.error('Recharge failed', apiErrorMessage(e));
+          }
+        }
+      }),
+    [act, listedMonthly, load]
+  );
 
-  const onPause = React.useCallback(async () => {
-    if (!sub) return;
-    const isPaused = sub.status === 'PAUSED';
-    const ok = await confirmAction({
-      title: isPaused ? 'Resume subscription' : 'Pause subscription',
-      message: isPaused
-        ? 'Resume water flow and billing for this plan?'
-        : 'Pause the device. You can resume any time — billing is frozen while paused.',
-      confirmLabel: isPaused ? 'Resume' : 'Pause',
-    });
-    if (!ok) return;
-    setBusy(true);
-    try {
-      if (isPaused) await Subscriptions.resume(sub.id);
-      else await Subscriptions.pause(sub.id);
-      await load();
-    } catch (e) {
-      notify(isPaused ? 'Resume failed' : 'Pause failed', apiErrorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [sub, load]);
-
-  const onCancel = React.useCallback(async () => {
-    if (!sub) return;
-    const now = new Date();
-    const inTrial = sub.trialEndsAt ? now < new Date(sub.trialEndsAt) : false;
-    const afterLockIn = now >= new Date(sub.lockInUntil);
-    if (!inTrial && !afterLockIn) {
-      notify(
-        'Locked-in',
-        `This plan is locked-in until ${new Date(sub.lockInUntil).toDateString()}. Contact support for exceptions.`,
-      );
-      return;
-    }
-    const blurb = inTrial
-      ? '7-day trial: full refund of deposit + first month rent.'
-      : 'Post lock-in: deposit refunded within 5–7 working days after quality inspection.';
-    const ok = await confirmAction({
-      title: 'Cancel subscription',
-      message: `${blurb}\n\nProceed?`,
-      confirmLabel: 'Cancel plan',
-      destructive: true,
-    });
-    if (!ok) return;
-    setBusy(true);
-    try {
-      const r = await Subscriptions.cancel(sub.id, inTrial ? 'TRIAL_CANCEL' : 'POST_LOCKIN_CANCEL');
-      await load();
-      notify(
-        'Cancellation submitted',
-        `Refund of ₹${Math.round(r.refundPaise / 100)} will be processed in 5–7 working days.`,
-      );
-    } catch (e) {
-      notify('Cancellation failed', apiErrorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [sub, load]);
-
-  const onAutopay = React.useCallback(async () => {
-    if (!sub) return;
-    if (sub.autopayStatus === 'ACTIVE') {
-      const ok = await confirmAction({
-        title: 'Cancel autopay',
-        message: 'Stop automatic monthly debits? You can re-enable autopay any time.',
-        confirmLabel: 'Cancel autopay',
-        destructive: true,
-      });
-      if (!ok) return;
-      setBusy(true);
-      try {
-        await Payments.autopay.cancel(sub.id);
+  const onPause = React.useCallback(
+    (sub: Subscription, v: PlanView) =>
+      act('pause', async (start) => {
+        const ok = await confirmAction({
+          title: 'Pause plan',
+          message:
+            `Pausing turns your water off right away. The time left on your plan (${v.daysLeftText.toLowerCase()}) is added back when you resume.` +
+            (sub.autopayStatus === 'ACTIVE' ? '\n\nAutopay pauses with it.' : ''),
+          confirmLabel: 'Pause',
+        });
+        if (!ok) return;
+        start();
+        try {
+          await Subscriptions.pause(sub.id);
+          toast.success('Plan paused', 'Water is off. Resume any time from here.');
+        } catch (e) {
+          if (apiError(e).code === 'AUTOPAY_PAUSE_FAILED') {
+            toast.error('Plan not paused', "We couldn't pause your autopay, so the plan was left running. Try again in a few minutes.");
+          } else {
+            toast.error('Pause failed', apiErrorMessage(e));
+          }
+        }
         await load();
-        notify('Autopay cancelled', 'Monthly debits stopped. Recharge manually next cycle.');
-      } catch (e) {
-        notify('Could not cancel autopay', apiErrorMessage(e));
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    setBusy(true);
-    try {
-      const r = await Payments.autopay.create(sub.id);
-      await load();
-      if (r.shortUrl) {
-        // Open Razorpay-hosted authorisation page to set up the e-mandate.
-        await Linking.openURL(r.shortUrl);
-      } else {
-        notify('Autopay setup', 'Authorisation link not available. Try again.');
-      }
-    } catch (e) {
-      notify('Could not setup autopay', apiErrorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [sub, load]);
+      }),
+    [act, load]
+  );
+
+  const onResume = React.useCallback(
+    (sub: Subscription) =>
+      act('resume', async (start) => {
+        const newEnd = resumeEndDate(sub, new Date());
+        const ok = await confirmAction({
+          title: 'Resume plan',
+          message:
+            'Water comes back on right away.' +
+            (newEnd ? ` With the paused days added back, your plan ends on ${formatDate(newEnd)}.` : '') +
+            (sub.autopayStatus === 'PAUSED' ? '\n\nAutopay resumes with it.' : ''),
+          confirmLabel: 'Resume',
+        });
+        if (!ok) return;
+        start();
+        try {
+          await Subscriptions.resume(sub.id);
+          toast.success('Plan resumed', 'Water is back on.');
+        } catch (e) {
+          toast.error('Resume failed', apiErrorMessage(e));
+        }
+        await load();
+      }),
+    [act, load]
+  );
+
+  const onCancel = React.useCallback(
+    (sub: Subscription, v: PlanView) =>
+      act('cancel', async (start) => {
+        const c = v.actions.cancel;
+        if (!c.enabled || (c.mode !== 'trial' && c.mode !== 'postLockIn')) return;
+        const refund = paiseToInr(c.refundPaise);
+        const mandateLive =
+          !!sub.autopayStatus && ['CREATED', 'ACTIVE', 'PAUSED', 'PENDING'].includes(sub.autopayStatus);
+        const ok = await confirmAction({
+          title: 'Cancel subscription',
+          message:
+            (c.mode === 'trial'
+              ? `You're inside the 7-day trial, so we refund everything you paid: ${refund} (deposit + first payment). We then collect the purifier.`
+              : `We refund your ${refund} deposit within 5–7 working days, after collecting and checking the purifier.`) +
+            (mandateLive ? '\n\nYour autopay is stopped too.' : ''),
+          confirmLabel: 'Cancel plan',
+          cancelLabel: 'Keep plan',
+          destructive: true,
+        });
+        if (!ok) return;
+        start();
+        try {
+          const r = await Subscriptions.cancel(sub.id, c.mode === 'trial' ? 'TRIAL_CANCEL' : 'POST_LOCKIN_CANCEL');
+          toast.success(
+            'Plan cancelled',
+            r.refundPaise > 0
+              ? `Refund of ${paiseToInr(r.refundPaise)} will be processed in 5–7 working days.`
+              : 'Your plan is closed.'
+          );
+        } catch (e) {
+          if (apiError(e).status === 403) {
+            toast.warning('Locked-in', `This plan is locked in until ${formatDate(sub.lockInUntil)}.`);
+          } else {
+            toast.error('Cancellation failed', apiErrorMessage(e));
+          }
+        }
+        await load();
+      }),
+    [act, load]
+  );
+
+  const onAutopay = React.useCallback(
+    (sub: Subscription, v: PlanView) =>
+      act('autopay', async (start) => {
+        const ap = v.actions.autopay;
+        if (!ap.enabled || !ap.op) return;
+
+        if (ap.op === 'cancel') {
+          const ok = await confirmAction({
+            title: 'Turn off autopay',
+            message: `Stop automatic renewal debits? You'll need to recharge before ${formatDate(sub.expiresAt)} to keep water flowing.`,
+            confirmLabel: 'Turn off',
+            cancelLabel: 'Keep autopay',
+            destructive: true,
+          });
+          if (!ok) return;
+          start();
+          try {
+            await Payments.autopay.cancel(sub.id);
+            toast.success('Autopay off', 'Automatic debits stopped. Recharge manually next cycle.');
+          } catch (e) {
+            toast.error('Could not turn off autopay', apiErrorMessage(e));
+          }
+          await load();
+          return;
+        }
+
+        if (ap.op === 'resume') {
+          const ok = await confirmAction({
+            title: 'Resume autopay',
+            message: 'Turn automatic renewal debits back on?',
+            confirmLabel: 'Resume autopay',
+          });
+          if (!ok) return;
+          start();
+          try {
+            await Payments.autopay.resume(sub.id);
+            toast.success('Autopay on', 'Renewals are automatic again.');
+          } catch (e) {
+            toast.error('Could not resume autopay', apiErrorMessage(e));
+          }
+          await load();
+          return;
+        }
+
+        // create — also finishes a CREATED mandate (the server replaces it).
+        const months = planMonths(sub);
+        const monthly = listedMonthly(sub);
+        const amount = monthly === null ? null : termPricePaise(monthly, months);
+        const ok = await confirmAction({
+          title: sub.autopayStatus === 'CREATED' ? 'Finish autopay setup' : 'Set up autopay',
+          message: `${amount === null ? 'Your plan amount' : paiseToInr(amount)} is debited ${cycleLabel(months)} so your water never stops. You authorise the mandate on Razorpay next, and can turn it off here any time.`,
+          confirmLabel: 'Continue',
+        });
+        if (!ok) return;
+        start();
+        try {
+          const r = await Payments.autopay.create(sub.id);
+          if (r.alreadyActive === true) {
+            toast.info('Autopay is already on');
+          } else if (!r.shortUrl) {
+            toast.error('Autopay setup', 'Authorisation link not available. Try again.');
+          } else {
+            await Linking.openURL(r.shortUrl);
+            toast.info(
+              'Authorise on Razorpay',
+              r.firstDebitAt
+                ? `Your first debit is on ${formatDate(r.firstDebitAt)}.`
+                : 'The first debit happens as soon as you authorise.'
+            );
+          }
+        } catch (e) {
+          if (apiError(e).code === 'RAZORPAY_DISABLED') {
+            setDriver('stub');
+            toast.info('Autopay unavailable', AUTOPAY_UNAVAILABLE);
+          } else {
+            toast.error('Could not set up autopay', apiErrorMessage(e));
+          }
+        }
+        await load();
+      }),
+    [act, listedMonthly, load]
+  );
+
+  const onWaterTest = React.useCallback(
+    (sub: Subscription) =>
+      act('waterTest', async (start) => {
+        start();
+        try {
+          await Tickets.create({
+            subscriptionId: sub.id,
+            category: 'FILTER',
+            description: 'Quick filter / water-quality check requested from My Plan.',
+          });
+          toast.success('Request raised', 'A technician will reach out shortly.');
+          Tickets.mine().then((t) => setTimeline(ticketsToTimeline(t))).catch(() => {});
+        } catch (e) {
+          toast.error('Could not raise request', apiErrorMessage(e));
+        }
+      }),
+    [act]
+  );
+
+  // My Plan lives in the tab navigator; the purifier gallery is on Home.
+  const onBrowse = React.useCallback(
+    () => (navigation as unknown as { navigate: (name: 'Home') => void }).navigate('Home'),
+    [navigation]
+  );
+
+  const chipLabel = (s: Subscription) => {
+    const name = s.product?.name ?? 'Purifier';
+    const twins = openSubs.filter((o) => (o.product?.name ?? 'Purifier') === name).length;
+    return twins > 1 ? `${name} · ${s.device?.serial ?? s.id.slice(-4).toUpperCase()}` : name;
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -259,27 +507,121 @@ export function MyPlanScreen() {
         </View>
 
         {!subs ? (
-          <View style={{ marginTop: 24 }}>
-            <Skeleton height={220} radius={28} />
-          </View>
-        ) : !sub ? (
+          loadError ? (
+            <View style={styles.errorCard}>
+              <TriangleAlert size={22} color={tokens.color.danger} />
+              <Text style={styles.errorTitle}>Couldn't load your plan</Text>
+              <Text style={styles.errorBody}>{loadError}</Text>
+              <Button
+                title="Retry"
+                onPress={() => void load()}
+                loading={refreshing}
+                iconLeft={<RefreshCw size={14} color="#FFFFFF" />}
+                style={{ marginTop: 16 }}
+              />
+              {hasLocalSwitch ? (
+                <Button
+                  title="Water switch"
+                  variant="outline"
+                  onPress={() => navigation.navigate('DeviceHealth')}
+                  iconLeft={<Power size={14} color={tokens.color.text} />}
+                  style={{ marginTop: 10 }}
+                />
+              ) : null}
+            </View>
+          ) : (
+            <View style={{ marginTop: 24 }}>
+              <Skeleton height={220} radius={28} />
+            </View>
+          )
+        ) : !selected || !view ? (
           <View style={{ marginTop: 60 }}>
             <EmptyState
-              title="No active plan"
-              description="Browse purifiers and pick the rental cycle that fits."
+              title="No plan yet"
+              description="Browse purifiers and pick the rental plan that fits."
+              action={
+                <Button
+                  title="Browse purifiers"
+                  onPress={onBrowse}
+                  iconLeft={<ShoppingBag size={14} color="#FFFFFF" />}
+                />
+              }
             />
           </View>
         ) : (
           <>
+            {openSubs.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 16 }}
+                contentContainerStyle={{ gap: 8 }}
+              >
+                {openSubs.map((s) => (
+                  <Chip
+                    key={s.id}
+                    label={chipLabel(s)}
+                    selected={s.id === selected.id}
+                    onPress={busy ? undefined : () => setSelectedId(s.id)}
+                  />
+                ))}
+              </ScrollView>
+            ) : null}
+
             <StatusCard
-              sub={sub}
+              sub={selected}
+              view={view}
+              monthlyPaise={listedMonthly(selected) ?? bookingMonthly(selected)}
               busy={busy}
-              onRecharge={onRecharge}
-              onPause={onPause}
-              onAutopay={onAutopay}
-              onCancel={onCancel}
+              onRecharge={() => void onRecharge(selected)}
+              onPause={() => void onPause(selected, view)}
+              onResume={() => void onResume(selected)}
+              onAutopay={() => void onAutopay(selected, view)}
+              onCancel={() => void onCancel(selected, view)}
+              onInstallSlot={() =>
+                selected.booking && navigation.navigate('InstallSlot', { bookingId: selected.booking.id })
+              }
               onSmartHealth={() => navigation.navigate('DeviceHealth')}
+              onBrowse={onBrowse}
             />
+
+            {pastSubs.length > 0 ? (
+              <View style={styles.pastCard}>
+                <Pressable
+                  onPress={() => setShowPast((v) => !v)}
+                  style={styles.pastHead}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showPast }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.eyebrowMuted}>History</Text>
+                    <Text style={styles.pastHeading}>Past plans ({pastSubs.length})</Text>
+                  </View>
+                  {showPast ? (
+                    <ChevronUp size={18} color={tokens.color.textMuted} />
+                  ) : (
+                    <ChevronDown size={18} color={tokens.color.textMuted} />
+                  )}
+                </Pressable>
+                {showPast
+                  ? pastSubs.map((s) => {
+                      const p = pastPlanSummary(s);
+                      return (
+                        <View key={s.id} style={styles.pastRow}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.pastTitle} numberOfLines={1}>{p.title}</Text>
+                            <Text style={styles.pastMeta}>{p.ended}</Text>
+                            {p.warning ? <Text style={styles.pastWarn}>{p.warning}</Text> : null}
+                          </View>
+                          {p.refund ? (
+                            <Pill tone={p.refundDone ? 'success' : 'warning'} size="sm">{p.refund}</Pill>
+                          ) : null}
+                        </View>
+                      );
+                    })
+                  : null}
+              </View>
+            ) : null}
           </>
         )}
 
@@ -373,60 +715,96 @@ export function MyPlanScreen() {
         </View>
         )}
 
-        {/* Side door — water test */}
-        <Pressable
-          onPress={onQuickFilter}
-          disabled={!sub || busy}
-          style={({ pressed }) => [styles.sideDoor, pressed && { opacity: 0.95 }]}
-        >
-          <View style={styles.sideDoorIcon}>
-            <Beaker size={20} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.sideDoorTitle}>Free water-quality test</Text>
-            <Text style={styles.sideDoorSub}>We come to you. No charge, ever.</Text>
-          </View>
-          <ChevronRight size={18} color={tokens.color.accentInk} />
-        </Pressable>
-
-        <Pressable onPress={onCancel} style={styles.cancelLink}>
-          <Text style={styles.cancelText}>Cancel subscription</Text>
-        </Pressable>
+        {/* Side door — water test, only while water is flowing */}
+        {selected && view?.actions.waterTest.visible ? (
+          <Pressable
+            onPress={() => void onWaterTest(selected)}
+            disabled={busy !== null}
+            style={({ pressed }) => [
+              styles.sideDoor,
+              pressed && { opacity: 0.95 },
+              busy !== null && { opacity: 0.6 },
+            ]}
+          >
+            <View style={styles.sideDoorIcon}>
+              <Beaker size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sideDoorTitle}>
+                {busy === 'waterTest' ? 'Raising request…' : view.actions.waterTest.label}
+              </Text>
+              <Text style={styles.sideDoorSub}>We come to you. No charge, ever.</Text>
+            </View>
+            <ChevronRight size={18} color={tokens.color.accentInk} />
+          </Pressable>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+/**
+ * Fallback price while today's pricing hasn't loaded: the booking was priced
+ * for one whole term, so divide it back to a month — but only while the
+ * booking still describes this plan (after a switch it would be wrong).
+ */
+function bookingMonthly(sub: Subscription): number | null {
+  const b = sub.booking;
+  if (!b || b.planId !== sub.planId) return null;
+  return Math.round((b.firstPaymentPaise + (b.referralCreditPaise ?? 0)) / planMonths(sub));
+}
+
+const ROW_ICON: Record<PlanRowIcon, (color: string) => React.ReactNode> = {
+  renew: (c) => <Zap size={14} color={c} />,
+  end: (c) => <Calendar size={14} color={c} />,
+  lock: (c) => <Lock size={14} color={c} />,
+  visit: (c) => <Wrench size={14} color={c} />,
+  pause: (c) => <Pause size={14} color={c} />,
+  refund: (c) => <Undo2 size={14} color={c} />,
+};
+
+type ActionButtonSpec = {
+  key: string;
+  busyKey: BusyKey | null;
+  label: string;
+  icon: (color: string) => React.ReactNode;
+  enabled: boolean;
+  onPress: () => void;
+};
+
 function StatusCard({
   sub,
+  view,
+  monthlyPaise,
   busy,
   onRecharge,
   onPause,
+  onResume,
   onAutopay,
   onCancel,
+  onInstallSlot,
   onSmartHealth,
+  onBrowse,
 }: {
   sub: Subscription;
-  busy: boolean;
+  view: PlanView;
+  monthlyPaise: number | null;
+  busy: BusyKey | null;
   onRecharge: () => void;
   onPause: () => void;
+  onResume: () => void;
   onAutopay: () => void;
   onCancel: () => void;
+  onInstallSlot: () => void;
   onSmartHealth: () => void;
+  onBrowse: () => void;
 }) {
-  const startMs = new Date(sub.startedAt).getTime();
-  const endMs = new Date(sub.expiresAt).getTime();
-  const now = Date.now();
-  const total = Math.max(1, endMs - startMs);
-  const remaining = Math.max(0, endMs - now);
-  const pct = Math.max(0, Math.min(1, remaining / total));
-  const daysLeft = Math.max(0, daysFromNow(sub.expiresAt));
-  const totalDays = Math.round(total / 86400000);
+  const { actions, kind } = view;
   const productName = sub.product?.name ?? 'Smart RO Plan';
   const tagline = sub.product?.technology ?? 'Premium subscription';
   const paired = Boolean(sub.device?.serial);
   const serial = sub.device?.serial ?? `SUB-${sub.id.slice(-6).toUpperCase()}`;
-  const monthly = sub.booking?.firstPaymentPaise ?? 69900;
+  const waterOff = kind === 'paused' || kind === 'expired';
   const lastSeenMs = sub.device?.lastHeartbeatAt
     ? new Date(sub.device.lastHeartbeatAt).getTime()
     : 0;
@@ -434,152 +812,214 @@ function StatusCard({
   const lastSeen = lastSeenMs
     ? `${Math.max(1, Math.round((Date.now() - lastSeenMs) / 60000))}m ago`
     : 'never';
+  const installed = sub.booking?.status === 'INSTALLED';
+
+  /* Buttons, from the view model */
+  const recharge: ActionButtonSpec = {
+    key: 'recharge',
+    busyKey: 'recharge',
+    label: actions.recharge.label,
+    icon: (c) => <Zap size={14} color={c} />,
+    enabled: actions.recharge.enabled,
+    onPress: onRecharge,
+  };
+  let primary: ActionButtonSpec | null = null;
+  if (kind === 'closed') {
+    primary = { key: 'browse', busyKey: null, label: 'Browse purifiers', icon: (c) => <ShoppingBag size={14} color={c} />, enabled: true, onPress: onBrowse };
+  } else if (actions.primary === 'resume') {
+    primary = { key: 'resume', busyKey: 'resume', label: actions.resume.label, icon: (c) => <Play size={14} color={c} />, enabled: actions.resume.enabled, onPress: onResume };
+  } else if (actions.primary === 'installSlot') {
+    primary = { key: 'installSlot', busyKey: null, label: actions.installSlot.label, icon: (c) => <CalendarClock size={14} color={c} />, enabled: actions.installSlot.enabled, onPress: onInstallSlot };
+  } else if (actions.primary === 'recharge') {
+    primary = recharge;
+  }
+
+  const secondary: ActionButtonSpec[] = [];
+  if (actions.recharge.visible && actions.primary !== 'recharge') secondary.push(recharge);
+  if (actions.pause.visible) {
+    secondary.push({ key: 'pause', busyKey: 'pause', label: actions.pause.label, icon: (c) => <Pause size={14} color={c} />, enabled: actions.pause.enabled, onPress: onPause });
+  }
+  if (actions.autopay.visible) {
+    secondary.push({ key: 'autopay', busyKey: 'autopay', label: actions.autopay.label, icon: (c) => <CreditCard size={14} color={c} />, enabled: actions.autopay.enabled, onPress: onAutopay });
+  }
+  if (actions.smartHealth.visible) {
+    secondary.push({ key: 'smartHealth', busyKey: null, label: actions.smartHealth.label, icon: (c) => <Beaker size={14} color={c} />, enabled: true, onPress: onSmartHealth });
+  }
+  // First row: primary + one secondary (as before); the rest in pairs.
+  const rows: { primary: ActionButtonSpec | null; rest: ActionButtonSpec[] }[] = [];
+  const queue = [...secondary];
+  if (primary) rows.push({ primary, rest: queue.splice(0, 1) });
+  while (queue.length) rows.push({ primary: null, rest: queue.splice(0, 2) });
+
+  /* Why something is greyed out, and autopay state worth knowing */
+  const notes: { key: string; text: string; warn: boolean }[] = [];
+  if (actions.recharge.visible && !actions.recharge.enabled && actions.recharge.reason) {
+    notes.push({ key: 'recharge', text: actions.recharge.reason, warn: false });
+  }
+  const ap = actions.autopay;
+  const apText = ap.note ?? (ap.visible && !ap.enabled ? ap.reason : null);
+  if (apText) notes.push({ key: 'autopay', text: apText, warn: ap.warn });
 
   return (
     <View style={styles.statusCard}>
       <View style={styles.statusHead}>
-        <Pill tone="success" dot>Active</Pill>
+        <Pill tone={view.pill.tone} dot>{view.pill.label}</Pill>
         <Text style={styles.serialText}>{serial}</Text>
       </View>
 
+      <Text style={styles.headline}>{view.headline}</Text>
+
       <View style={styles.statusBody}>
         <ProgressRing
-          progress={pct}
+          progress={view.ring.progress}
           size={132}
           stroke={11}
-          label={String(daysLeft)}
-          caption="DAYS LEFT"
+          label={view.ring.label}
+          caption={view.ring.caption}
           pulse={false}
         />
         <View style={{ flex: 1, minWidth: 0, paddingLeft: 16 }}>
           <Text style={styles.statusTagline}>{tagline}</Text>
           <Text style={styles.statusName} numberOfLines={2}>{productName}</Text>
           <View style={{ marginTop: 10 }}>
-            <Text style={styles.statusPrice}>
-              {paiseToInr(monthly)}
-              <Text style={styles.statusPriceSuffix}>/mo</Text>
+            {monthlyPaise !== null && kind !== 'closed' ? (
+              <Text style={styles.statusPrice}>
+                {paiseToInr(monthlyPaise)}
+                <Text style={styles.statusPriceSuffix}>/mo</Text>
+              </Text>
+            ) : null}
+            <Text style={styles.statusCycle}>
+              {view.daysLeftText}
+              {view.cycleText ? ` · ${view.cycleText}` : ''}
             </Text>
-            <Text style={styles.statusCycle}>of {totalDays}-day cycle</Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.metaPanel}>
-        <MetaRow icon={<Zap size={14} color={tokens.color.accent} />} label="Renews" value={formatDate(sub.expiresAt)} />
-        <MetaRow icon={<Lock size={14} color={tokens.color.accent} />} label="Lock-in until" value={formatDate(sub.lockInUntil)} />
-        <MetaRow icon={<Wrench size={14} color={tokens.color.accent} />} label="Next service" value="May 04, 2026" />
-      </View>
-
-      {/* Device flow status — surfaces ESP32 pairing + heartbeat */}
-      <View style={[styles.metaPanel, { marginTop: 10 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.statusTagline, { color: tokens.color.textMuted }]}>
-              {paired ? 'Paired device' : 'Device pairing'}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={{ fontFamily: 'Manrope_800ExtraBold', color: tokens.color.text, fontSize: 16, marginTop: 2 }}
-            >
-              {paired
-                ? `${serial} · ${isOnline ? 'Flowing' : lastSeenMs ? 'Offline' : 'Awaiting first connect'}`
-                : 'Awaiting hardware install'}
-            </Text>
-            <Text style={{ fontSize: 12, color: tokens.color.textMuted, marginTop: 2 }}>
-              {paired
-                ? `Last heartbeat · ${lastSeen}`
-                : 'We will pair your purifier at installation.'}
-            </Text>
-          </View>
-          <Pill tone={!paired ? 'accent' : isOnline ? 'success' : 'warning'} dot>
-            {!paired ? 'Pending' : isOnline ? 'Online' : 'Offline'}
-          </Pill>
-        </View>
-      </View>
-
-      <View style={styles.actionRow}>
-        <Pressable
-          onPress={onRecharge}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.actionPrimary,
-            pressed && { opacity: 0.95 },
-            busy && { opacity: 0.6 },
-          ]}
-        >
-          <LinearGradient
-            colors={[tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <Zap size={14} color="#FFFFFF" />
-          <Text style={styles.actionPrimaryText}>{busy ? 'Working…' : 'Recharge'}</Text>
-        </Pressable>
-        <Pressable
-          onPress={onPause}
-          style={({ pressed }) => [styles.actionSecondary, pressed && { opacity: 0.95 }]}
-        >
-          <Pause size={14} color={tokens.color.text} />
-          <Text style={styles.actionSecondaryText}>
-            {sub.status === 'PAUSED' ? 'Resume' : 'Pause'}
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={[styles.actionRow, { marginTop: 10 }]}>
-        <Pressable
-          onPress={onAutopay}
-          disabled={busy}
-          style={({ pressed }) => [styles.actionSecondary, pressed && { opacity: 0.95 }]}
-        >
-          <Zap size={14} color={tokens.color.text} />
-          <Text style={styles.actionSecondaryText}>
-            {sub.autopayStatus === 'ACTIVE' ? 'Autopay on' : 'Setup autopay'}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={onSmartHealth}
-          style={({ pressed }) => [styles.actionSecondary, pressed && { opacity: 0.95 }]}
-        >
-          <Beaker size={14} color={tokens.color.text} />
-          <Text style={styles.actionSecondaryText}>Smart health</Text>
-        </Pressable>
-      </View>
-
-      {/* Trial banner shows only inside the 7-day window */}
-      {sub.trialEndsAt && new Date() < new Date(sub.trialEndsAt) ? (
-        <View style={{
-          marginTop: 12,
-          padding: 12,
-          borderRadius: 16,
-          backgroundColor: tokens.color.accentTint,
-          borderWidth: 1,
-          borderColor: tokens.color.accentSoft,
-        }}>
-          <Text style={{ fontFamily: 'Manrope_800ExtraBold', color: tokens.color.accentInk, fontSize: 13 }}>
-            🎉 7-day trial active
-          </Text>
-          <Text style={{ fontSize: 12, color: tokens.color.accentInk, marginTop: 2 }}>
-            Cancel by {new Date(sub.trialEndsAt).toDateString()} for a 100% refund — deposit + first month.
-          </Text>
+      {view.rows.length > 0 ? (
+        <View style={styles.metaPanel}>
+          {view.rows.map((r) => (
+            <MetaRow key={r.key} icon={ROW_ICON[r.icon](tokens.color.accent)} label={r.label} value={r.value} />
+          ))}
         </View>
       ) : null}
 
-      <Pressable
-        onPress={onCancel}
-        style={({ pressed }) => [{
-          marginTop: 10,
-          paddingVertical: 10,
-          alignItems: 'center',
-          opacity: pressed ? 0.6 : 1,
-        }]}
-      >
-        <Text style={{ fontFamily: 'Manrope_700Bold', fontSize: 12, color: tokens.color.textMuted, textDecorationLine: 'underline' }}>
-          Cancel subscription
-        </Text>
-      </Pressable>
+      {/* Device flow status — surfaces ESP32 pairing + heartbeat */}
+      {kind !== 'closed' ? (
+        <View style={[styles.metaPanel, { marginTop: 10 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.statusTagline, { color: tokens.color.textMuted }]}>
+                {paired ? 'Paired device' : 'Device pairing'}
+              </Text>
+              <Text numberOfLines={1} style={styles.deviceTitle}>
+                {paired
+                  ? `${serial} · ${waterOff ? 'Water off' : isOnline ? 'Flowing' : lastSeenMs ? 'Offline' : 'Awaiting first connect'}`
+                  : installed ? 'No device paired' : 'Awaiting hardware install'}
+              </Text>
+              <Text style={styles.deviceSub}>
+                {paired
+                  ? `Last heartbeat · ${lastSeen}`
+                  : installed
+                    ? 'Raise a service request and we will pair it.'
+                    : 'We will pair your purifier at installation.'}
+              </Text>
+            </View>
+            <Pill tone={!paired ? 'accent' : waterOff ? 'neutral' : isOnline ? 'success' : 'warning'} dot>
+              {!paired ? 'Pending' : waterOff ? 'Off' : isOnline ? 'Online' : 'Offline'}
+            </Pill>
+          </View>
+        </View>
+      ) : null}
+
+      {rows.map((row, i) => (
+        <View key={i} style={[styles.actionRow, i > 0 && { marginTop: 10 }]}>
+          {row.primary ? <ActionButton spec={row.primary} primary busy={busy} /> : null}
+          {row.rest.map((b) => (
+            <ActionButton key={b.key} spec={b} busy={busy} />
+          ))}
+        </View>
+      ))}
+
+      {notes.map((n) => (
+        <View key={n.key} style={[styles.note, n.warn && styles.noteWarn]}>
+          {n.warn ? (
+            <TriangleAlert size={14} color={tokens.color.warn} />
+          ) : (
+            <Info size={14} color={tokens.color.textMuted} />
+          )}
+          <Text style={[styles.noteText, n.warn && { color: tokens.color.inkSoft }]}>{n.text}</Text>
+        </View>
+      ))}
+
+      {/* Trial banner shows only inside the 7-day window */}
+      {view.trial ? (
+        <View style={styles.trialBox}>
+          <Text style={styles.trialTitle}>🎉 7-day trial active</Text>
+          <Text style={styles.trialBody}>{view.trial.text}</Text>
+        </View>
+      ) : null}
+
+      {/* The one cancel entry. During lock-in it says when, instead of failing on tap. */}
+      {actions.cancel.visible ? (
+        actions.cancel.enabled ? (
+          <Pressable
+            onPress={onCancel}
+            disabled={busy !== null}
+            style={({ pressed }) => [styles.cancelLink, { opacity: busy !== null ? 0.5 : pressed ? 0.6 : 1 }]}
+          >
+            <Text style={styles.cancelText}>
+              {busy === 'cancel' ? 'Cancelling…' : actions.cancel.label}
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.cancelLink, styles.cancelLocked]}>
+            <Lock size={12} color={tokens.color.textMuted} />
+            <Text style={styles.cancelLockedText}>{actions.cancel.reason}</Text>
+          </View>
+        )
+      ) : null}
     </View>
+  );
+}
+
+function ActionButton({
+  spec,
+  primary,
+  busy,
+}: {
+  spec: ActionButtonSpec;
+  primary?: boolean;
+  busy: BusyKey | null;
+}) {
+  const disabled = !spec.enabled || busy !== null;
+  const working = busy !== null && busy === spec.busyKey;
+  const fg = primary ? '#FFFFFF' : tokens.color.text;
+  return (
+    <Pressable
+      onPress={spec.onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled, busy: working }}
+      style={({ pressed }) => [
+        primary ? styles.actionPrimary : styles.actionSecondary,
+        pressed && { opacity: 0.95 },
+        disabled && { opacity: primary && working ? 0.75 : 0.5 },
+      ]}
+    >
+      {primary ? (
+        <LinearGradient
+          colors={[tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      ) : null}
+      {spec.icon(fg)}
+      <Text style={primary ? styles.actionPrimaryText : styles.actionSecondaryText} numberOfLines={1}>
+        {working ? 'Working…' : spec.label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -598,7 +1038,7 @@ function MetaRow({
         {icon}
         <Text style={metaStyles.label}>{label}</Text>
       </View>
-      <Text style={metaStyles.value}>{value}</Text>
+      <Text style={metaStyles.value} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -609,6 +1049,20 @@ const styles = StyleSheet.create({
   header: { paddingTop: 12 },
   eyebrow: { ...tokens.text.label, color: tokens.color.textSubtle },
   heading: { ...tokens.text.displayMd, color: tokens.color.text, marginTop: 2 },
+
+  /* Load error */
+  errorCard: {
+    marginTop: 24,
+    backgroundColor: tokens.color.surface,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: tokens.color.border,
+    padding: 24,
+    alignItems: 'center',
+    ...tokens.shadow.sm,
+  },
+  errorTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 16, color: tokens.color.text, marginTop: 10 },
+  errorBody: { fontSize: 13, color: tokens.color.textMuted, marginTop: 4, textAlign: 'center' },
 
   /* Status card — mt-5 rounded-3xl shadow-elevated */
   statusCard: {
@@ -622,6 +1076,7 @@ const styles = StyleSheet.create({
   },
   statusHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   serialText: { fontFamily: 'Manrope_700Bold', fontSize: 12, color: tokens.color.textMuted, letterSpacing: 0.6 },
+  headline: { fontFamily: 'Manrope_700Bold', fontSize: 14, lineHeight: 20, color: tokens.color.text, marginTop: 14 },
   statusBody: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
   statusTagline: {
     ...tokens.text.label,
@@ -642,6 +1097,8 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 4,
   },
+  deviceTitle: { fontFamily: 'Manrope_800ExtraBold', color: tokens.color.text, fontSize: 16, marginTop: 2 },
+  deviceSub: { fontSize: 12, color: tokens.color.textMuted, marginTop: 2 },
 
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   actionPrimary: {
@@ -653,9 +1110,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: 8,
     ...tokens.shadow.glow,
   },
-  actionPrimaryText: { fontFamily: 'Manrope_800ExtraBold', color: '#FFFFFF', fontSize: 14 },
+  actionPrimaryText: { fontFamily: 'Manrope_800ExtraBold', color: '#FFFFFF', fontSize: 14, flexShrink: 1 },
   actionSecondary: {
     flex: 1,
     height: 48,
@@ -667,15 +1125,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: 8,
   },
-  actionSecondaryText: { fontFamily: 'Manrope_700Bold', color: tokens.color.text, fontSize: 14 },
+  actionSecondaryText: { fontFamily: 'Manrope_700Bold', color: tokens.color.text, fontSize: 14, flexShrink: 1 },
+
+  note: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: tokens.color.surfaceWarm,
+  },
+  noteWarn: { backgroundColor: tokens.color.warnSoft },
+  noteText: { flex: 1, fontSize: 12, lineHeight: 17, color: tokens.color.textMuted },
+
+  trialBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: tokens.color.accentTint,
+    borderWidth: 1,
+    borderColor: tokens.color.accentSoft,
+  },
+  trialTitle: { fontFamily: 'Manrope_800ExtraBold', color: tokens.color.accentInk, fontSize: 13 },
+  trialBody: { fontSize: 12, color: tokens.color.accentInk, marginTop: 2 },
+
+  cancelLink: { marginTop: 10, paddingVertical: 10, alignItems: 'center' },
+  cancelText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    color: tokens.color.textMuted,
+    textDecorationLine: 'underline',
+  },
+  cancelLocked: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  cancelLockedText: { fontSize: 12, color: tokens.color.textMuted, textAlign: 'center', flexShrink: 1 },
+
+  /* Past plans */
+  pastCard: {
+    marginTop: 20,
+    backgroundColor: tokens.color.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: tokens.color.border,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    ...tokens.shadow.xs,
+  },
+  pastHead: { flexDirection: 'row', alignItems: 'center' },
+  pastHeading: { fontFamily: 'Manrope_800ExtraBold', fontSize: 15, color: tokens.color.text, marginTop: 2 },
+  pastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: tokens.color.border,
+    marginTop: 10,
+  },
+  pastTitle: { fontFamily: 'Manrope_700Bold', fontSize: 13, color: tokens.color.text },
+  pastMeta: { fontSize: 11, color: tokens.color.textMuted, marginTop: 2 },
+  pastWarn: { fontSize: 11, color: tokens.color.warn, marginTop: 2 },
 
   /* Section heads */
   sectionHead: { flexDirection: 'row', alignItems: 'flex-end' },
   eyebrowMuted: { ...tokens.text.label, color: tokens.color.textSubtle },
   sectionTitle: { ...tokens.text.headingLg, color: tokens.color.text, marginTop: 2 },
-  viewAll: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  viewAllText: { fontFamily: 'Manrope_700Bold', color: tokens.color.accent, fontSize: 13 },
 
   /* Timeline */
   timelineWrap: { marginTop: 14, paddingLeft: 28 },
@@ -749,7 +1266,8 @@ const styles = StyleSheet.create({
   billAmount: { fontFamily: 'Manrope_700Bold', fontSize: 9.5, color: tokens.color.textMuted },
   billBarTrack: {
     width: '70%',
-    height: '70%',
+    // Fixed: a % height of an auto-height column is 0 on web, so no bar drew.
+    height: 84,
     overflow: 'hidden',
     borderRadius: 6,
     backgroundColor: 'transparent',
@@ -780,18 +1298,11 @@ const styles = StyleSheet.create({
   },
   sideDoorTitle: { fontFamily: 'Manrope_800ExtraBold', fontSize: 14, color: tokens.color.accentInk },
   sideDoorSub: { fontSize: 11, color: 'rgba(10,74,107,0.7)', marginTop: 2 },
-
-  cancelLink: { marginTop: 32, alignItems: 'center' },
-  cancelText: {
-    fontSize: 12,
-    color: tokens.color.textMuted,
-    textDecorationLine: 'underline',
-  },
 });
 
 const metaStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, gap: 12 },
   left: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { ...tokens.text.bodySm, color: tokens.color.textMuted },
-  value: { fontFamily: 'Manrope_700Bold', color: tokens.color.text, fontSize: 13 },
+  value: { fontFamily: 'Manrope_700Bold', color: tokens.color.text, fontSize: 13, flexShrink: 1, textAlign: 'right' },
 });

@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { MotiView } from 'moti';
-import { notify } from '../../utils/confirm';
+import { showDialog, toast } from '../../utils/messages';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -31,6 +31,8 @@ import { apiErrorMessage } from '../../api/client';
 import { tokens } from '@theme/tokens';
 import { Stepper } from '@ui/index';
 import { paiseToInr } from '../../utils/format';
+import { cycleLabel, planTermLabel, termLength, termPricePaise } from '../../utils/plans';
+import { PaymentCancelledError, PaymentFailedError, payForBooking } from '../../utils/payments';
 import type { RootStackParamList } from '../../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
@@ -42,7 +44,8 @@ const PHASE_INDEX: Record<Phase, number> = {
   identity: 0,
   sign: 1,
   paying: 2,
-  done: 3,
+  // Past the last step, so all four show as finished instead of "4" pending.
+  done: 4,
 };
 
 const STEPS = ['Identity', 'Sign', 'Pay', 'Done'];
@@ -84,8 +87,8 @@ export function BookingScreen({ route, navigation }: Props) {
   }, [productId, planId, cityId]);
 
   async function submitKyc() {
-    if (!/^\d{4}$/.test(aadhaar)) return notify('Aadhaar', 'Enter the last 4 digits');
-    if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(pan.toUpperCase())) return notify('PAN', 'Format ABCDE1234F');
+    if (!/^\d{4}$/.test(aadhaar)) return toast.warning('Aadhaar', 'Enter the last 4 digits');
+    if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(pan.toUpperCase())) return toast.warning('PAN', 'Format ABCDE1234F');
     setWorking(true);
     try {
       await Kyc.submit({ aadhaarLast4: aadhaar, pan: pan.toUpperCase() });
@@ -103,11 +106,33 @@ export function BookingScreen({ route, navigation }: Props) {
     try {
       await Bookings.signAgreement(booking.id);
       setPhase('paying');
-      await Bookings.pay(booking.id);
+      const outcome = await payForBooking(
+        booking.id,
+        `${product?.name ?? 'Purifier'} — ${price?.plan?.name ?? 'rental'}`
+      );
       setPhase('done');
+      if (outcome === 'pending') {
+        void showDialog({
+          title: 'Payment received',
+          message: 'We are confirming it with your bank. Your plan shows as active within a few minutes.',
+        });
+      }
     } catch (e) {
-      setError(apiErrorMessage(e));
+      // A closed or declined Checkout is not a failed booking: stay on this
+      // step so the customer can pay again.
       setPhase('sign');
+      if (e instanceof PaymentCancelledError) {
+        toast.info('Payment cancelled', 'Tap the button to pay when ready. If you finished paying in your UPI app, your plan updates here within a few minutes.');
+      } else if (e instanceof PaymentFailedError) {
+        void showDialog({
+          title: 'Payment failed',
+          message: e.maybeCharged
+            ? e.message
+            : `${e.message}\n\nYou have not been charged. Try again or use another method.`,
+        });
+      } else {
+        setError(apiErrorMessage(e));
+      }
     } finally {
       setWorking(false);
     }
@@ -130,12 +155,17 @@ export function BookingScreen({ route, navigation }: Props) {
     );
   }
 
+  // Show exactly what Razorpay will charge: the booking's own amounts, set by
+  // the server as deposit + the whole term's rent − referral credit (no tax
+  // added on top). The old summary showed one month + 18% GST, about half the
+  // real charge on a 6-month plan.
   const monthly = price?.monthlyPricePaise ?? 0;
-  const deposit = price?.depositPaise ?? 0;
-  const subtotal = monthly + deposit;
-  const gst = Math.round(subtotal * 0.18);
-  const total = subtotal + gst;
-  const months = Math.max(1, Math.round((price?.plan?.durationDays ?? 30) / 30));
+  // Term = rate × calendar months, as the server charges.
+  const months = price?.plan?.durationMonths ?? booking?.plan?.durationMonths ?? 1;
+  const credit = booking?.referralCreditPaise ?? 0;
+  const rent = booking ? booking.firstPaymentPaise + credit : termPricePaise(monthly, months);
+  const deposit = booking?.depositPaise ?? price?.depositPaise ?? 0;
+  const total = booking ? booking.depositPaise + booking.firstPaymentPaise : rent + deposit;
 
   return (
     <View style={styles.root}>
@@ -173,14 +203,21 @@ export function BookingScreen({ route, navigation }: Props) {
         <View style={styles.summary}>
           <View style={styles.summaryHead}>
             <Text style={styles.eyebrow}>Order summary</Text>
-            <Text style={styles.summaryTag}>{months}-month plan</Text>
+            <Text style={styles.summaryTag}>{planTermLabel(months)}</Text>
           </View>
-          <SumRow label="First month" value={paiseToInr(monthly)} />
+          <SumRow
+            label={
+              months > 1
+                ? `Rent · ${months} months × ${paiseToInr(Math.round(rent / months))}`
+                : `Rent · ${termLength(months)}`
+            }
+            value={paiseToInr(rent)}
+          />
+          {credit > 0 ? <SumRow label="Referral credit" value={`− ${paiseToInr(credit)}`} /> : null}
           <SumRow label="Refundable deposit" value={deposit === 0 ? 'Waived' : paiseToInr(deposit)} />
-          <SumRow label="GST 18%" value={paiseToInr(gst)} />
           <View style={styles.summaryDivider} />
           <View style={styles.summaryTotalRow}>
-            <Text style={styles.summaryTotalLabel}>Total today</Text>
+            <Text style={styles.summaryTotalLabel}>{phase === 'done' ? 'Total paid' : 'Total today'}</Text>
             <Text style={styles.summaryTotalValue}>{paiseToInr(total)}</Text>
           </View>
         </View>
@@ -236,9 +273,17 @@ export function BookingScreen({ route, navigation }: Props) {
               <Text style={styles.h2Sub}>Plain English. No fine print games.</Text>
               <View style={{ marginTop: 16, gap: 10 }}>
                 {[
-                  { t: 'Lock-in period', d: `${months} month${months > 1 ? 's' : ''}, then month-to-month.` },
-                  { t: '7-day trial', d: 'Full refund of deposit + first month if you cancel within 7 days of install.' },
-                  { t: 'Recurring billing', d: `${paiseToInr(monthly)} every month. Set up autopay from My Plan, or recharge manually.` },
+                  {
+                    t: 'Lock-in period',
+                    // Lock-in is the plan's own length: it ends when this first term does.
+                    d: `${termLength(months)}, the length of this plan — you can cancel any time after that.`,
+                  },
+                  { t: '7-day trial', d: 'Full refund of everything you paid if you cancel within 7 days of paying.' },
+                  {
+                    t: 'Recurring billing',
+                    // A renewal charges the whole term again, like this first payment.
+                    d: `${paiseToInr(rent)} ${cycleLabel(months)}. Set up autopay from My Plan, or recharge manually.`,
+                  },
                   { t: 'Return policy', d: 'Cancel anytime after lock-in — deposit refunded after pickup & inspection.' },
                   { t: 'Maintenance covered', d: 'All filters, service & visits included.' },
                 ].map((b) => (
@@ -299,7 +344,8 @@ export function BookingScreen({ route, navigation }: Props) {
               <View style={styles.successHalo} />
               <MotiView
                 from={{ scale: 1, opacity: 0.55 }}
-                animate={{ scale: 2, opacity: 0 }}
+                // 2× washed over the order summary card above it.
+                animate={{ scale: 1.6, opacity: 0 }}
                 transition={{ type: 'timing', duration: 2000, loop: true }}
                 style={styles.successHalo}
               />
@@ -312,7 +358,7 @@ export function BookingScreen({ route, navigation }: Props) {
               <View style={styles.factRow}>
                 <FactTile icon={<Truck size={18} color={tokens.color.accentInk} />} title="48 hr" sub="Install" />
                 <FactTile icon={<FilterIcon size={18} color={tokens.color.accentInk} />} title="Filters" sub="Included" />
-                <FactTile icon={<Headphones size={18} color={tokens.color.accentInk} />} title="24/7" sub="Support" />
+                <FactTile icon={<Headphones size={18} color={tokens.color.accentInk} />} title="In-app" sub="Support" />
               </View>
             </MotiView>
           ) : null}
@@ -570,7 +616,9 @@ const styles = StyleSheet.create({
   doneBox: { alignItems: 'center', paddingTop: 20 },
   successHalo: {
     position: 'absolute',
-    top: 0,
+    // Centred on successDisk (20 padding + 24 margin + 40 radius = 84; 84 − 66).
+    // At top: 0 it sat 18px high and ran into the order summary.
+    top: 18,
     width: 132,
     height: 132,
     borderRadius: 66,

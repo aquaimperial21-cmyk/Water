@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Auth } from '../api/endpoints';
 import { clearTokens, getRefreshToken, getStoredUser, setStoredUser, setTokens } from '../api/client';
+import { clearLocalAccess } from '../utils/localPurifier';
 
 export interface AuthUser {
   id: string;
@@ -43,6 +44,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Without it the token stayed valid for its full 30 days.
     try { await Auth.logout((await getRefreshToken()) ?? undefined); } catch { /* ignore */ }
     await clearTokens();
+    // The purifier's local key belongs to this account; don't leave it on a shared phone.
+    await clearLocalAccess();
     set({ user: null });
   },
 }));
