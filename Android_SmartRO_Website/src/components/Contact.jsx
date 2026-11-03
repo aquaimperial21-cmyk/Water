@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { EMAIL, PHONE, WHATSAPP } from '../siteInfo';
 
-const PHONE = '+919595190024';
-const WHATSAPP = '+919595190024';
-const EMAIL = 'aquaimperial21@gmail.com';
 const FORM_ENDPOINT = `https://formsubmit.co/ajax/${EMAIL}`;
 
 const cities = ['Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Satara', 'Other'];
