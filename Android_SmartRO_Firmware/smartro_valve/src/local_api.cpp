@@ -5,6 +5,7 @@
 
 #include "cloud.h"
 #include "config.h"
+#include "ota.h"
 #include "purifier.h"
 #include "util.h"
 
@@ -76,6 +77,7 @@ void sendStatus() {
   doc["ip"] = WiFi.localIP().toString();
   doc["ssid"] = WiFi.SSID();
   doc["rssi"] = WiFi.RSSI();
+  ota::addStatusJson(doc["ota"].to<JsonObject>());
   sendJson(200, doc);
 }
 

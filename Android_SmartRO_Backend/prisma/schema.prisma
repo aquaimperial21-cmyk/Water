@@ -336,6 +336,15 @@ model Device {
   filterLifePct    Int? // 0–100, fall-off counter maintained by firmware
   usageLitresTotal Int       @default(0)
   leakDetectedAt   DateTime?
+  // Remote firmware update (OTA): the release last offered to or reported by
+  // this unit, and how that went. See FirmwareRelease.
+  otaReleaseId     String?
+  otaRelease       FirmwareRelease? @relation(fields: [otaReleaseId], references: [id], onDelete: SetNull)
+  otaStatus        String? // OFFERED | DOWNLOADING | INSTALLED | FAILED | ROLLED_BACK
+  otaError         String?
+  otaAttempts      Int       @default(0) // FAILED / ROLLED_BACK reports for otaReleaseId; offers stop at 3
+  otaRetryGen      Int       @default(0) // +1 on each admin Retry; sent in offers so the chip resets its own try count
+  otaUpdatedAt     DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -344,6 +353,31 @@ model Device {
   readings     DeviceReading[]
 
   @@index([status])
+  @@index([otaReleaseId])
+}
+
+// A signed ESP32 app image that purifiers can download over the air. The
+// .bin lives at UPLOAD_ROOT/<filePath> and is served only through the
+// device-token route GET /devices/:serial/firmware/:releaseId, never the
+// public /uploads handler.
+model FirmwareRelease {
+  id          String   @id @default(uuid())
+  version     String   @unique
+  sizeBytes   Int
+  sha256      String // lowercase hex of the exact .bin bytes
+  signature   String // base64 DER ECDSA P-256 / SHA-256 over the .bin bytes
+  notes       String?
+  filePath    String // relative to UPLOAD_ROOT, e.g. firmware/<id>.bin
+  rollout     String   @default("OFF") // OFF | TEST | ALL
+  testSerials String[] @default([]) // Device.serial values offered the release while rollout = TEST
+  installNow  Boolean  @default(false) // firmware installs at once instead of waiting for a quiet moment
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  devices Device[]
+
+  @@index([rollout, createdAt])
 }
 
 // Append-only telemetry log. ESP32 posts batches; the `kind` discriminates the

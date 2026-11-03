@@ -2,7 +2,8 @@
 // These endpoints are NOT JWT-protected; they validate a per-device token
 // stored on the Device row. The hardware polls /state to decide whether to
 // open or close its solenoid valve, and posts /heartbeat to declare itself
-// alive + report firmware/wifi.
+// alive + report firmware/wifi. Remote firmware updates ride on /state and
+// use /firmware/:releaseId + /ota-report (rules in core/firmware.ts).
 
 import { Router } from 'express';
 import { z } from 'zod';
@@ -13,6 +14,14 @@ import { asyncHandler, BadRequest, Conflict, NotFound, Unauthorized } from '../c
 import { validateBody } from '../core/validate';
 import { hideToken, localKeyFor } from '../core/device-token';
 import { parseGraceDays, pollIntervalSec as computePollIntervalSec } from '../core/poll-schedule';
+import {
+  FIRMWARE_VERSION_RE,
+  OTA_REPORT_STATUSES,
+  mayDownload,
+  recordOtaReport,
+  syncDeviceFirmware,
+} from '../core/firmware';
+import { UPLOAD_ROOT } from './upload';
 
 const router = Router();
 
@@ -72,6 +81,13 @@ router.get(
       now: Date.now(),
     });
 
+    // Remote update: the chip sends the version it runs; `firmware` is present
+    // only when a newer (or replacement) release is rolled out to it. A
+    // malformed header is ignored rather than failing the poll.
+    const fwHeader = req.header('x-firmware-version');
+    const runningVersion = fwHeader && FIRMWARE_VERSION_RE.test(fwHeader) ? fwHeader : undefined;
+    const firmware = await syncDeviceFirmware(device, runningVersion);
+
     res.json({
       data: {
         allowFlow,
@@ -81,8 +97,63 @@ router.get(
         pollIntervalSec,
         message,
         serverTime: new Date().toISOString(),
+        ...(firmware ? { firmware } : {}),
       },
     });
+  })
+);
+
+// The signed image of a release rolled out to this unit. 404 for anything
+// else, so serials can't be used to probe which releases exist.
+router.get(
+  '/:serial/firmware/:releaseId',
+  asyncHandler(async (req, res, next) => {
+    const token = (req.query.token as string | undefined) ?? req.header('x-device-token') ?? undefined;
+    const device = await authorizeDevice(req.params.serial, token);
+    const release = await prisma.firmwareRelease.findUnique({ where: { id: req.params.releaseId } });
+    if (!release || !mayDownload(release, device)) throw NotFound('Firmware release not found');
+
+    res.sendFile(
+      release.filePath,
+      {
+        root: UPLOAD_ROOT,
+        dotfiles: 'deny',
+        cacheControl: false,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Cache-Control': 'no-store',
+          'X-Firmware-Version': release.version,
+          'X-Firmware-Sha256': release.sha256,
+        },
+      },
+      (err?: Error & { code?: string; status?: number }) => {
+        if (!err) return;
+        if (res.headersSent) return; // client went away mid-download
+        next(err.status === 404 || err.code === 'ENOENT' ? NotFound('Firmware file missing') : err);
+      }
+    );
+  })
+);
+
+const otaReportSchema = z.object({
+  releaseId: z.string().min(1).max(64),
+  status: z.enum(OTA_REPORT_STATUSES),
+  error: z.string().max(200).optional(),
+  version: z.string().regex(FIRMWARE_VERSION_RE).optional(),
+});
+
+// Progress of a remote update, posted by the chip: DOWNLOADING when it starts,
+// INSTALLED once the new image runs, FAILED (download/verify/flash error) or
+// ROLLED_BACK (new image did not come up). Offers of a release stop after 3
+// FAILED reports until an admin presses retry.
+router.post(
+  '/:serial/ota-report',
+  validateBody(otaReportSchema),
+  asyncHandler(async (req, res) => {
+    const token = (req.query.token as string | undefined) ?? req.header('x-device-token') ?? undefined;
+    const device = await authorizeDevice(req.params.serial, token);
+    await recordOtaReport(device, req.body as z.infer<typeof otaReportSchema>);
+    res.json({ data: { ok: true } });
   })
 );
 

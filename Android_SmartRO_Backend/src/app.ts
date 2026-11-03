@@ -23,6 +23,7 @@ import paymentRoutes, { webhookRouter as razorpayWebhookRouter } from './modules
 import referralRoutes from './modules/referral';
 import docRoutes from './modules/docs';
 import supportRoutes from './modules/support';
+import firmwareRoutes, { blockPublicFirmware } from './modules/firmware';
 
 export function buildApp() {
   const app = express();
@@ -44,8 +45,9 @@ export function buildApp() {
   app.get('/health', (_req, res) => res.json({ data: { ok: true, ts: new Date().toISOString() } }));
 
   // Static-serve uploaded files. URLs returned by the upload endpoint look
-  // like `/uploads/products/<uuid>.jpg` and resolve here.
-  app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '7d' }));
+  // like `/uploads/products/<uuid>.jpg` and resolve here. Firmware images
+  // (uploads/firmware/) are refused: purifiers fetch them with their token.
+  app.use('/uploads', blockPublicFirmware, express.static(UPLOAD_ROOT, { maxAge: '7d' }));
 
   const v1 = express.Router();
   v1.use('/auth', authRoutes);
@@ -60,6 +62,7 @@ export function buildApp() {
   v1.use('/banners', bannerRoutes);
   v1.use('/notifications', notificationRoutes);
   v1.use('/devices', deviceRoutes);
+  v1.use('/firmware', firmwareRoutes); // remote firmware updates (admin)
   v1.use('/webhooks', webhookRoutes);
   v1.use('/webhooks/razorpay', razorpayWebhookRouter);
   v1.use('/payments', paymentRoutes);

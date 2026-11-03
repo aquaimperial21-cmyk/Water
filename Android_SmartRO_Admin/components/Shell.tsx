@@ -13,6 +13,7 @@ const NAV: Array<{ href: string; label: string; icon: string; group?: string }> 
   { href: '/subscriptions', label: 'Subscriptions', icon: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 6v4l3 3' },
   { href: '/dispatch', label: 'Device dispatch', icon: 'M16 3h5v5M8 21H3v-5M21 3l-7.5 7.5M3 21l7.5-7.5' },
   { href: '/devices', label: 'Paired devices', icon: 'M9 3h6l1 4H8zM5 7h14l-1 13H6zM10 11v6M14 11v6' },
+  { href: '/firmware', label: 'Firmware updates', icon: 'M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM12 9v6M9.5 12.5 12 15l2.5-2.5' },
   { href: '/products', label: 'Products', icon: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z' },
   { href: '/plans', label: 'Plans', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
   { href: '/customers', label: 'Customers', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' },

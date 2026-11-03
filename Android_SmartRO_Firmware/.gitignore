@@ -1,3 +1,6 @@
 # PlatformIO build output and downloaded libraries
 .pio/
 .vscode/
+
+# Signed release files made by tools/release.mjs (upload them in the admin, do not commit)
+dist/

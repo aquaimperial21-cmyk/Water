@@ -41,3 +41,6 @@ deploy/hostinger/backups/
 # The repo is public: never commit these.
 SmartRO_Doc/
 SmartRO_Photos/
+
+# Firmware signing key backup (PRIVATE KEY — never commit or push)
+signing-key-backup/

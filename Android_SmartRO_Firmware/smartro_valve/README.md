@@ -88,6 +88,7 @@ serial <SERIAL>     set the serial               token <TOKEN>   set the token
 ssid <name>         set the Wi-Fi name           pass <password>  set the Wi-Fi password
 setup               open the setup hotspot       wifi-forget      delete the saved Wi-Fi
 on | off            the water switch (ON still needs a paid plan)
+ota                 remote update details     ota now   install the offered update now, not at night
 reboot              apply serial/token/Wi-Fi changes
 factory-reset yes   wipe everything
 ```
@@ -103,7 +104,31 @@ The token for a real purifier comes from admin: shown once after Dispatch → Al
 - Only our server's own JSON answer cuts the water for a wrong token or serial (401 "device token" / 404 "Device not found"). Hosting error pages and timeouts keep the saved plan. While the API is down, the proxy in front of it answers with its own error pages, and that must not shut off every purifier.
 - The app's commands need a one-time code plus a signature made with the purifier's local key. The server gives that key only to the purifier's owner. Other people on the same Wi-Fi can read the status but can't switch the water.
 
+## Remote updates
+
+New firmware reaches purifiers over Wi-Fi. Making, signing and publishing a release: [OTA.md](OTA.md).
+
+- **Every release needs a new `FW_VERSION`** in `platformio.ini`. The purifier sends it with each server check (`X-Firmware-Version`). An offer for the version it already runs is ignored.
+- **When.** The server's `/state` answer offers the update. It installs at night, between 02:00 and 05:00 IST. Each purifier starts at its own minute between 02:00 and 03:59, so they don't all download at once. A release marked *install now* goes at once. Night installs need the clock to be known. An offer heard more than 10 minutes earlier is checked with the server again first.
+- **Checks.** The purifier downloads the `.bin` into its spare app slot and checks its size, its SHA-256 and its ECDSA P-256 signature against the public key in [src/ota_pubkey.h](src/ota_pubkey.h). Only then does it switch to the new firmware and restart. If anything fails, the slot is discarded and the purifier reports `FAILED` with the reason. It tries again after 30 minutes at the earliest, and gives up on a release after 3 failed tries. Pressing **Retry** in admin raises the offer's `retryGen`. When the purifier sees a new `retryGen` for the same release, its tries start again from zero, even after a wrong version label. The monitor shows `[ota] admin pressed Retry for 1.2.0: tries start again`.
+- **The water.** The download runs in the background. The valve, the app's commands and the local API keep working. Server checks pause for the minute or two it takes. The valve closes during the restart, then follows the plan as on any boot.
+- **Rollback.** A new firmware boots *on trial*. It keeps itself once it gets an answer from the server. If it crashes or restarts before that, the bootloader puts the old firmware back. If it has Wi-Fi for 10 minutes in total without getting an answer from the server, it puts the old firmware back itself. Without Wi-Fi it just waits: a router outage never causes a rollback. The old firmware then reports `ROLLED_BACK` (this counts as a failed try).
+- **Wrong version label.** If a release's image reports a different `FW_VERSION` from its release, the purifier keeps the image (it works). It reports `FAILED "installed image reports …"` and never installs that release again (unless an admin presses Retry), so it can't loop.
+- **Watching it.** `status` shows an `OTA` line: `idle`, `1.2.0 offered, waiting for the night window (02:37-05:00 IST)`, `downloading 1.2.0: 42%`, `failed: download: HTTP 404 (try 1 of 3, next in 28 min)` or `pending verify: …`. `ota` prints the details: slots, the offer, tries, last error, memory. `ota now` lets the offered update skip the night window and the 30-minute wait, once. `GET /api/status` has `"ota": {"state", "offeredVersion", "lastError"}`. `state` is one of `idle`, `waiting`, `downloading`, `verifying`, `restarting`, `failed` or `pending_verify`.
+- Saved in flash (NVS namespace `ota`): `pendId`/`pendVer` (installed, waiting for its first boot), `relId`/`fails`/`relGen` (the last offered release, its failed tries and the `retryGen` they count under), `lastErr`, `rbWhy`. `factory-reset` leaves them alone.
+
+### Testing the rollback
+
+Build an image that crashes on purpose and publish it like a normal release. Give it a version label the purifier isn't running, e.g. `1.1.0-crashtest`:
+
+```powershell
+$env:PLATFORMIO_BUILD_FLAGS = "-D OTA_TEST_CRASH_ON_BOOT=1"
+pio run -e production
+Remove-Item Env:PLATFORMIO_BUILD_FLAGS
+```
+
+After an over-the-air install, this image crashes 8 seconds after boot, before it can keep itself. The bootloader puts the old firmware back, and that firmware reports `ROLLED_BACK … it restarted before its first server check (crash)`. Flashed by USB, the same image runs normally: it only crashes while on trial. Build again without the flag before making a real release.
+
 ## Not done yet
 
 - DS3231 clock module support. Without it, water stays off after a power cut until the internet is back.
-- Updates over Wi-Fi (OTA). The flash layout (`min_spiffs.csv`) already has room for them.

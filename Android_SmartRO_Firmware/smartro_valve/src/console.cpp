@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "config.h"
+#include "ota.h"
 #include "purifier.h"
 #include "util.h"
 
@@ -23,7 +24,9 @@ void printHelp() {
       "  setup                  open the Wi-Fi setup hotspot (same as holding BOOT 5 s)\n"
       "  wifi-forget            delete the saved Wi-Fi\n"
       "  on | off               the customer's water switch (ON still needs an active plan)\n"
-      "  reboot                 restart (serial/token/Wi-Fi changes apply after this)\n"
+      "  ota                    remote update details\n"
+      "  ota now                install the offered update now instead of at night (once)\n"
+      "  reboot              restart (serial/token/Wi-Fi changes apply after this)\n"
       "  factory-reset yes      wipe serial, token, Wi-Fi and the saved plan\n");
 }
 
@@ -98,6 +101,17 @@ void handle() {
     } else {
       Serial.printf("Water is %s.\n", purifier::valveOpen() ? "ON" : "OFF");
     }
+  } else if (word == "ota") {
+    String arg = restAfter("ota");
+    arg.trim();
+    arg.toLowerCase();
+    if (arg == "now") {
+      Serial.println(ota::requestNow());
+    } else if (arg.isEmpty()) {
+      ota::printDetail();
+    } else {
+      Serial.println("Type: ota  or  ota now");
+    }
   } else if (word == "reboot" || word == "restart") {
     Serial.println("Restarting...");
     delay(200);
@@ -168,6 +182,7 @@ void printStatus() {
   }
   Serial.printf("Switch        %s\n", purifier::wantOn() ? "ON" : "OFF");
   Serial.printf("Water         %s\n", purifier::valveOpen() ? "ON (valve open)" : "OFF (valve closed)");
+  Serial.printf("OTA           %s\n", ota::statusLine().c_str());
   const String msg = purifier::customerMessage();
   if (msg.length()) Serial.printf("Note          %s\n", msg.c_str());
   Serial.println("----------------------------");

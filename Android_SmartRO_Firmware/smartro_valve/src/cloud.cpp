@@ -8,10 +8,34 @@
 
 #include "certs.h"
 #include "config.h"
+#include "ota.h"
 #include "purifier.h"
 #include "util.h"
 
 namespace cloud {
+
+bool beginRequest(HTTPClient &http, NetworkClientSecure &secure, NetworkClient &plain, const String &path,
+                  uint16_t readTimeoutMs) {
+  const String url = String(API_BASE) + path;
+  NetworkClient *client = &plain;
+  if (url.startsWith("https://")) {
+    secure.setCACert(ROOT_CAS);  // only Let's Encrypt roots: a fake server can't answer
+    secure.setHandshakeTimeout(30);  // seconds; the library default is 120
+    client = &secure;
+  } else if (REQUIRE_HTTPS) {
+    return false;
+  }
+
+  http.setConnectTimeout(8000);
+  http.setTimeout(readTimeoutMs);
+  http.setReuse(false);
+  http.setUserAgent("SmartRO-Valve/" FW_VERSION);
+  if (!http.begin(*client, url)) return false;
+  http.addHeader("X-Device-Token", purifier::token());
+  http.addHeader("X-Firmware-Version", FW_VERSION);  // the server compares it with its releases
+  return true;
+}
+
 namespace {
 
 volatile bool pollSoon_ = false;
@@ -23,23 +47,10 @@ struct Reply {
 
 Reply request(bool post, const String &path, const String &body) {
   Reply r{-1, String()};
-  const String url = String(API_BASE) + path;
-
   NetworkClientSecure secure;
   NetworkClient plain;
-  NetworkClient *client = &plain;
-  if (url.startsWith("https://")) {
-    secure.setCACert(ROOT_CAS);  // only Let's Encrypt roots: a fake server can't answer
-    client = &secure;
-  }
-
   HTTPClient http;
-  http.setConnectTimeout(8000);
-  http.setTimeout(10000);
-  http.setReuse(false);
-  http.setUserAgent("SmartRO-Valve/" FW_VERSION);
-  if (!http.begin(*client, url)) return r;
-  http.addHeader("X-Device-Token", purifier::token());
+  if (!beginRequest(http, secure, plain, path, 10000)) return r;
   http.addHeader("Accept", "application/json");
   if (post) {
     http.addHeader("Content-Type", "application/json");
@@ -104,6 +115,9 @@ Outcome pollState(uint32_t &nextSec) {
     Serial.printf("[cloud] plan %s, allowFlow=%s, until %s, next check in %d s\n",
                   d["status"] | "?", allow ? "true" : "false",
                   until ? formatIsoUtc(until).c_str() : "-", poll);
+
+    ota::handleOffer(d["firmware"].as<JsonObjectConst>());
+    ota::onStateOk();
     return Outcome::Ok;
   }
 
@@ -181,10 +195,14 @@ void task(void *) {
       lastBeatIp = ip;
       beatEveryMs = ok ? timing::HEARTBEAT_MS : 10UL * 60UL * 1000UL;
     }
+
+    ota::service();  // remote update reports and installs; a download blocks this task for a while
   }
 }
 
 }  // namespace
+
+int postJson(const String &path, const String &body) { return request(true, path, body).code; }
 
 void begin() {
   const bool https = String(API_BASE).startsWith("https://");

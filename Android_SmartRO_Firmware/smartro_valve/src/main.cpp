@@ -20,6 +20,7 @@
 #include "config.h"
 #include "console.h"
 #include "local_api.h"
+#include "ota.h"
 #include "portal.h"
 #include "purifier.h"
 #include "util.h"
@@ -154,6 +155,7 @@ void setup() {
   console::begin(hostName);
 
   Serial.printf("\n\nSmartRO valve firmware %s (%s)\n", FW_VERSION, hostName.c_str());
+  ota::begin();  // a new update on trial, or the result of the last one
   if (!purifier::provisioned()) {
     Serial.println("Not set up yet. Type:  serial <SERIAL>  then  token <TOKEN>  then  reboot");
   }
@@ -178,6 +180,7 @@ void loop() {
   }
   server.handleClient();
   purifier::updateValve();
+  ota::loop();
   updateLed();
   delay(2);
 }

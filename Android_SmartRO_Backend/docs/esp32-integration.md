@@ -137,6 +137,65 @@ Response (200):
 { "data": { "lastHeartbeatAt": "…", "firmwareVersion": "1.4.2", "wifiSsid": "Customer-Home", "localIp": "192.168.1.50", … } }
 ```
 
+## Remote firmware updates (OTA)
+
+Images are signed on the release PC (`Android_SmartRO_Firmware/tools/release.mjs`):
+ECDSA P-256 over SHA-256 of the exact `.bin` bytes, DER signature in base64,
+`sha256` in lowercase hex. The server checks every upload against
+`keys/firmware-signing-public.pem` (override: `FIRMWARE_PUBKEY_PATH`), and
+the chip checks the signature again before it boots the new image.
+
+**Offer.** Every `/state` poll may send `X-Firmware-Version: <running
+version>` (1–40 of `A-Z a-z 0-9 . _ + -`; anything else is ignored). The
+server stores it as `Device.firmwareVersion`, and marks the update
+`INSTALLED` when it equals the offered release. The response then carries
+
+```json
+"firmware": { "id": "<releaseId>", "version": "1.1.0", "size": 1395136,
+              "sha256": "<hex>", "signature": "<base64 DER>", "installNow": false,
+              "retryGen": 0 }
+```
+
+only when a release is rolled out to the unit (`ALL`, or `TEST` with its
+serial listed; the newest one wins), its version differs from the running
+one, and the unit has not already failed or rolled it back 3 times.
+Otherwise the key is absent. `retryGen` goes up by one each time an admin
+presses Retry for the unit; the chip keeps its own try count per release and
+resets it when `retryGen` changes.
+
+**Download.** `GET /api/v1/devices/:serial/firmware/:releaseId` (device
+token) streams the image as `application/octet-stream` with an exact
+`Content-Length` (Range requests work). 404 unless the release is rolled out
+to the unit or is the one it was offered. Images are never served from the
+public `/uploads/...` path.
+
+**Progress.** `POST /api/v1/devices/:serial/ota-report` (device token)
+
+```json
+{ "releaseId": "…", "status": "DOWNLOADING|FAILED|INSTALLED|ROLLED_BACK", "error": "≤200 chars", "version": "1.0.0" }
+```
+
+`FAILED` and `ROLLED_BACK` count an attempt; after 3 `FAILED` the release is
+no longer offered to that unit until an admin presses retry. `INSTALLED`
+clears the error. Each report is audited as `DEVICE_OTA_<STATUS>`. Answer:
+`{ "data": { "ok": true } }`; unknown `releaseId` is a 404.
+
+**Admin** (`/api/v1/firmware/admin/...`, ADMIN JWT; the console's Firmware
+page): `POST releases` (multipart `file`, `manifest`, optional `notes`;
+starts with rollout `OFF`), `GET releases` (with fleet counts), `PATCH
+releases/:id` (`rollout`, `testSerials`, `installNow`, `notes`), `GET
+devices`, `POST devices/:serial/retry`.
+
+**Without the console**, inside the API container:
+
+```bash
+docker compose exec api npm run firmware:add -- /tmp/fw.bin /tmp/fw.release.json "notes"
+docker compose exec api npm run firmware:rollout -- 1.1.0 TEST SR-AP-000105,SR-AP-000106
+docker compose exec api npm run firmware:rollout -- 1.1.0 ALL --now
+```
+
+(copy the files in first with `docker compose cp <file> api:/tmp/`).
+
 ## Failure modes
 
 The firmware saves the last `/state` answer in flash, so a reboot does not
