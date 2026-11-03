@@ -21,3 +21,9 @@ String formatIsoUtc(uint32_t epoch);
 
 // Last 6 hex digits of the Wi-Fi MAC, lowercase. Used in names: smartro-a1b2c3.
 String macSuffix();
+
+// Milliseconds since boot, 64-bit: never wraps (millis() wraps after 49 days).
+int64_t uptimeMs();
+
+// "23 h 59 min", "4 min 12 s", "42 s"
+String formatWait(uint32_t sec);

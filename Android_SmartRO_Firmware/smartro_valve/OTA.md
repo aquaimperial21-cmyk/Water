@@ -8,7 +8,7 @@ You need three things: this repo, PlatformIO, and the admin console (**Firmware 
 1. You build the firmware and **sign** it on your PC. Only your PC has the signing key.
 2. You upload the two signed files in the admin console. A new release starts **Off**.
 3. You switch it on: first for one **Test** purifier, then for **All purifiers**.
-4. Each purifier checks in with the server about once an hour. The server's answer tells it about the update.
+4. Each purifier checks in with the server about once a day, and also every night at its own minute between 02:00 and 03:59 IST (firmware 1.1.2+; older firmware checks about once an hour). The server's answer tells it about the update, so a release switched on during the day is heard that night.
 5. The purifier waits for the night window (**02:00–05:00 IST**). Then it downloads the file.
 6. It checks the file's SHA-256 and signature. If either is wrong, it throws the file away and keeps its old firmware.
 7. It restarts into the new firmware. The new firmware must reach the server within 10 minutes. If it can't, the purifier goes back to the old firmware by itself.
@@ -61,7 +61,7 @@ Do these in order. Don't skip the test.
    Pick the `.bin`, then the `.release.json`. Check that the version and size look right. Add a note. Click **Upload**.
 5. **Test on one purifier.** On the new release's row, click **Test**. Enter `SR-TEST-0001` and save.
    Then turn on **Install now (skip night window)**.
-6. **Make the test purifier check in.** Unplug it for a few seconds, or type `reboot` in its serial monitor.
+6. **Make the test purifier check in.** Type `refresh` in its serial monitor, or unplug it for a few seconds.
    With the monitor open you can type `ota` to watch the update.
 7. **Check it worked.** In the *Purifiers* table, SR-TEST-0001 should go Offered → Downloading → **Installed**,
    and its Version should show `1.2.0`. Turn the water off and on from the app to be sure it still works.
@@ -111,7 +111,8 @@ Open PlatformIO **Monitor** with the purifier plugged in by USB.
 |---|---|
 | `ota` | Shows the update details: what is offered, how far it got, and the last error. |
 | `ota now` | Lets the offered update skip the night window (and the wait after a failure), once. |
-| `status` | One-line summary, including the firmware version and update state. |
+| `status` | One-line summary, including the firmware version, update state and when the next server check is. |
+| `refresh` | Checks in with the server now, so it hears about an update at once. |
 | `reboot` | Restarts. The purifier checks in with the server right away. |
 
 ## Back up the signing key
@@ -189,12 +190,12 @@ Replace `1.2.0` with your version.
 | Upload: "File size differs" or "SHA-256 doesn't match" | The `.bin` and `.json` are from different builds. | Pick both files with the same version from `dist/`. |
 | Upload: signature error from the server | Files were changed after signing, or signed with another key. | Sign again and upload the new files. |
 | Page says the server doesn't have firmware updates yet (404) | The backend isn't deployed with OTA support yet. | Deploy the latest backend, then refresh. |
-| Purifier stays **Offered** | It's waiting for the night window, or is offline. | Normal. For a test, turn on Install now and unplug it for a few seconds, or type `ota now`. |
+| Purifier stays **Offered** | It's waiting for the night window, or is offline. | Normal. For a test, turn on Install now and type `refresh` (or unplug it for a few seconds), or type `ota now`. |
 | Purifier shows no update at all | It isn't in the test list, hasn't checked in yet, or runs firmware older than 1.1.0. | Check the test list and its Version column. Older chips need the USB flash. |
 | **Failed** with a signature or SHA-256 error | The file is damaged, or signed with the wrong key. | Don't Retry. Turn the release Off and sign/upload it again. |
 | **Failed** with a download or time-out error | Weak Wi-Fi. | It retries by itself. After 3 tries, fix the Wi-Fi and press Retry. |
 | **Rolled back** | The new firmware crashed, or couldn't reach the server for 10 minutes. | Turn the release Off. Reproduce on SR-TEST-0001 with the monitor open. Release a fixed, higher version. |
-| Last seen shows **Offline** | No check-in for 90 minutes. | Check the purifier's power and Wi-Fi. It updates once it's back. |
+| Last seen shows **Offline** | No check-in for 25 hours (chips check in about once a day). | Check the purifier's power and Wi-Fi. It updates once it's back. |
 
 ## Reference
 

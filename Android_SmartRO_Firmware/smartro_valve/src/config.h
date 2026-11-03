@@ -33,10 +33,22 @@ constexpr uint32_t SETUP_HOLD_MS = 5000;
 constexpr uint32_t SETUP_TIMEOUT_MS = 10UL * 60UL * 1000UL;
 // A Wi-Fi network that has never worked gets this long before setup reopens.
 constexpr uint32_t FIRST_JOIN_TIMEOUT_MS = 45UL * 1000UL;
-// Heartbeat cadence (the server marks a purifier offline after 90 minutes).
-constexpr uint32_t HEARTBEAT_MS = 30UL * 60UL * 1000UL;
+// Heartbeat: once after boot, after every Wi-Fi (re)connect or IP change, and
+// at least this often. Every /state check also sends the IP (X-Local-Ip).
+constexpr uint32_t HEARTBEAT_MS = 24UL * 60UL * 60UL * 1000UL;
+// A failed heartbeat is tried again after this long.
+constexpr uint32_t HEARTBEAT_RETRY_MS = 10UL * 60UL * 1000UL;
 // Poll cadence when the server doesn't send pollIntervalSec.
 constexpr uint32_t DEFAULT_POLL_SEC = 300;
+// The server's pollIntervalSec is kept inside this range (about once a day while paid).
+constexpr uint32_t POLL_MIN_SEC = 30;
+constexpr uint32_t POLL_MAX_SEC = 86400;
+// A check is also timed this long after the plan's end, to see a last-minute recharge.
+constexpr uint32_t PLAN_END_MARGIN_SEC = 5;
+// The cloud task wakes at least this often for update housekeeping (ota::service).
+constexpr uint32_t CLOUD_TICK_MS = 1000;
+// The app's POST /api/refresh works at most once per this long.
+constexpr uint32_t REFRESH_MIN_GAP_MS = 10UL * 1000UL;
 // After the server says the token or serial is wrong.
 constexpr uint32_t PAIRING_RETRY_SEC = 15UL * 60UL;
 // Retry after a failed poll: starts here and doubles up to the max.

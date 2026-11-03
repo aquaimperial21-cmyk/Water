@@ -84,7 +84,7 @@ void onConnected() {
   }
   Serial.printf("[wifi] the app reaches this purifier at http://%s/ (or http://%s.local/)\n",
                 WiFi.localIP().toString().c_str(), hostName.c_str());
-  cloud::pollSoon();
+  cloud::wifiConnected();  // check the server and send the (maybe new) IP right away
 }
 
 void normalLoop() {

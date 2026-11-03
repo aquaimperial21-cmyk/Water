@@ -36,6 +36,11 @@ void onStateOk();
 void service();
 
 // ── Any task ────────────────────────────────────────────────────────────────
+// UTC seconds of this purifier's next night-window start (its own minute in
+// 02:00-03:59 IST) strictly after utc. The cloud task checks the server then,
+// so an update switched on during the day is heard and installed that night
+// even though a paid purifier otherwise checks only once a day.
+uint32_t nextWindowStart(uint32_t utc);
 // Console "ota now": the offered update may skip the night window (and the
 // retry wait) once. Returns what to tell the technician.
 String requestNow();

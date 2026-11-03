@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 
+#include "cloud.h"
 #include "config.h"
 #include "ota.h"
 #include "purifier.h"
@@ -24,9 +25,10 @@ void printHelp() {
       "  setup                  open the Wi-Fi setup hotspot (same as holding BOOT 5 s)\n"
       "  wifi-forget            delete the saved Wi-Fi\n"
       "  on | off               the customer's water switch (ON still needs an active plan)\n"
+      "  refresh                check the server now (plan changes, update offers)\n"
       "  ota                    remote update details\n"
       "  ota now                install the offered update now instead of at night (once)\n"
-      "  reboot              restart (serial/token/Wi-Fi changes apply after this)\n"
+      "  reboot                 restart (serial/token/Wi-Fi changes apply after this)\n"
       "  factory-reset yes      wipe serial, token, Wi-Fi and the saved plan\n");
 }
 
@@ -100,6 +102,14 @@ void handle() {
       Serial.printf("Switch is ON, but the water stays off: %s\n", purifier::customerMessage().c_str());
     } else {
       Serial.printf("Water is %s.\n", purifier::valveOpen() ? "ON" : "OFF");
+    }
+  } else if (word == "refresh") {
+    if (!cloud::running()) {
+      Serial.println("No server checks: this purifier has no serial/token yet (or this build can't reach the server).");
+    } else {
+      cloud::pollSoon();  // the same check the app's /api/refresh asks for
+      Serial.println(WiFi.status() == WL_CONNECTED ? "Checking the server now."
+                                                   : "Checks the server as soon as Wi-Fi is back.");
     }
   } else if (word == "ota") {
     String arg = restAfter("ota");
@@ -179,6 +189,21 @@ void printStatus() {
     Serial.printf("Last server   %ld s ago (%s)\n", static_cast<long>(ago), purifier::cloudOk() ? "ok" : "last try failed");
   } else {
     Serial.println("Last server   no answer since boot");
+  }
+  const cloud::NextCheck next = cloud::nextCheck();
+  if (!next.running) {
+    Serial.println("Next check    none (no serial/token, or server checks off in this build)");
+  } else if (WiFi.status() != WL_CONNECTED && next.inMs == 0) {
+    Serial.printf("Next check    as soon as Wi-Fi is back (%s)\n", next.why);
+  } else {
+    const uint32_t inSec = static_cast<uint32_t>((next.inMs + 999) / 1000);
+    if (inSec == 0) {
+      Serial.printf("Next check    now (%s)\n", next.why);
+    } else {
+      String at;
+      if (now) at = String(", at ") + formatIsoUtc(now + inSec);
+      Serial.printf("Next check    in %s%s (%s)\n", formatWait(inSec).c_str(), at.c_str(), next.why);
+    }
   }
   Serial.printf("Switch        %s\n", purifier::wantOn() ? "ON" : "OFF");
   Serial.printf("Water         %s\n", purifier::valveOpen() ? "ON (valve open)" : "OFF (valve closed)");

@@ -2,6 +2,7 @@
 
 #include <esp_mac.h>
 #include <esp_random.h>
+#include <esp_timer.h>
 #include <mbedtls/md.h>
 #include <time.h>
 
@@ -83,5 +84,20 @@ String macSuffix() {
   esp_read_mac(mac, ESP_MAC_WIFI_STA);  // works before Wi-Fi starts
   char buf[7];
   snprintf(buf, sizeof(buf), "%02x%02x%02x", mac[3], mac[4], mac[5]);
+  return String(buf);
+}
+
+int64_t uptimeMs() { return esp_timer_get_time() / 1000; }
+
+String formatWait(uint32_t sec) {
+  char buf[32];
+  if (sec >= 3600) {
+    snprintf(buf, sizeof(buf), "%lu h %lu min", static_cast<unsigned long>(sec / 3600),
+             static_cast<unsigned long>((sec / 60) % 60));
+  } else if (sec >= 60) {
+    snprintf(buf, sizeof(buf), "%lu min %lu s", static_cast<unsigned long>(sec / 60), static_cast<unsigned long>(sec % 60));
+  } else {
+    snprintf(buf, sizeof(buf), "%lu s", static_cast<unsigned long>(sec));
+  }
   return String(buf);
 }

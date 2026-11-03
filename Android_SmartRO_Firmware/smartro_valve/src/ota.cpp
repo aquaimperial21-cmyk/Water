@@ -1037,6 +1037,13 @@ void service() {
   install(v.offer);  // returns only on failure
 }
 
+uint32_t nextWindowStart(uint32_t utc) {
+  const uint32_t s = istSecOfDay(utc);
+  uint32_t ahead = (windowFrom_ + 86400UL - s) % 86400UL;
+  if (ahead == 0) ahead = 86400UL;  // at the start now: the next one is tomorrow
+  return utc + ahead;
+}
+
 String requestNow() {
   if (!purifier::provisioned()) return "This purifier has no serial/token yet, so it can't get updates.";
   {
