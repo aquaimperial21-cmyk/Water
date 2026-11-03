@@ -12,11 +12,13 @@ import { authRequired } from '../core/auth';
 import { asyncHandler, BadRequest, Conflict, NotFound, Unauthorized } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { hideToken, localKeyFor } from '../core/device-token';
+import { parseGraceDays, pollIntervalSec as computePollIntervalSec } from '../core/poll-schedule';
 
 const router = Router();
 
 // Grace days: device keeps flowing for N days after subscription expires.
-const GRACE_DAYS = Number(process.env.DEVICE_GRACE_DAYS ?? 0);
+// A malformed value falls back to 0 instead of NaN (which would stop all water).
+const GRACE_DAYS = parseGraceDays(process.env.DEVICE_GRACE_DAYS);
 
 async function authorizeDevice(serial: string, token: string | undefined) {
   if (!token) throw Unauthorized('Missing device token');
@@ -60,16 +62,15 @@ router.get(
       message = 'No active subscription';
     }
 
-    // Polling hint: fast when there's anything live to react to (recharge
-    // extension, pause/resume, mandate debit). Slow when there's no
-    // subscription at all — saves the device's batt/data and the server load.
-    const pollIntervalSec = !sub
-      ? 3600
-      : sub.status === 'ACTIVE' || sub.status === 'GRACE'
-        ? 60
-        : sub.status === 'PAUSED'
-          ? 300
-          : 1800;
+    // Polling hint: hourly while a plan is comfortably paid, faster near and
+    // just after the end so a recharge turns the water back on quickly.
+    // The schedule lives in core/poll-schedule.ts.
+    const pollIntervalSec = computePollIntervalSec({
+      subscription: sub,
+      allowFlow,
+      graceDays: GRACE_DAYS,
+      now: Date.now(),
+    });
 
     res.json({
       data: {

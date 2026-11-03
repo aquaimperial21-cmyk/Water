@@ -52,14 +52,18 @@ Before testing, check your PC's address with `ipconfig` ("IPv4 Address" under Wi
 6. **Watch the monitor.** You should see:
    ```
    [wifi] connected to "...", IP 192.168.1.x
-   [cloud] plan ACTIVE, allowFlow=true, until 2027-04-01T13:26:17Z, next check in 60 s
+   [cloud] plan ACTIVE, allowFlow=true, until 2027-04-01T13:26:17Z, next check in 3600 s
    [valve] OPEN  -> water flows
    [cloud] heartbeat sent (IP 192.168.1.x)
    ```
 7. **Use the app.** In `Android_SmartRO_Frontend`, run `npm run web` and log in as Priya: `+919876543210`, using the dev OTP.
    Then go to My Plan → Smart health → Water switch → **Turn water off**. The relay clicks and the monitor shows `[app] water switched OFF from the app`.
 
-To check that the payment rule holds: suspend Priya's subscription in the admin. Within a minute the valve closes, and the app's ON button shows "Recharge".
+To check that the payment rule holds: suspend Priya's subscription in the admin. The valve closes at the next check, so within about an hour, and the app's ON button shows "Recharge". To see it at once, type `reboot` in the monitor.
+
+The `next check in` time comes from the server: hourly while a plan has more than 3 days left, faster near the end and right after it ends (every minute for the first day). The full schedule is in the [integration doc](../../Android_SmartRO_Backend/docs/esp32-integration.md#how-often-the-purifier-checks).
+
+**Tip:** to make a purifier check the server right now, unplug its power for a few seconds and plug it back in. It checks as soon as it's back on Wi-Fi. Use this right after installation or allocation, or to pick up a recharge or an admin change without waiting for the next check.
 
 A phone needs a new EAS build: the `lan` profile in `eas.json` still points at `192.168.1.21`, and only a new build includes the cleartext/local-network permissions.
 
@@ -94,6 +98,7 @@ The token for a real purifier comes from admin: shown once after Dispatch → Al
 
 - The valve stays closed at boot until the plan is known.
 - Offline, it uses the saved answer until `expiresAt + graceDays`. If the time is unknown (power cut and no internet since), the valve stays closed.
+- It closes the valve by itself at `expiresAt + graceDays`, with or without internet. Server checks only bring news (a recharge, or admin stopping a plan), so they can be hourly. The wait comes from `pollIntervalSec`, kept between 30 s and 1 hour (5 minutes if it's missing). The heartbeat goes every 30 minutes.
 - The clock comes from the server's `serverTime` and NTP. It never goes back past the last known time, so a faked NTP answer can't stretch a plan.
 - Only our server's own JSON answer cuts the water for a wrong token or serial (401 "device token" / 404 "Device not found"). Hosting error pages and timeouts keep the saved plan. While the API is down, the proxy in front of it answers with its own error pages, and that must not shut off every purifier.
 - The app's commands need a one-time code plus a signature made with the purifier's local key. The server gives that key only to the purifier's owner. Other people on the same Wi-Fi can read the status but can't switch the water.

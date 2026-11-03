@@ -32,8 +32,9 @@ HTTP header `X-Device-Token`.
 
 ### `GET /api/v1/devices/:serial/state`
 
-Polled by firmware (recommended cadence: once per 5 minutes, plus once
-immediately on boot and Wi-Fi reconnect).
+Polled by firmware on the schedule the server sends in `pollIntervalSec`
+(see [How often the purifier checks](#how-often-the-purifier-checks)), plus
+once immediately on boot and Wi-Fi reconnect.
 
 Request:
 
@@ -51,7 +52,7 @@ Response (200):
     "status": "ACTIVE",
     "expiresAt": "2026-10-26T04:06:31.265Z",
     "graceDays": 0,
-    "pollIntervalSec": 60,
+    "pollIntervalSec": 3600,
     "message": null,
     "serverTime": "2026-04-29T06:11:02.912Z"
   }
@@ -68,8 +69,43 @@ Behaviour:
   CLOSED`). When `NO_SUBSCRIPTION`, the device is paired but unassigned.
 - `graceDays` is configurable via `DEVICE_GRACE_DAYS` env on the backend
   (default 0). Useful to keep flow on for a small window after expiry.
-- `pollIntervalSec` is the server's hint for the next poll: 60 s while the
-  plan is live, slower when paused, closed or unassigned.
+- `pollIntervalSec` is how many seconds to wait before the next poll. It is
+  always a whole number from 30 to 3600. The firmware obeys it, clamped to
+  that range, and waits 5 minutes if the field is missing.
+
+#### How often the purifier checks
+
+The server picks `pollIntervalSec` from the plan:
+
+| Plan | Next check |
+|---|---|
+| Paid, more than 3 days left | every 1 hour (3600 s) |
+| Last 3 days before the end (the reminder period) | every 15 minutes (900 s), plus one check right at the end time (`expiresAt + graceDays`) |
+| Ended less than 24 hours ago, waiting for recharge | every 1 minute (60 s) |
+| Ended 1–7 days ago | every 5 minutes (300 s) |
+| Ended more than 7 days ago | every 15 minutes (900 s) |
+| Paused | every 5 minutes (300 s) |
+| Suspended or closed | every 30 minutes (1800 s) |
+| No plan attached | every 1 hour (3600 s) |
+
+Why water still stops on time: the firmware saves the plan's end time
+(`expiresAt + graceDays`) and closes the valve by itself at that moment, even
+with no internet. Frequent checks are not what stops the water. They only
+bring news: a recharge, or admin stopping a plan. The check at the end time
+means a recharge made just before expiry is seen about 5 seconds after the
+end, so the water pauses for a few seconds at most. A recharge right after the end brings water back within about a minute;
+after a long lapse, within about 15 minutes. An admin cancel or suspend
+reaches a purifier at its next check, so within about an hour at most.
+
+To make a purifier check at once, unplug its power for a few seconds and plug
+it back in. It checks the server as soon as it is back on Wi-Fi. This is
+handy right after installation or allocation, or to pick up a recharge or an
+admin change without waiting.
+
+The heartbeat (below) is separate and still goes every 30 minutes.
+
+Load example: 100 purifiers used to make about 149,000 requests a day (a
+check every 60 s, plus heartbeats). On this schedule it is roughly 8,000.
 
 ### `POST /api/v1/devices/:serial/heartbeat`
 
