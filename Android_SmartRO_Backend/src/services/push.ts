@@ -26,6 +26,8 @@ export interface PushTicket {
   status: 'ok' | 'error';
   id?: string;
   message?: string;
+  /** e.g. { error: 'DeviceNotRegistered' } (app uninstalled) or 'InvalidCredentials' (no FCM key on Expo). */
+  details?: { error?: string };
 }
 
 interface PushDriver {
@@ -86,6 +88,17 @@ export async function sendToUser(userId: string, payload: PushPayload): Promise<
   try {
     const tickets = await getDriver().send(tokens.map((t) => t.token), payload);
     const delivered = tickets.filter((t) => t.status === 'ok').length;
+    // Tickets come back in token order. An uninstalled app's token never
+    // works again: drop it. Other errors are logged so a setup problem
+    // (e.g. InvalidCredentials = no FCM key uploaded to Expo) is visible.
+    const dead: string[] = [];
+    tickets.forEach((t, i) => {
+      if (t.status !== 'error') return;
+      if (t.details?.error === 'DeviceNotRegistered') dead.push(tokens[i]!.token);
+      // eslint-disable-next-line no-console
+      else console.warn(`[push] ${t.details?.error ?? 'error'}: ${t.message ?? ''}`);
+    });
+    if (dead.length) await prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
     return { delivered, failed: tickets.length - delivered };
   } catch (e) {
     // eslint-disable-next-line no-console

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   BottomTabBarProps,
@@ -29,7 +29,9 @@ import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { HelpScreen } from '../screens/profile/HelpScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { WaitlistScreen } from '../screens/catalog/WaitlistScreen';
-import { registerPushToken } from '../utils/push';
+import { onPushTapped, registerPushToken, showPushesWhileOpen } from '../utils/push';
+
+showPushesWhileOpen();
 
 export type RootStackParamList = {
   Phone: undefined;
@@ -160,6 +162,16 @@ export function RootNavigator() {
     if (user) void registerPushToken();
   }, [user]);
 
+  // Tapping a push opens the screen it names (the notification inbox).
+  const navRef = useNavigationContainerRef<RootStackParamList>();
+  const [navReady, setNavReady] = React.useState(false);
+  React.useEffect(() => {
+    if (!user || !navReady) return;
+    return onPushTapped((screen) => {
+      if (screen === 'Notifications' && navRef.isReady()) navRef.navigate('Notifications');
+    });
+  }, [user, navReady, navRef]);
+
   if (!hydrated) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: tokens.color.bg }}>
@@ -168,7 +180,7 @@ export function RootNavigator() {
     );
   }
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navRef} theme={navTheme} onReady={() => setNavReady(true)}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

@@ -543,10 +543,14 @@ model Notification {
   providerMessageId String?
   payload           String? // JSON string of template vars
   readAt            DateTime?
+  // When an INAPP row was also sent as a phone push (cron/push-outbox.ts).
+  // Null = not pushed yet.
+  pushedAt          DateTime?
   createdAt         DateTime  @default(now())
 
   @@index([userId, readAt])
   @@index([templateKey, scheduledAt])
+  @@index([pushedAt, createdAt])
 }
 
 // ───────────────────────────────────── Banners / Campaigns ──────────────────────────────────────

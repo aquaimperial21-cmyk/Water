@@ -62,3 +62,50 @@ export async function registerPushToken(): Promise<void> {
     // app; in-app notifications continue to land via the Notification inbox.
   }
 }
+
+/** expo-notifications, or null where it can't run (web preview, missing module). */
+function notificationsModule(): any | null {
+  if (Platform.OS === 'web') return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-notifications');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Show pushes that arrive while the app is open. Without a handler,
+ * expo-notifications drops them silently.
+ */
+export function showPushesWhileOpen(): void {
+  const Notifications = notificationsModule();
+  if (!Notifications) return;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
+  });
+}
+
+/**
+ * Calls `open(screen)` when the customer taps a push whose data names a
+ * screen (the server sends screen: 'Notifications'), including the push that
+ * launched the app. Returns a function that stops listening.
+ */
+export function onPushTapped(open: (screen: string) => void): () => void {
+  const Notifications = notificationsModule();
+  if (!Notifications) return () => {};
+  const handle = (resp: any) => {
+    const screen = resp?.notification?.request?.content?.data?.screen;
+    if (typeof screen === 'string') open(screen);
+  };
+  const sub = Notifications.addNotificationResponseReceivedListener(handle);
+  // The tap that started the app. Only a recent one: Android can hand back
+  // an old response on a later, ordinary launch.
+  Notifications.getLastNotificationResponseAsync()
+    .then((resp: any) => {
+      const at = Number(resp?.notification?.date ?? 0);
+      if (resp && Date.now() - at < 60_000) handle(resp);
+    })
+    .catch(() => {});
+  return () => sub.remove();
+}
