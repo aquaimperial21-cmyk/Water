@@ -21,7 +21,7 @@ const AUDIENCES: { value: string; label: string; hint: string }[] = [
 
 export default function BroadcastsPage() {
   const [audience, setAudience] = useState('ACTIVE_SUBSCRIBERS');
-  const [channel, setChannel] = useState<'WHATSAPP' | 'SMS'>('WHATSAPP');
+  const [channel, setChannel] = useState<'INAPP' | 'WHATSAPP' | 'SMS'>('INAPP');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -87,9 +87,10 @@ export default function BroadcastsPage() {
               {a ? <div className="text-[11px] text-ink-muted mt-1">{a.hint}</div> : null}
             </FormField>
             <FormField label="Channel" required>
-              <Select value={channel} onChange={(e) => setChannel(e.target.value as 'WHATSAPP' | 'SMS')}>
-                <option value="WHATSAPP">WhatsApp</option>
-                <option value="SMS">SMS</option>
+              <Select value={channel} onChange={(e) => setChannel(e.target.value as 'INAPP' | 'WHATSAPP' | 'SMS')}>
+                <option value="INAPP">App notification (push)</option>
+                <option value="WHATSAPP">WhatsApp (not connected yet)</option>
+                <option value="SMS">SMS (not connected yet)</option>
               </Select>
             </FormField>
             <FormField label="Title (push)" required hint={`${title.length}/120`}>

@@ -1,6 +1,8 @@
-// Daily — finds subscriptions expiring in 7 / 3 / 1 days and dispatches a
-// WhatsApp reminder via the messaging driver. Idempotent: each (user, template,
-// day) combination only fires once.
+// Daily — finds subscriptions expiring in 7 / 3 / 1 days and sends a reminder
+// as an in-app notification, which cron/push-outbox.ts also sends as a phone
+// push. (WhatsApp isn't connected; when it is, add a WHATSAPP send with a
+// rechargeLink.) Idempotent: each (user, template, day) combination only
+// fires once.
 
 import { prisma } from '../core/prisma';
 import { formatIst, istSlotStart } from '../core/time';
@@ -55,14 +57,13 @@ export async function runExpiryReminders(): Promise<{ checked: number; sent: num
       const r = await dispatch({
         userId: s.userId,
         to: phone,
-        channel: 'WHATSAPP',
+        channel: 'INAPP',
         templateKey: tier.key,
         vars: {
           name: s.user.fullName ?? 'there',
           productName: s.product.name,
           daysLeft: String(tier.days),
           expiryDate: fmt(s.expiresAt),
-          rechargeLink: `https://imperialaqua.in/recharge/${s.id}`,
         },
         idempotencyDate: new Date(),
       });

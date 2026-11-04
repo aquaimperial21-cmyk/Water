@@ -17,6 +17,9 @@ export type TemplateKey =
 type Render = (vars: Record<string, string>) => { title: string; body: string };
 
 const r = (vars: Record<string, string>, key: string, fallback = '') => vars[key] ?? fallback;
+/** ': <link>' when a link was given (WhatsApp/SMS), else a pointer to the app. */
+const recharge = (vars: Record<string, string>) =>
+  vars.rechargeLink ? `: ${vars.rechargeLink}` : '. Open the app to recharge.';
 
 export const TEMPLATES: Record<TemplateKey, Render> = {
   'auth.otp': (v) => ({
@@ -30,19 +33,19 @@ export const TEMPLATES: Record<TemplateKey, Render> = {
     body:
       `Hi ${r(v, 'name', 'there')}, your ${r(v, 'productName', 'ImperialAqua plan')} expires on ` +
       `${r(v, 'expiryDate')} (${r(v, 'daysLeft', '7')} days left). ` +
-      `Recharge anytime to keep clean water flowing: ${r(v, 'rechargeLink', 'app://my-plan')}`,
+      `Recharge anytime to keep clean water flowing${recharge(v)}`,
   }),
   'recharge.reminder.3d': (v) => ({
     title: 'Recharge in 3 days',
     body:
       `Hi ${r(v, 'name', 'there')}, only 3 days left on your ${r(v, 'productName', 'plan')}. ` +
-      `Renew now to avoid service interruption: ${r(v, 'rechargeLink', 'app://my-plan')}`,
+      `Renew now to avoid service interruption${recharge(v)}`,
   }),
   'recharge.reminder.1d': (v) => ({
     title: 'Recharge tomorrow',
     body:
       `Hi ${r(v, 'name', 'there')}, your ${r(v, 'productName', 'plan')} expires tomorrow. ` +
-      `Renew now to keep your water purifier running: ${r(v, 'rechargeLink', 'app://my-plan')}`,
+      `Renew now to keep your water purifier running${recharge(v)}`,
   }),
   'recharge.success': (v) => ({
     title: 'Plan renewed',

@@ -57,6 +57,12 @@ export async function dispatch(opts: DispatchOpts): Promise<{ notificationId: st
   });
 
   try {
+    // In-app: the row itself is the message; cron/push-outbox.ts sends the
+    // phone push. No messaging driver involved.
+    if (channel === 'INAPP') {
+      await prisma.notification.update({ where: { id: row.id }, data: { status: 'SENT', sentAt: new Date() } });
+      return { notificationId: row.id, sent: true };
+    }
     if (channel === 'PUSH') {
       const result = await sendPushToUser(userId, { title, body, data: vars });
       await prisma.notification.update({

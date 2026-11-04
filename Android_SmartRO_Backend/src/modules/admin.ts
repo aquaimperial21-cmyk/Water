@@ -1000,7 +1000,9 @@ router.patch(
 
 const broadcastSchema = z.object({
   audience: z.enum(['ALL', 'ACTIVE_SUBSCRIBERS', 'EXPIRING_7D', 'NO_SUBSCRIPTION']).default('ALL'),
-  channel: z.enum(['WHATSAPP', 'SMS']).default('WHATSAPP'),
+  // INAPP = the app's inbox + a phone push (cron/push-outbox.ts). WhatsApp and
+  // SMS have no provider connected yet, so they only reach the console log.
+  channel: z.enum(['INAPP', 'WHATSAPP', 'SMS']).default('INAPP'),
   templateKey: z.enum(['admin.broadcast.custom', 'banner.broadcast']).default('admin.broadcast.custom'),
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(2000),

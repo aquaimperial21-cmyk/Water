@@ -5,6 +5,7 @@ import cron from 'node-cron';
 import { runExpiryReminders } from './expiry-reminders';
 import { runTechSchedule } from './tech-schedule';
 import { runReadingRetention } from './reading-retention';
+import { runPushOutbox } from './push-outbox';
 
 export function registerCronJobs(): void {
   if (process.env.CRON_DISABLED === '1') {
@@ -41,11 +42,23 @@ export function registerCronJobs(): void {
     { timezone: 'UTC' },
   );
 
+  // Every 30 s — in-app notifications go out as phone pushes.
+  let pushing = false;
+  cron.schedule('*/30 * * * * *', () => {
+    if (pushing) return; // the previous run is still sending
+    pushing = true;
+    runPushOutbox()
+      .catch((e) => console.error('[cron:push-outbox] error', e))
+      .finally(() => {
+        pushing = false;
+      });
+  });
+
   // eslint-disable-next-line no-console
   console.log(
-    '[cron] registered: expiry-reminders @ 09:00 IST, tech-schedule @ 07:30 IST, reading-retention @ 02:30 UTC'
+    '[cron] registered: expiry-reminders @ 09:00 IST, tech-schedule @ 07:30 IST, reading-retention @ 02:30 UTC, push-outbox every 30 s'
   );
 }
 
 // Re-export for manual invocation (smoke tests + admin "run now" button).
-export { runExpiryReminders, runTechSchedule, runReadingRetention };
+export { runExpiryReminders, runTechSchedule, runReadingRetention, runPushOutbox };
