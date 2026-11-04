@@ -97,7 +97,28 @@ Hostinger with no problems, cancel Railway.
 | Download last night's backup | `ssh root@<VPS-IP> cat /opt/smartro/backups/daily-<YYYYMMDD>.dump > smartro.dump` |
 
 Backups run every night at 03:00 IST into `/opt/smartro/backups/` and are
-kept 14 days. They sit on the same VPS, so download one now and then.
+kept 14 days. They sit on the same VPS, so the owner's PC downloads a copy
+every day (below).
+
+### Daily copy on the owner's PC
+
+A Windows scheduled task, **SmartRO backup download**, runs
+`deploy/hostinger/pull-backup.ps1` every day at 10:00. If the PC was off at
+10:00, it runs as soon as the PC is back on and online. It downloads the
+newest `daily-*.dump` from the server into `backups\` at the repo root, checks
+it with `pg_restore --list`, and deletes copies older than 30 days. It only
+reads from the server. `backups/` is gitignored: the dumps hold customer data
+and the repo is public.
+
+The server names each dump by its UTC date, so the one made at 03:00 IST on
+5 November is `daily-20261104.dump`.
+
+| Task | Command (PowerShell, from the repo folder) |
+|---|---|
+| Run it now | `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\hostinger\pull-backup.ps1` |
+| Check the log | `Get-Content backups\pull-backup.log -Tail 10` (one line per run: `OK` or `FAILED: <reason>`) |
+| Task status | `Get-ScheduledTaskInfo 'SmartRO backup download'` |
+| Remove the task | `Unregister-ScheduledTask 'SmartRO backup download' -Confirm:$false` |
 
 ## Good to know
 
