@@ -25,6 +25,8 @@ import {
   User,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../store/auth';
+import { restartApp } from '../../components/AppErrorBoundary';
+import { reportAppError } from '../../utils/crashReporter';
 import { openLegal } from '../../utils/legal';
 import { Auth, Kyc, Referrals, ReferralInfo } from '../../api/endpoints';
 import { apiBaseUrl, apiErrorMessage } from '../../api/client';
@@ -97,21 +99,23 @@ export function ProfileScreen() {
     if (ok) await signOut();
   }
 
-  // A ref, not just state: a second tap lands before the re-render that
+  // Refs, not just state: a second tap lands before the re-render that
   // would show the first one is already in flight.
   const deletingRef = React.useRef(false);
   const [deleting, setDeleting] = React.useState(false);
+  const updatingRef = React.useRef(false);
   const [checkingUpdate, setCheckingUpdate] = React.useState(false);
 
   // New screens and fixes arrive as over-the-air updates (EAS Update): the app
   // downloads them on launch by itself and uses them from the next start.
   // This button fetches one now and restarts into it.
   async function checkForUpdate() {
-    if (checkingUpdate) return;
+    if (updatingRef.current) return;
     if (!Updates.isEnabled) {
       toast.info('Updates are not available in this build');
       return;
     }
+    updatingRef.current = true;
     setCheckingUpdate(true);
     try {
       const check = await Updates.checkForUpdateAsync();
@@ -126,11 +130,20 @@ export function ProfileScreen() {
         confirmLabel: 'Restart',
         cancelLabel: 'Later',
       });
-      if (restart) await Updates.reloadAsync();
-      else toast.info('The update will be used next time you open the app');
+      if (!restart) {
+        toast.info('The update will be used next time you open the app');
+        return;
+      }
+      toast.info('Restarting…');
+      // restartApp lets the dialog finish closing before it reloads.
+      await restartApp().catch((e) => {
+        void reportAppError('updates', e);
+        toast.warning('Could not restart the app', 'The update will be used next time you open the app.');
+      });
     } catch {
       toast.error('Could not check for updates', 'Check your internet connection and try again.');
     } finally {
+      updatingRef.current = false;
       setCheckingUpdate(false);
     }
   }

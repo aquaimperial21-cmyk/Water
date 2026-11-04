@@ -3,19 +3,36 @@
 // a Restart button instead of the app closing, and the error is reported.
 
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { InteractionManager, Pressable, Text, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import { tokens } from '@theme/tokens';
 import { onFatalError, reportAppError } from '../utils/crashReporter';
 
+/**
+ * Restarts the app (into a downloaded update, if there is one) once the
+ * screen has settled: reloading while a dialog is still closing, or while a
+ * push is being handled, can crash the app natively. Rejects if the app
+ * could not reload.
+ */
+export async function restartApp(): Promise<void> {
+  // runAfterInteractions waits out gestures and Animated animations; the
+  // 500 ms covers Reanimated ones (the dialog, the pressed button, a toast).
+  // Capped, as a looping animation would hold it up forever.
+  await new Promise<void>((resolve) => {
+    InteractionManager.runAfterInteractions(() => setTimeout(resolve, 500));
+    setTimeout(resolve, 2000);
+  });
+  await Updates.reloadAsync();
+}
+
 type Props = { children: React.ReactNode };
-type State = { error: Error | null };
+type State = { error: Error | null; restarting: boolean };
 
 export class AppErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, restarting: false };
   private unsubscribe?: () => void;
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
@@ -32,9 +49,14 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   }
 
   private restart = () => {
+    if (this.state.restarting) return;
     // A full reload starts clean; if that isn't possible, try drawing again.
     if (Updates.isEnabled) {
-      Updates.reloadAsync().catch(() => this.setState({ error: null }));
+      this.setState({ restarting: true });
+      restartApp().catch((e) => {
+        void reportAppError('updates', e);
+        this.setState({ error: null, restarting: false });
+      });
     } else {
       this.setState({ error: null });
     }
@@ -52,7 +74,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
         </Text>
         <Pressable
           onPress={this.restart}
+          disabled={this.state.restarting}
           accessibilityRole="button"
+          accessibilityState={{ busy: this.state.restarting }}
           style={({ pressed }) => ({
             marginTop: 24,
             backgroundColor: tokens.color.accent,
@@ -62,7 +86,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
             opacity: pressed ? 0.9 : 1,
           })}
         >
-          <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>Restart app</Text>
+          <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>
+            {this.state.restarting ? 'Restarting…' : 'Restart app'}
+          </Text>
         </Pressable>
       </View>
     );
