@@ -12,6 +12,7 @@ interface Stats {
   openInquiries: number;
   bookingsThisMonth: number;
   openTickets: number;
+  unassignedJobs?: number;
   revenuePaiseThisMonth: number;
   devices: Record<string, number>;
 }
@@ -47,6 +48,15 @@ export default function Dashboard() {
         <div className="text-ink-muted">Loading…</div>
       ) : (
         <div className="space-y-6">
+          {stats.unassignedJobs ? (
+            <Link
+              href="/jobs"
+              className="block px-4 py-3 rounded-xl text-sm font-semibold hover:underline"
+              style={{ backgroundColor: '#FEF2E2', color: '#9A5E0B' }}
+            >
+              {stats.unassignedJobs === 1 ? '1 job has' : `${stats.unassignedJobs} jobs have`} no technician yet. Assign one →
+            </Link>
+          ) : null}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Stat
               label="Active subscriptions"

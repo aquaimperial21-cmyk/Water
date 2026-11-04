@@ -503,22 +503,24 @@ model Technician {
 }
 
 model Job {
-  id           String     @id @default(uuid())
+  id           String      @id @default(uuid())
   ticketId     String?
-  ticket       Ticket?    @relation(fields: [ticketId], references: [id])
+  ticket       Ticket?     @relation(fields: [ticketId], references: [id])
   // Bookings produce an INSTALL job at confirm-time; nullable so SERVICE/FILTER
   // jobs raised from tickets continue to work without a bookingId.
   bookingId    String?
-  booking      Booking?   @relation(fields: [bookingId], references: [id])
-  technicianId String
-  technician   Technician @relation(fields: [technicianId], references: [id])
+  booking      Booking?    @relation(fields: [bookingId], references: [id])
+  // Null = unassigned: the slot was booked when no technician was free and an
+  // admin assigns one later. Restrict is spelled out so the FK stays as it was.
+  technicianId String?
+  technician   Technician? @relation(fields: [technicianId], references: [id], onDelete: Restrict)
   type         String // INSTALL | SERVICE | FILTER | PICKUP
   scheduledFor DateTime
-  status       String     @default("SCHEDULED") // SCHEDULED | EN_ROUTE | IN_PROGRESS | DONE | CANCELLED
+  status       String      @default("SCHEDULED") // SCHEDULED | EN_ROUTE | IN_PROGRESS | DONE | CANCELLED
   notes        String?
   completedAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   @@index([technicianId, status, scheduledFor])
   @@index([bookingId])

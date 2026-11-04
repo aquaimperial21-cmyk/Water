@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { createHash, randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { asyncHandler, NotFound, BadRequest, Conflict } from '../core/errors';
@@ -11,6 +12,9 @@ import { hideToken } from '../core/device-token';
 import { isDeviceOnline, presenceOf } from '../core/device-online';
 
 const router = Router();
+
+// A job still to be done (used by the dashboard and the jobs list).
+const OPEN_JOB_STATUSES = ['SCHEDULED', 'EN_ROUTE', 'IN_PROGRESS'];
 
 function slugify(s: string): string {
   return s
@@ -36,6 +40,7 @@ router.get(
       openTickets,
       paymentsThisMonth,
       devicesByStatus,
+      unassignedJobs,
     ] = await Promise.all([
       prisma.subscription.count({ where: { status: 'ACTIVE' } }),
       prisma.inquiry.count({ where: { createdAt: { gte: todayStart } } }),
@@ -50,6 +55,7 @@ router.get(
         by: ['status'],
         _count: { _all: true },
       }),
+      prisma.job.count({ where: { technicianId: null, status: { in: OPEN_JOB_STATUSES } } }),
     ]);
 
     res.json({
@@ -59,6 +65,7 @@ router.get(
         openInquiries,
         bookingsThisMonth,
         openTickets,
+        unassignedJobs,
         revenuePaiseThisMonth: paymentsThisMonth._sum.amountPaise ?? 0,
         devices: devicesByStatus.reduce((acc: Record<string, number>, d) => {
           acc[d.status] = d._count._all;
@@ -828,6 +835,74 @@ router.post(
       data: { documentUrls: JSON.stringify(docs) },
     });
     res.status(201).json({ data: maskTechnician(updated) });
+  })
+);
+
+// ───────────────────────────────────── Jobs (technician visits) ──────────────────────────────────────
+//
+// An install booked when no technician was free has no technician (null)
+// until an admin assigns one here. GET ?view=unassigned | open (default) | all.
+
+const customerSelect = { select: { id: true, fullName: true, phone: true } } as const;
+const jobInclude = {
+  technician: { select: { id: true, employeeCode: true, zone: true, status: true, user: { select: { fullName: true, phone: true } } } },
+  booking: { select: { id: true, status: true, installationSlot: true, city: { select: { name: true } }, user: customerSelect } },
+  ticket: { select: { id: true, category: true, status: true, user: customerSelect } },
+} satisfies Prisma.JobInclude;
+
+router.get(
+  '/jobs',
+  authRequired(['ADMIN']),
+  asyncHandler(async (req, res) => {
+    const view = req.query.view === 'unassigned' || req.query.view === 'all' ? req.query.view : 'open';
+    const where: Prisma.JobWhereInput =
+      view === 'all' ? {} : { status: { in: OPEN_JOB_STATUSES }, ...(view === 'unassigned' ? { technicianId: null } : {}) };
+    const jobs = await prisma.job.findMany({
+      where,
+      include: jobInclude,
+      orderBy: { scheduledFor: view === 'all' ? 'desc' : 'asc' },
+      take: 300,
+    });
+    res.json({ data: jobs });
+  })
+);
+
+const jobAssignSchema = z.object({ technicianId: z.string().min(1) }).strict();
+
+// Assign (or reassign) the technician on an open job.
+router.patch(
+  '/jobs/:id',
+  authRequired(['ADMIN']),
+  validateBody(jobAssignSchema),
+  asyncHandler(async (req, res) => {
+    const { technicianId } = req.body as z.infer<typeof jobAssignSchema>;
+    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    if (!job) throw NotFound('Job not found');
+    if (!OPEN_JOB_STATUSES.includes(job.status)) {
+      throw BadRequest(`Job is ${job.status}; cannot change its technician`);
+    }
+    const tech = await prisma.technician.findUnique({ where: { id: technicianId } });
+    if (!tech) throw BadRequest('Technician not found');
+    if (tech.status !== 'ACTIVE') throw BadRequest(`Technician is ${tech.status}; pick an active one`);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const j = await tx.job.update({ where: { id: job.id }, data: { technicianId }, include: jobInclude });
+      // A ticket's visit: keep the ticket on the same technician, so it shows in their list.
+      if (job.ticketId) await tx.ticket.update({ where: { id: job.ticketId }, data: { technicianId } });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.auth!.sub,
+          action: 'JOB_ASSIGN',
+          entity: 'Job',
+          entityId: job.id,
+          before: JSON.stringify({ technicianId: job.technicianId }),
+          after: JSON.stringify({ technicianId }),
+        },
+      });
+      return j;
+    });
+
+    res.json({ data: updated });
   })
 );
 
