@@ -1,33 +1,57 @@
-// Customer app is not city-aware in the UX, but the backend stores
-// per-city pricing. We pick the first serviceable city once and use
-// that for pricing + booking under the hood.
+// Prices and technicians differ per city, so the customer picks their city
+// (on the product page) and the choice is saved on the phone. Nothing falls
+// back to "the first city" any more: a Pune customer used to be priced and
+// booked as Mumbai without ever being asked.
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Catalog, City } from '../api/endpoints';
 
-let cached: City | null = null;
-let promise: Promise<City> | null = null;
+const CITY_KEY = 'smartro.cityId';
 
-export async function getDefaultCity(): Promise<City> {
-  if (cached) return cached;
-  if (!promise) {
-    promise = Catalog.cities()
+let citiesPromise: Promise<City[]> | null = null;
+
+/** Cities we install in (the server lists serviceable ones only). */
+export function getCities(): Promise<City[]> {
+  if (!citiesPromise) {
+    citiesPromise = Catalog.cities()
       .then((cs) => {
-        const c = cs.find((x) => x.isServiceable) ?? cs[0];
-        if (!c) throw new Error('No cities available');
-        cached = c;
-        return c;
+        const list = cs.filter((c) => c.isServiceable);
+        if (!list.length) throw new Error('No cities available');
+        return list;
       })
       // Without this, one failed call (a dropped connection on first launch)
       // is cached for the life of the process and every later caller inherits
       // the same rejection — screens that wait on it never recover.
       .catch((e) => {
-        promise = null;
+        citiesPromise = null;
         throw e;
       });
   }
-  return promise;
+  return citiesPromise;
+}
+
+/**
+ * The customer's city: the one they picked before, or the only city if we
+ * serve just one. null means "ask them".
+ */
+export async function getChosenCity(): Promise<City | null> {
+  const cities = await getCities();
+  let savedId: string | null = null;
+  try {
+    savedId = await AsyncStorage.getItem(CITY_KEY);
+  } catch {
+    // Storage unavailable: treat as not chosen yet.
+  }
+  return cities.find((c) => c.id === savedId) ?? (cities.length === 1 ? cities[0] : null);
+}
+
+export async function saveChosenCity(city: City): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CITY_KEY, city.id);
+  } catch {
+    // Not fatal: they'll be asked again next time.
+  }
 }
 
 export function clearCityCache() {
-  cached = null;
-  promise = null;
+  citiesPromise = null;
 }

@@ -36,6 +36,24 @@ By default the app connects to `http://localhost:4000/api/v1`.
 - Android emulator: auto-rewritten to `10.0.2.2`.
 - Physical device with Expo Go: edit `app.json` → `extra.apiBaseUrl` to your Mac's LAN IP, e.g. `http://192.168.1.42:4000/api/v1`. Find it with `ipconfig getifaddr en0`.
 
+## Updates without a new APK (EAS Update)
+
+Phones download new app code by themselves when the app opens and use it
+from the next start. Profile → About shows the version and has
+"Check for updates", which fetches an update now and restarts into it.
+
+Publish an update to everyone on the preview APK:
+
+```
+npm run update:preview -- --message "What changed"
+```
+
+This works only for JavaScript changes (screens, text, logic). A new native
+library, permission or app.json plugin needs a new APK: bump `version` in
+app.json first (updates are matched to it), then `eas build -p android
+--profile preview`. Phones on the old version keep getting updates made for
+the old version only, so they never receive code they can't run.
+
 ## Screens
 
 | Stack | Screen |
