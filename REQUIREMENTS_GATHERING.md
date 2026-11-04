@@ -450,9 +450,7 @@ For each technician, provide:
 - Key secret > Your answer (or "I'll share separately"):
 - Business name as it should appear on the customer's bank statement > Your answer:
 
-**14.3 SMS / OTP provider** — MSG91 is already wired up (auth key on file). Still needed:
-- Sender ID (6 chars, DLT-registered) > Your answer:
-- MSG91 OTP template ID (after DLT approval) > Your answer:
+**14.3 SMS / OTP provider** — Decided (2026-11-04): no separate SMS provider. Phone login OTPs are sent by Firebase Authentication.
 
 **14.4 Push-notification provider** — Firebase Cloud Messaging (FCM) / OneSignal / Expo. *Not built yet — confirm preference so we know which SDK to wire in.*
 > Your answer:

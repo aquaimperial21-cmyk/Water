@@ -240,12 +240,12 @@ stubbed until you're going to real production. Payments are the exception.
   On a phone, Checkout needs an EAS build; it doesn't run in Expo Go. Full
   steps:
   [Android_SmartRO_Backend/README.md → Razorpay payments](Android_SmartRO_Backend/README.md#razorpay-payments).
-- **Real SMS via MSG91** — `MESSAGING_DRIVER=stub` logs OTPs to the API
-  response instead of sending SMS.
+- **Server SMS** — there is no SMS provider; `MESSAGING_DRIVER=stub` only
+  logs messages. Customer phone login uses Firebase.
 - **Expo Push notifications** — `PUSH_DRIVER=stub` logs to console only.
 - **Persistent file uploads** — Render free tier has no persistent disk, so
   uploaded files (invoice PDFs, KYC images) are lost on each redeploy. Fine
   for testing.
 
 See `Android_SmartRO_Backend/.env.production.example` for the real-prod
-template (Fly.io + Razorpay + MSG91 + Expo).
+template (Fly.io + Razorpay + Expo).
