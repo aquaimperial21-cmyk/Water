@@ -14,6 +14,7 @@ import { tokens } from '@theme/tokens';
 import { Button, Input, Pill, Skeleton } from '@ui/index';
 import { toast } from '../../utils/messages';
 import { formatDate } from '../../utils/format';
+import { reportAppError } from '../../utils/crashReporter';
 import {
   PLAN_INACTIVE_MESSAGE,
   getCachedAccess,
@@ -71,16 +72,23 @@ export function PurifierSwitchCard({ refreshSignal = 0, style }: { refreshSignal
 
   /* ---- access info: cache first (instant, works offline), then SmartRO ---- */
   const loadAccess = React.useCallback(async () => {
-    const cached = await getCachedAccess();
-    if (cached) setState((s) => (s.phase === 'ready' ? s : { phase: 'ready', access: cached }));
-    const r = await refreshAccess();
-    if (r.access) {
-      setState({ phase: 'ready', access: r.access });
-      // The purifier may check SmartRO only once a day: opening this asks it to check now,
-      // so the status polled below shows the latest plan. At most once a minute.
-      void refreshPurifier({ access: r.access, throttle: true });
-    } else if (r.source === 'backend') setState({ phase: 'none' });
-    else setState(cached ? { phase: 'ready', access: cached } : { phase: 'unavailable' });
+    try {
+      const cached = await getCachedAccess();
+      if (cached) setState((s) => (s.phase === 'ready' ? s : { phase: 'ready', access: cached }));
+      const r = await refreshAccess();
+      if (r.access) {
+        setState({ phase: 'ready', access: r.access });
+        // The purifier may check SmartRO only once a day: opening this asks it to check now,
+        // so the status polled below shows the latest plan. At most once a minute.
+        void refreshPurifier({ access: r.access, throttle: true });
+      } else if (r.source === 'backend') setState({ phase: 'none' });
+      else setState(cached ? { phase: 'ready', access: cached } : { phase: 'unavailable' });
+    } catch (e) {
+      // Network trouble comes back as a result, never a throw, so this is a bug.
+      // Keep what's on screen; never stay on the skeleton.
+      void reportAppError('promise', e);
+      setState((s) => (s.phase === 'loading' ? { phase: 'unavailable' } : s));
+    }
   }, []);
 
   useFocusEffect(React.useCallback(() => { void loadAccess(); }, [loadAccess]));
@@ -198,6 +206,10 @@ export function PurifierSwitchCard({ refreshSignal = 0, style }: { refreshSignal
         default:
           toast.error("Couldn't switch the water", result.message);
       }
+    } catch (e) {
+      // Same as above: a throw here is a bug. The next status check shows the real state.
+      void reportAppError('promise', e);
+      toast.error("Couldn't switch the water", 'Something went wrong. Try again.');
     } finally {
       busyRef.current = false;
       setBusy(false);
