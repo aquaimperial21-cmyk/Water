@@ -106,13 +106,20 @@ const KIND_RANK: Record<PlanKind, number> = {
 };
 
 /**
- * The subscription My Plan opens on: running plans (incl. awaiting install)
- * first, then inactive, then expired, then closed; newest first within each.
+ * The subscription Home and My Plan open on. The purifier at home comes
+ * first: a plan with a purifier connected beats one without (not installed
+ * yet, or taken away), so "Restore water" lands on the purifier that stopped.
+ * Then running plans (incl. awaiting install), inactive, expired; newest
+ * first within each. Closed plans always last.
  */
 export function pickDefaultSubscription(subs: Subscription[], now: Date): Subscription | null {
   if (subs.length === 0) return null;
-  const ranked = subs.map((s, i) => ({ s, i, rank: KIND_RANK[planKind(s, now)], started: ms(s.startedAt) || 0 }));
-  ranked.sort((a, b) => a.rank - b.rank || b.started - a.started || a.i - b.i);
+  const ranked = subs.map((s, i) => {
+    const kind = planKind(s, now);
+    return { s, i, closed: kind === 'closed' ? 1 : 0, noPurifier: s.device ? 0 : 1, rank: KIND_RANK[kind], started: ms(s.startedAt) || 0 };
+  });
+  ranked.sort((a, b) =>
+    a.closed - b.closed || a.noPurifier - b.noPurifier || a.rank - b.rank || b.started - a.started || a.i - b.i);
   return ranked[0]!.s;
 }
 
@@ -351,7 +358,9 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
           : `Water stops ${onDay(expires, now)}. Recharge to keep it flowing.`;
       break;
     case 'expired':
-      headline = `Water stopped ${onDay(expires, now)}. Recharge to restore it.`;
+      headline = sub.device
+        ? `Water stopped ${onDay(expires, now)}. Recharge to restore it.`
+        : `This plan ended ${onDay(expires, now)}. No purifier is connected to it yet.`;
       break;
     case 'inactive':
       headline = 'This plan is inactive, so the water is off. Recharge to restore it, or contact support.';
@@ -427,9 +436,14 @@ export function planView(sub: Subscription, now: Date, opts: PlanViewOptions): P
   const canSchedule = kind === 'awaitingInstall'
     && !!booking && booking.status !== 'CANCELLED' && booking.status !== 'INSTALLED';
 
+  // A recharge brings water back only through a purifier on this plan. With
+  // none connected (not installed yet, or taken away) the money would turn
+  // nothing on, so the button is off and says why.
   const recharge: PlanAction = kind === 'closed'
     ? hidden
-    : shown(kind === 'expired' ? 'Restore water' : kind === 'expiring' ? 'Recharge now' : 'Recharge');
+    : !sub.device
+      ? shown('Recharge', 'No purifier is connected to this plan yet, so a recharge would not turn any water on. You can recharge once it is installed.')
+      : shown(kind === 'expired' ? 'Restore water' : kind === 'expiring' ? 'Recharge now' : 'Recharge');
 
   const actions: PlanActions = {
     primary: kind === 'closed' ? null : canSchedule ? 'installSlot' : 'recharge',

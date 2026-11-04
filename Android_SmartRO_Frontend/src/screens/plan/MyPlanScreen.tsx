@@ -416,7 +416,8 @@ export function MyPlanScreen() {
   const chipLabel = (s: Subscription) => {
     const name = s.product?.name ?? 'Purifier';
     const twins = openSubs.filter((o) => (o.product?.name ?? 'Purifier') === name).length;
-    return twins > 1 ? `${name} · ${s.device?.serial ?? s.id.slice(-4).toUpperCase()}` : name;
+    // Same product twice: name the purifier, or say there isn't one yet.
+    return twins > 1 ? `${name} · ${s.device?.serial ?? `not installed (${s.id.slice(-4).toUpperCase()})`}` : name;
   };
 
   return (
