@@ -8,7 +8,7 @@
 // "inactive": water off, with recharge and support offered.
 
 import type { AutopayStatus, Subscription, SubscriptionRefund } from '../api/endpoints';
-import { formatDate, paiseToInr } from './format';
+import { formatDate, formatWith, paiseToInr } from './format';
 import { planTermLabel, termLength } from './plans';
 
 export type PlanKind = 'awaitingInstall' | 'active' | 'expiring' | 'expired' | 'inactive' | 'closed';
@@ -55,17 +55,18 @@ function sameLocalDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
+// Built once and reused, like the ones in format.ts.
+const DAY_MONTH = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' });
+const DAY_MONTH_YEAR = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const TIME = new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit' });
+
 /** '3 Nov', or '3 Nov 2027' outside the current year. */
 export function shortDate(d: Date, now: Date): string {
-  return d.toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
-  });
+  return formatWith(d.getFullYear() !== now.getFullYear() ? DAY_MONTH_YEAR : DAY_MONTH, d);
 }
 
 function shortTime(d: Date): string {
-  return d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  return formatWith(TIME, d);
 }
 
 /** 'today' | 'tomorrow' | 'yesterday' | 'on 3 Nov' — reads after a verb. */

@@ -1,22 +1,34 @@
+// Formatters are built once and reused: toLocaleString & co. build a new one
+// on every call, which is slow, and these run on every render. Same locale
+// and options as those calls, so the text is the same.
+const INR = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+const DATE = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+const DATE_TIME = new Intl.DateTimeFormat('en-IN', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** fmt.format(date), but a bad date gives 'Invalid Date' (as toLocaleDateString does) instead of throwing. */
+export function formatWith(fmt: Intl.DateTimeFormat, date: Date): string {
+  return Number.isNaN(date.getTime()) ? 'Invalid Date' : fmt.format(date);
+}
+
 export function paiseToInr(paise: number): string {
   const rupees = Math.round(paise) / 100;
-  return '₹' + rupees.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  return '₹' + INR.format(rupees);
 }
 
 export function formatDate(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatWith(DATE, date);
 }
 
 export function formatDateTime(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatWith(DATE_TIME, date);
 }
 
 /** '5m ago' · '3h ago' · '1d ago' (whole units, never under 1m). */
