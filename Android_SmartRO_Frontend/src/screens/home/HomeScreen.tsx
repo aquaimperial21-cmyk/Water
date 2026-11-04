@@ -42,6 +42,7 @@ import {
   WaterDropLogo,
 } from '@ui/index';
 import { useAuthStore } from '../../store/auth';
+import { reportAppError } from '../../utils/crashReporter';
 import type { RootStackParamList } from '../../navigation';
 import { paiseToInr, formatDate } from '../../utils/format';
 import { planTermLabel } from '../../utils/plans';
@@ -95,12 +96,16 @@ export function HomeScreen() {
         Notifications.mine().catch(() => ({ items: [], unreadCount: 0 })),
         DeviceHealthApi.me().catch(() => null),
       ]);
-      if (ps) setProducts(ps);
-      if (ss) setSubs(ss);
+      // A reply that isn't the expected shape is treated like a failed request.
+      if (Array.isArray(ps)) setProducts(ps);
+      if (Array.isArray(ss)) setSubs(ss);
       setHealth(hs);
-      setBanners(bs);
-      setUnread(ns.unreadCount);
+      setBanners(Array.isArray(bs) ? bs : []);
+      setUnread(ns?.unreadCount ?? 0);
       setNow(new Date());
+    } catch (e) {
+      // Failed requests (offline included) are handled above, quietly: this is a bug.
+      void reportAppError('promise', e);
     } finally {
       setLoading(false);
     }
