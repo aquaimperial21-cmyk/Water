@@ -6,7 +6,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../core/prisma';
 import { authRequired } from '../core/auth';
 import { asyncHandler, NotFound, BadRequest, Conflict } from '../core/errors';
-import { validateBody } from '../core/validate';
+import { validateBody, validateQuery } from '../core/validate';
 import { refreshLowestMonthlyRollup } from './catalog';
 import { hideToken } from '../core/device-token';
 import { isDeviceOnline, presenceOf } from '../core/device-online';
@@ -835,6 +835,96 @@ router.post(
       data: { documentUrls: JSON.stringify(docs) },
     });
     res.status(201).json({ data: maskTechnician(updated) });
+  })
+);
+
+// ───────────────────────────────────── Bookings ──────────────────────────────────────
+//
+// Every booking, newest first: GET ?status=&cityId=&page=&perPage=.
+// Selects are explicit, so no device (or its token) is ever read here.
+
+const BOOKING_STATUSES = ['PENDING_KYC', 'PENDING_PAY', 'PAID', 'INSTALLED', 'CANCELLED'] as const;
+const bookingListQuery = z.object({
+  status: z.enum(BOOKING_STATUSES).optional(),
+  cityId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+router.get(
+  '/bookings',
+  authRequired(['ADMIN']),
+  validateQuery(bookingListQuery),
+  asyncHandler(async (req, res) => {
+    const { status, cityId, page, perPage } = req.query as unknown as z.infer<typeof bookingListQuery>;
+    const cityWhere: Prisma.BookingWhereInput = cityId ? { cityId } : {};
+    const where: Prisma.BookingWhereInput = { ...cityWhere, ...(status ? { status } : {}) };
+
+    const [total, byStatus, rows] = await Promise.all([
+      prisma.booking.count({ where }),
+      // Per-status counts for the filter chips (city filter only).
+      prisma.booking.groupBy({ by: ['status'], where: cityWhere, _count: { _all: true } }),
+      prisma.booking.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * perPage,
+        take: perPage,
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          installationSlot: true,
+          agreementSignedAt: true,
+          cancelledAt: true,
+          depositPaise: true,
+          firstPaymentPaise: true,
+          referralCreditPaise: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          product: { select: { id: true, name: true } },
+          plan: { select: { id: true, name: true, durationMonths: true } },
+          city: { select: { id: true, name: true } },
+          payments: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true, kind: true, status: true, amountPaise: true, createdAt: true },
+          },
+          subscription: { select: { id: true, status: true, expiresAt: true } },
+          // The next visit still to happen; technician null = unassigned.
+          jobs: {
+            where: { type: 'INSTALL', status: { in: OPEN_JOB_STATUSES } },
+            orderBy: { scheduledFor: 'asc' },
+            take: 1,
+            select: {
+              id: true,
+              status: true,
+              scheduledFor: true,
+              technician: { select: { id: true, employeeCode: true, user: { select: { fullName: true } } } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const data = rows.map(({ user, payments, jobs, ...b }) => {
+      const job = jobs[0];
+      return {
+        ...b,
+        customer: user,
+        latestPayment: payments[0] ?? null,
+        installJob: job
+          ? {
+              id: job.id,
+              status: job.status,
+              scheduledFor: job.scheduledFor,
+              technician: job.technician
+                ? { id: job.technician.id, employeeCode: job.technician.employeeCode, fullName: job.technician.user.fullName }
+                : null,
+            }
+          : null,
+      };
+    });
+    const counts = Object.fromEntries(byStatus.map((g) => [g.status, g._count._all]));
+    res.json({ data, meta: { total, page, perPage, counts } });
   })
 );
 
