@@ -16,7 +16,7 @@ import {
 import { RootNavigator } from './src/navigation';
 import { MessageHost } from './src/components/ui/MessageHost';
 import { AppErrorBoundary } from './src/components/AppErrorBoundary';
-import { reportUpdateProblems } from './src/utils/crashReporter';
+import { reportAppError, reportUpdateProblems } from './src/utils/crashReporter';
 import { tokens } from './src/theme';
 
 export default function App() {
@@ -25,14 +25,20 @@ export default function App() {
     void reportUpdateProblems();
   }, []);
 
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Manrope_400Regular,
     Manrope_600SemiBold,
     Manrope_700Bold,
     Manrope_800ExtraBold,
   });
 
-  if (!fontsLoaded) {
+  // A font that fails to load must not keep the app on the spinner: carry on
+  // with the system font and report it.
+  React.useEffect(() => {
+    if (fontError) void reportAppError('promise', fontError);
+  }, [fontError]);
+
+  if (!fontsLoaded && !fontError) {
     return (
       <View style={{ flex: 1, backgroundColor: tokens.color.bg, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={tokens.color.accent} />
