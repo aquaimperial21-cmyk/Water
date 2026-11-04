@@ -7,7 +7,6 @@ import { MotiView } from 'moti';
 import {
   Bell,
   ChevronRight,
-  Star,
   ShieldCheck,
   Wallet,
   Home as HomeIcon,
@@ -58,15 +57,9 @@ import {
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Filter = 'HOME' | 'COMMERCIAL';
 
-const TRUST = { rating: 4.8, reviews: 12480, slaHours: 24 };
-
-const TESTIMONIAL = {
-  name: 'Ananya R.',
-  city: 'Bengaluru',
-  text:
-    'No filter shopping, no service haggling. ImperialAqua just works — like the water in my taps was always meant to be this clean.',
-  rating: 5,
-};
+// Only true facts here: no star ratings or customer quotes until we have
+// real ones from real customers.
+const TRUST = { slaHours: 24 };
 
 const HOW_STEPS = [
   { Icon: ClipboardList, title: 'Book the perfect plan for you', sub: 'Pick a purifier and rental cycle.' },
@@ -382,10 +375,10 @@ export function HomeScreen() {
         <View style={styles.trust}>
           <View style={styles.trustCell}>
             <View style={styles.trustValueRow}>
-              <Star size={14} color={tokens.color.star} fill={tokens.color.star} />
-              <Text style={styles.trustValue}>{TRUST.rating}</Text>
+              <Wrench size={14} color={tokens.color.accentGlow} />
+              <Text style={styles.trustValue}>Free</Text>
             </View>
-            <Text style={styles.trustSub}>{TRUST.reviews.toLocaleString('en-IN')}+ reviews</Text>
+            <Text style={styles.trustSub}>Installation</Text>
           </View>
           <View style={styles.trustDivider} />
           <View style={styles.trustCell}>
@@ -403,19 +396,6 @@ export function HomeScreen() {
             </View>
             <Text style={styles.trustSub}>Full-refund trial</Text>
           </View>
-        </View>
-
-        {/* Testimonial */}
-        <View style={styles.testimonial}>
-          <View style={styles.starsRow}>
-            {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
-              <Star key={i} size={14} color={tokens.color.star} fill={tokens.color.star} />
-            ))}
-          </View>
-          <Text style={styles.quote}>"{TESTIMONIAL.text}"</Text>
-          <Text style={styles.quoteWho}>
-            — {TESTIMONIAL.name}, {TESTIMONIAL.city}
-          </Text>
         </View>
 
         <Text style={styles.helpFooter}>Need help? <Text style={{ color: tokens.color.accent, fontFamily: 'Manrope_700Bold' }}>Chat with us</Text></Text>
@@ -722,10 +702,6 @@ function ProductCard({ product, onPress }: { product: Product; onPress: () => vo
         <View style={styles.cardCapacityChip}>
           <Text style={styles.cardCapacityText}>{product.capacityLitres} L/hr</Text>
         </View>
-        <View style={styles.cardRatingChip}>
-          <Star size={10} color={tokens.color.star} fill={tokens.color.star} />
-          <Text style={styles.cardRatingText}>4.8</Text>
-        </View>
       </View>
 
       <View style={styles.cardBody}>
@@ -959,19 +935,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   cardCapacityText: { fontFamily: 'Manrope_700Bold', color: tokens.color.accentInk, fontSize: 10 },
-  cardRatingChip: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(14,23,38,0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  cardRatingText: { color: '#FFFFFF', fontFamily: 'Manrope_700Bold', fontSize: 10 },
 
   cardBody: { padding: 12 },
   cardTagline: {
@@ -1139,17 +1102,6 @@ const styles = StyleSheet.create({
   trustDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
 
   /* Testimonial — mt-6 rounded-3xl bg-primary-tint border-primary-soft p-5 */
-  testimonial: {
-    marginTop: 24,
-    backgroundColor: tokens.color.accentTint,
-    borderRadius: 32,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: tokens.color.accentSoft,
-  },
-  starsRow: { flexDirection: 'row', gap: 2 },
-  quote: { ...tokens.text.bodyMd, color: tokens.color.accentInk, marginTop: 12, lineHeight: 22, fontFamily: 'Manrope_600SemiBold' },
-  quoteWho: { fontFamily: 'Manrope_700Bold', color: 'rgba(10,74,107,0.7)', fontSize: 13, marginTop: 10 },
 
   helpFooter: { textAlign: 'center', marginTop: 24, ...tokens.text.bodySm, color: tokens.color.textMuted },
 });

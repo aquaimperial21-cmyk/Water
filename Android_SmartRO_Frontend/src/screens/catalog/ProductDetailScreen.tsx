@@ -10,7 +10,6 @@ import {
   Check,
   ChevronDown,
   Heart,
-  Star,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -25,11 +24,11 @@ import type { RootStackParamList } from '../../navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'ProductDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type Tab = 'overview' | 'specs' | 'reviews' | 'faq';
+// No Reviews tab: we show only real reviews, and there are none in the app yet.
+type Tab = 'overview' | 'specs' | 'faq';
 const TABS: { value: Tab; label: string }[] = [
   { value: 'overview', label: 'Overview' },
   { value: 'specs', label: 'Specs' },
-  { value: 'reviews', label: 'Reviews' },
   { value: 'faq', label: 'FAQ' },
 ];
 
@@ -46,12 +45,6 @@ const FAQS = [
   { q: 'What if I move cities?', a: 'We support free relocation once per year across all serviceable cities.' },
   { q: 'Who pays for filters?', a: 'We do. Every replacement filter is included for the lifetime of your subscription.' },
   { q: 'How fast is service?', a: 'Most service requests are resolved within 24 hours. Emergencies within 4 hours.' },
-];
-
-const REVIEWS = [
-  { name: 'Aarav S.', city: 'Bengaluru', rating: 5, text: 'Installed in a day, water tastes incredible. Service team is sharp.' },
-  { name: 'Meera K.', city: 'Mumbai', rating: 5, text: 'Zero hassle. Filter changes happen before I even notice.' },
-  { name: 'Rohan D.', city: 'Pune', rating: 4, text: 'Quiet, neat, and the app makes everything transparent.' },
 ];
 
 export function ProductDetailScreen({ route, navigation }: Props) {
@@ -238,13 +231,6 @@ export function ProductDetailScreen({ route, navigation }: Props) {
         {/* Title */}
         <Text style={styles.tagline}>{product.technology}</Text>
         <Text style={styles.title}>{product.name}</Text>
-        <View style={styles.ratingRow}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Star key={i} size={13} color={tokens.color.star} fill={tokens.color.star} />
-          ))}
-          <Text style={styles.ratingValue}> 4.8</Text>
-          <Text style={styles.ratingMeta}>· 1,284 reviews</Text>
-        </View>
 
         {/* Tabs */}
         <View style={styles.tabsRow}>
@@ -292,35 +278,6 @@ export function ProductDetailScreen({ route, navigation }: Props) {
                 >
                   <Text style={styles.specRowLabel}>{s.label}</Text>
                   <Text style={styles.specRowValue}>{s.value}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {tab === 'reviews' ? (
-            <View style={{ gap: 12 }}>
-              {REVIEWS.map((r, i) => (
-                <View key={i} style={styles.reviewCard}>
-                  <View style={styles.reviewHead}>
-                    <View style={styles.reviewAvatar}>
-                      <Text style={styles.reviewInitial}>{r.name[0]}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.reviewName}>{r.name}</Text>
-                      <Text style={styles.reviewCity}>{r.city}</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 1 }}>
-                      {Array.from({ length: r.rating }).map((_, j) => (
-                        <Star
-                          key={j}
-                          size={12}
-                          color={tokens.color.star}
-                          fill={tokens.color.star}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                  <Text style={styles.reviewText}>{r.text}</Text>
                 </View>
               ))}
             </View>
@@ -733,9 +690,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   title: { ...tokens.text.displayMd, color: tokens.color.text, marginTop: 4 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 2 },
-  ratingValue: { ...tokens.text.bodySmMedium, color: tokens.color.text, fontFamily: 'Manrope_700Bold' },
-  ratingMeta: { ...tokens.text.bodySm, color: tokens.color.textMuted, marginLeft: 4 },
 
   tabsRow: {
     flexDirection: 'row',
@@ -790,27 +744,6 @@ const styles = StyleSheet.create({
   specRowLabel: { ...tokens.text.bodySm, color: tokens.color.textMuted },
   specRowValue: { fontFamily: 'Manrope_700Bold', color: tokens.color.text, fontSize: 14 },
 
-  reviewCard: {
-    backgroundColor: tokens.color.surface,
-    borderWidth: 1,
-    borderColor: tokens.color.border,
-    borderRadius: 20,
-    padding: 14,
-    ...tokens.shadow.xs,
-  },
-  reviewHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  reviewAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: tokens.color.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reviewInitial: { color: tokens.color.accentInk, fontFamily: 'Manrope_700Bold' },
-  reviewName: { fontFamily: 'Manrope_700Bold', color: tokens.color.text, fontSize: 13 },
-  reviewCity: { ...tokens.text.caption, color: tokens.color.textMuted },
-  reviewText: { ...tokens.text.bodySm, color: tokens.color.inkSoft, marginTop: 8 },
 
   faqCard: {
     backgroundColor: tokens.color.surface,
