@@ -11,7 +11,7 @@
 // turns a plan into an amount must go through here.
 //
 // Test products (Product.tag TEST, e.g. "TEST Purifier ₹1") are the exception
-// to calendar months: every paid term is exactly one minute, whatever plan was
+// to calendar months: every paid term is exactly two minutes, whatever plan was
 // bought, so pay → water on → water off can be tried in minutes. The price is
 // still the normal termPricePaise. Every payment path (stub, Razorpay verify,
 // order sync, webhooks) gets its dates from firstTermDates / applyPaidTerm
@@ -21,12 +21,12 @@ import { TEST_PRODUCT_TAG } from './poll-schedule';
 import { addMonthsIst, istDayOfMonth } from './time';
 
 /** One paid term of a test product (tag TEST). */
-export const TEST_TERM_MS = 60 * 1000;
+export const TEST_TERM_MS = 2 * 60 * 1000;
 
 /** The product's tag (Product.tag). Only TEST changes how long a term is. */
 export type TermProductTag = string | null | undefined;
 
-/** Whether this product tag marks an internal test product with 1-minute terms. */
+/** Whether this product tag marks an internal test product with 2-minute terms. */
 export function isTestProduct(productTag: TermProductTag): boolean {
   return productTag === TEST_PRODUCT_TAG;
 }
@@ -40,7 +40,7 @@ export function termPricePaise(monthlyPricePaise: number, durationMonths: number
  * Dates for a subscription starting now on a plan of `durationMonths`.
  * Lock-in is the plan's own term: a 1-month plan locks in for 1 month, a
  * 6-month plan for 6. It used to be a flat 180 days whatever was sold.
- * A test product's term is one minute, and its trial ends with it.
+ * A test product's term is two minutes, and its trial ends with it.
  */
 export function firstTermDates(startedAt: Date, durationMonths: number, productTag: TermProductTag) {
   const trialDays = Number(process.env.TRIAL_DAYS ?? 7);
@@ -57,7 +57,7 @@ export function firstTermDates(startedAt: Date, durationMonths: number, productT
  * New expiry after paying for one more term: from the current expiry if the
  * plan is still running, else from now. Anchored to the day the plan started
  * so a plan from the 31st that was squeezed to 28 Feb renews to 31 Mar.
- * A test product gets one minute on top of the same base.
+ * A test product gets two minutes on top of the same base.
  */
 export function renewedExpiry(
   sub: { expiresAt: Date; startedAt: Date },

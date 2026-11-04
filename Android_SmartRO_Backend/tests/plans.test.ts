@@ -1,5 +1,5 @@
 // Plans: admin management, calendar-month terms end to end, TEST products'
-// 1-minute terms, autopay cadence, and the IST month arithmetic the terms are
+// 2-minute terms, autopay cadence, and the IST month arithmetic the terms are
 // built on.
 
 import crypto from 'node:crypto';
@@ -183,7 +183,7 @@ describe('Calendar-month terms', () => {
   });
 });
 
-describe('TEST products: every paid term is one minute', () => {
+describe('TEST products: every paid term is two minutes', () => {
   const near = (d: Date, ms: number) => expect(Math.abs(d.getTime() - ms)).toBeLessThan(5000);
   const stub = async <T>(fn: () => Promise<T>) => {
     process.env.PAYMENT_DRIVER = 'stub';
@@ -213,7 +213,7 @@ describe('TEST products: every paid term is one minute', () => {
     });
   }
 
-  it('works the dates out in one place: one minute for TEST, calendar months for the rest', () => {
+  it('works the dates out in one place: two minutes for TEST, calendar months for the rest', () => {
     const start = ist(2027, 1, 31);
     expect(firstTermDates(start, 6, 'TEST')).toEqual({
       startedAt: start,
@@ -237,7 +237,7 @@ describe('TEST products: every paid term is one minute', () => {
     expect(applyPaidTerm(ended, 1, null, now).expiresAt).toEqual(ist(2027, 4, 10));
   });
 
-  it('booking payment (stub): water for one minute from now, at the normal price', async () => {
+  it('booking payment (stub): water for two minutes from now, at the normal price', async () => {
     const price = await testProductPrice();
     const at = Date.now();
     const { booking, sub } = await bookAndPay(1, price);
@@ -248,7 +248,7 @@ describe('TEST products: every paid term is one minute', () => {
     expect(sub.trialEndsAt?.toISOString()).toBe(sub.expiresAt.toISOString());
   });
 
-  it('recharge (stub): one minute on top of a running plan, or from now once it has ended', async () => {
+  it('recharge (stub): two minutes on top of a running plan, or from now once it has ended', async () => {
     const price = await testProductPrice();
     const { sub } = await bookAndPay(1, price);
     const recharge = () =>

@@ -1,7 +1,7 @@
 // Subscription states behind the app's My Plan screen: autopay setup and its
 // gateway failures, plan switches under a mandate, mandate webhooks (closed
 // plans, mandates paused at the gateway), legacy PAUSED plans from before the
-// pause feature was removed, TEST products' 1-minute terms on the Razorpay
+// pause feature was removed, TEST products' 2-minute terms on the Razorpay
 // paths, cancel, and /me. Only the Razorpay network calls are faked.
 
 import crypto from 'node:crypto';
@@ -54,7 +54,7 @@ let techUserId = '';
 let technicianId = '';
 let price: Prisma.PlanCityPriceGetPayload<{ include: { plan: true } }>;
 let otherPlanId = '';
-/** A price on a product tagged TEST (1-minute terms), made for this file. */
+/** A price on a product tagged TEST (2-minute terms), made for this file. */
 let testPrice: Prisma.PlanCityPriceGetPayload<{ include: { plan: true } }>;
 let testProductId = '';
 
@@ -429,10 +429,10 @@ describe('Mandate webhooks', () => {
   });
 });
 
-describe('TEST products get 1-minute terms on the Razorpay paths', () => {
+describe('TEST products get 2-minute terms on the Razorpay paths', () => {
   const near = (d: Date, ms: number) => expect(Math.abs(d.getTime() - ms)).toBeLessThan(5000);
 
-  it('booking payment (checkout /verify): the plan runs one minute from now', async () => {
+  it('booking payment (checkout /verify): the plan runs two minutes from now', async () => {
     const b = await prisma.booking.create({
       data: {
         userId,
@@ -463,7 +463,7 @@ describe('TEST products get 1-minute terms on the Razorpay paths', () => {
     expect(sub.trialEndsAt?.toISOString()).toBe(sub.expiresAt.toISOString());
   });
 
-  it('recharge order on an ended plan (payment.captured webhook): one minute from now, at the normal price', async () => {
+  it('recharge order on an ended plan (payment.captured webhook): two minutes from now, at the normal price', async () => {
     const sub = await makeSub({ expiresAt: new Date(Date.now() - DAY), lockInUntil: new Date(Date.now() - DAY) }, testPrice);
     const order = await post(`/payments/subscriptions/${sub.id}/order`);
     expect(order.status).toBe(201);
@@ -479,7 +479,7 @@ describe('TEST products get 1-minute terms on the Razorpay paths', () => {
     near(after.expiresAt, at + TEST_TERM_MS);
   });
 
-  it('autopay debit on a running plan (subscription.charged): one minute on top of the current end', async () => {
+  it('autopay debit on a running plan (subscription.charged): two minutes on top of the current end', async () => {
     const autopayId = `sub_S${rnd()}`;
     const sub = await makeSub({ expiresAt: new Date(Date.now() + 30_000), autopayId, autopayStatus: 'ACTIVE' }, testPrice);
     const r = await webhook({

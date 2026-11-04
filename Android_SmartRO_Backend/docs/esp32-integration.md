@@ -101,7 +101,7 @@ The server picks `pollIntervalSec` from the plan:
 | No plan attached | every 1 hour (3600 s) |
 | Test plan (product tagged `TEST`), any state | every 1 minute (60 s) |
 
-A test plan's paid term is also just one minute (booking payment and every
+A test plan's paid term is also just two minutes (booking payment and every
 recharge, whatever plan was bought), so paying, water coming on and water
 stopping can be tried in a few minutes.
 
