@@ -164,6 +164,8 @@ router.post(
     // Pick a technician for this booking's city: prefer techs whose zone
     // contains the city name (case-insensitive), then the one with the fewest
     // open jobs in the next 7 days. Defensive fallback: any active tech.
+    // None at all: the customer has paid, so the slot is still saved and the
+    // job stays unassigned until an admin picks a technician.
     const zoneMatch = await prisma.technician.findMany({
       where: { status: 'ACTIVE', zone: { contains: b.city.name } },
       include: { _count: { select: { jobs: { where: { status: { in: ['SCHEDULED', 'EN_ROUTE', 'IN_PROGRESS'] } } } } } },
@@ -175,9 +177,8 @@ router.post(
           where: { status: 'ACTIVE' },
           include: { _count: { select: { jobs: { where: { status: { in: ['SCHEDULED', 'EN_ROUTE', 'IN_PROGRESS'] } } } } } },
         });
-    if (candidates.length === 0) throw BadRequest('No active technicians configured for this city');
     candidates.sort((a, b) => a._count.jobs - b._count.jobs);
-    const tech = candidates[0]!;
+    const technicianId = candidates[0]?.id ?? null;
 
     const result = await prisma.$transaction(async (tx) => {
       const booking = await tx.booking.update({
@@ -191,7 +192,7 @@ router.post(
       const job = await tx.job.create({
         data: {
           bookingId: b.id,
-          technicianId: tech.id,
+          technicianId,
           type: 'INSTALL',
           scheduledFor: start,
           status: 'SCHEDULED',
@@ -206,7 +207,7 @@ router.post(
           body: `Technician will arrive on ${formatIst(start, { dateStyle: 'medium', timeStyle: 'short' })}.`,
         },
       });
-      return { booking, job, technicianId: tech.id };
+      return { booking, job, technicianId };
     });
 
     res.json({ data: result });

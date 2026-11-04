@@ -18,6 +18,7 @@ const NAV: Array<{ href: string; label: string; icon: string; group?: string }> 
   { href: '/plans', label: 'Plans', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
   { href: '/customers', label: 'Customers', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' },
   { href: '/tickets', label: 'Service tickets', icon: 'M21 16V8.5a2.5 2.5 0 0 0-5 0V16M3 16h18M5 9h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z' },
+  { href: '/jobs', label: 'Technician jobs', icon: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' },
   { href: '/technicians', label: 'Employees', icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM18 7v6M21 10h-6' },
   { href: '/banners', label: 'Banners & offers', icon: 'M11 4 8 9l-5 .73 3.6 3.51L5.78 18 11 15.27 16.22 18l-.82-4.76L19 9.73 14 9z' },
   { href: '/broadcasts', label: 'Broadcasts', icon: 'M3 11l18-8-8 18-2-7-8-3z' },
