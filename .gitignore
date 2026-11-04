@@ -35,6 +35,7 @@ CREDENTIALS.local.md
 # Hostinger deploy: server secrets and database dumps (customer data)
 deploy/hostinger/secrets/
 deploy/hostinger/backups/
+/backups/
 *.dump
 
 # Owner ID documents (Aadhaar, PAN, bank, registrations) and raw photos.
