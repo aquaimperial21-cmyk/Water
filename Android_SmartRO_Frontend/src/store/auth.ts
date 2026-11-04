@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Auth } from '../api/endpoints';
 import { clearTokens, getRefreshToken, getStoredUser, setStoredUser, setTokens } from '../api/client';
 import { clearLocalAccess } from '../utils/localPurifier';
+import { reportAppError } from '../utils/crashReporter';
 
 export interface AuthUser {
   id: string;
@@ -24,8 +25,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   hydrated: false,
   hydrate: async () => {
-    const u = await getStoredUser<AuthUser>();
-    set({ user: u, hydrated: true });
+    try {
+      const u = await getStoredUser<AuthUser>();
+      set({ user: u, hydrated: true });
+    } catch (e) {
+      // The saved session can't be read: start signed out instead of spinning
+      // forever, and drop it so the next launch starts clean.
+      set({ user: null, hydrated: true });
+      void reportAppError('promise', e);
+      await clearTokens().catch(() => {});
+    }
   },
   signInWithFirebase: async (idToken, fullName, referralCode) => {
     const data = await Auth.firebaseLogin(idToken, fullName, referralCode);

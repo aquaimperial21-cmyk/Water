@@ -62,6 +62,7 @@ import {
 } from '../../utils/planState';
 import type { RootStackParamList } from '../../navigation';
 import { getCachedAccess, refreshPurifier } from '../../utils/localPurifier';
+import { reportAppError } from '../../utils/crashReporter';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -99,6 +100,23 @@ function apiError(e: unknown): { status?: number; code?: string } {
   return { status: res?.status, code: res?.data?.error?.code };
 }
 
+/** Offline or an error answer from the server: expected, shown (or skipped) as before. */
+const isRequestError = (e: unknown) => Boolean((e as AxiosError | undefined)?.isAxiosError);
+
+/** Anything else is a bad reply or a bug here: worth a report. */
+function reportUnexpected(e: unknown): void {
+  if (!isRequestError(e)) void reportAppError('promise', e);
+}
+
+/**
+ * The list the server sent. Anything else is a server bug: thrown, so it's
+ * reported and handled like a failed request.
+ */
+function expectList<T>(list: T[], what: string): T[] {
+  if (Array.isArray(list)) return list;
+  throw new Error(`My Plan: ${what} came back as ${list === null ? 'null' : typeof list}, not a list`);
+}
+
 const priceKey = (productId: string, cityId: string) => `${productId}:${cityId}`;
 
 const AUTOPAY_UNAVAILABLE = 'Autopay is not available yet. Recharge manually before your plan ends.';
@@ -129,7 +147,7 @@ export function MyPlanScreen() {
     setRefreshing(true);
     setNow(new Date());
     try {
-      const list = await Subscriptions.mine();
+      const list = expectList(await Subscriptions.mine(), 'subscriptions');
       subsRef.current = list;
       setSubs(list);
       setLoadError(null);
@@ -143,11 +161,15 @@ export function MyPlanScreen() {
       });
       wanted.forEach(({ productId, cityId }, key) => {
         Catalog.pricing(productId, cityId)
-          .then((prices) => setPricing((p) => ({ ...p, [key]: prices })))
-          .catch(() => {});
+          .then((reply) => {
+            const prices = expectList(reply, 'pricing');
+            setPricing((p) => ({ ...p, [key]: prices }));
+          })
+          .catch(reportUnexpected);
       });
     } catch (e) {
-      const message = apiErrorMessage(e);
+      reportUnexpected(e);
+      const message = isRequestError(e) ? apiErrorMessage(e) : 'Something went wrong. Please try again.';
       setLoadError(message);
       if (subsRef.current) toast.error('Could not refresh your plan', message);
       void getCachedAccess().then((a) => setHasLocalSwitch(!!a));
@@ -155,9 +177,19 @@ export function MyPlanScreen() {
       setRefreshing(false);
     }
     // Secondary: a failure hides these rather than blocking the plan itself.
-    Payments.config().then((c) => setDriver(c.driver)).catch(() => {});
-    Invoices.mine().then(setInvoices).catch(() => setInvoices([]));
-    Tickets.mine().then((t) => setTimeline(ticketsToTimeline(t))).catch(() => setTimeline([]));
+    Payments.config().then((c) => setDriver(c.driver)).catch(reportUnexpected);
+    Invoices.mine()
+      .then((list) => setInvoices(expectList(list, 'invoices')))
+      .catch((e) => {
+        reportUnexpected(e);
+        setInvoices([]);
+      });
+    Tickets.mine()
+      .then((t) => setTimeline(ticketsToTimeline(expectList(t, 'tickets'))))
+      .catch((e) => {
+        reportUnexpected(e);
+        setTimeline([]);
+      });
   }, []);
 
   useFocusEffect(
@@ -399,7 +431,7 @@ export function MyPlanScreen() {
             description: 'Quick filter / water-quality check requested from My Plan.',
           });
           toast.success('Request raised', 'A technician will reach out shortly.');
-          Tickets.mine().then((t) => setTimeline(ticketsToTimeline(t))).catch(() => {});
+          Tickets.mine().then((t) => setTimeline(ticketsToTimeline(expectList(t, 'tickets')))).catch(reportUnexpected);
         } catch (e) {
           toast.error('Could not raise request', apiErrorMessage(e));
         }
