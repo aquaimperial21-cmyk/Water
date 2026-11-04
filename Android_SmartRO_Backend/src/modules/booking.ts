@@ -9,6 +9,7 @@ import { nextInvoiceNumber } from '../core/invoice';
 import { assertStubPaymentsAllowed } from '../core/payments';
 import { istSlotStart, formatIst, formatIstDate } from '../core/time';
 import { applyReferralRewardOnFirstPayment, lookupReferralCreditForUser } from './referral';
+import { technicianForCustomer } from '../core/technician-public';
 
 const router = Router();
 
@@ -92,7 +93,7 @@ router.get(
         subscription: true,
         jobs: {
           where: { type: 'INSTALL' },
-          include: { technician: { include: { user: { select: { fullName: true, phone: true } } } } },
+          include: { technician: technicianForCustomer },
           orderBy: { scheduledFor: 'desc' },
         },
       },

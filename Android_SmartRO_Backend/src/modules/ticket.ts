@@ -5,6 +5,7 @@ import { authRequired } from '../core/auth';
 import { BadRequest, NotFound, asyncHandler } from '../core/errors';
 import { validateBody } from '../core/validate';
 import { hideToken } from '../core/device-token';
+import { technicianForCustomer } from '../core/technician-public';
 
 const router = Router();
 
@@ -56,7 +57,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const items = await prisma.ticket.findMany({
       where: { userId: req.auth!.sub },
-      include: { device: true, technician: { include: { user: true } } },
+      include: { device: true, technician: technicianForCustomer },
       orderBy: { createdAt: 'desc' },
     });
     res.json({ data: items.map((t) => ({ ...t, device: hideToken(t.device) })) });
@@ -72,7 +73,7 @@ router.get(
       include: {
         user: { select: { id: true, fullName: true, phone: true } },
         device: true,
-        technician: { include: { user: { select: { fullName: true, phone: true } } } },
+        technician: technicianForCustomer,
         jobs: { orderBy: { scheduledFor: 'desc' } },
       },
     });
