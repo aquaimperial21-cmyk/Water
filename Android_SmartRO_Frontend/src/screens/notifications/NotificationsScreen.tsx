@@ -33,8 +33,9 @@ export function NotificationsScreen() {
   const load = React.useCallback(async () => {
     try {
       const r = await Notifications.mine();
-      setItems(r.items);
-      setUnread(r.unreadCount);
+      // An odd reply shows an empty inbox instead of breaking the screen.
+      setItems(Array.isArray(r?.items) ? r.items : []);
+      setUnread(r?.unreadCount ?? 0);
     } catch {}
   }, []);
 
