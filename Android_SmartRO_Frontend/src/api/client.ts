@@ -69,7 +69,13 @@ export async function setStoredUser(user: unknown) {
 }
 export async function getStoredUser<T>(): Promise<T | null> {
   const v = await AsyncStorage.getItem(USER_KEY);
-  return v ? (JSON.parse(v) as T) : null;
+  if (!v) return null;
+  // A saved copy that isn't valid JSON counts as signed out, rather than leaving the app stuck at launch.
+  try {
+    return JSON.parse(v) as T;
+  } catch {
+    return null;
+  }
 }
 
 api.interceptors.request.use(async (config) => {

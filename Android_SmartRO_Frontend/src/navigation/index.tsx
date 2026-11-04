@@ -30,7 +30,7 @@ import { HelpScreen } from '../screens/profile/HelpScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { WaitlistScreen } from '../screens/catalog/WaitlistScreen';
 import { onPushTapped, registerPushToken, showPushesWhileOpen } from '../utils/push';
-import { setCurrentScreen } from '../utils/crashReporter';
+import { reportAppError, setCurrentScreen } from '../utils/crashReporter';
 
 showPushesWhileOpen();
 
@@ -169,7 +169,15 @@ export function RootNavigator() {
   React.useEffect(() => {
     if (!user || !navReady) return;
     return onPushTapped((screen) => {
-      if (screen === 'Notifications' && navRef.isReady()) navRef.navigate('Notifications');
+      if (screen !== 'Notifications') return;
+      try {
+        // Only if the stack has that screen right now: it exists only while signed in.
+        if (navRef.isReady() && navRef.getRootState()?.routeNames?.includes('Notifications')) {
+          navRef.navigate('Notifications');
+        }
+      } catch (e) {
+        void reportAppError('global', e);
+      }
     });
   }, [user, navReady, navRef]);
 
