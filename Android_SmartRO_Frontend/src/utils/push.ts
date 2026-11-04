@@ -13,6 +13,10 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { DeviceHealthApi } from '../api/endpoints';
+import { reportAppError } from './crashReporter';
+
+// Types only; the module itself is loaded by notificationsModule() below.
+type NotificationsModule = typeof import('expo-notifications');
 
 // SDK 51 requires an explicit EAS projectId when the app isn't running inside
 // Expo Go. `eas init` writes it to expoConfig.extra.eas.projectId; until then
@@ -30,8 +34,8 @@ export async function registerPushToken(): Promise<void> {
   if (attempted) return; // once per app session
   attempted = true;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Notifications = require('expo-notifications');
+    const Notifications = notificationsModule();
+    if (!Notifications) return;
 
     const settings = await Notifications.getPermissionsAsync();
     let status = settings.status as string;
@@ -63,15 +67,26 @@ export async function registerPushToken(): Promise<void> {
   }
 }
 
+// Loaded once and kept, even when loading fails. Trying again never helps:
+// Metro remembers a module that failed to load and throws the same error on
+// every later require, and from an effect or a tap that error closes the app
+// (Metro reports it as fatal itself and the require returns undefined, so a
+// try/catch doesn't help).
+let notifications: NotificationsModule | null | undefined; // undefined: not loaded yet
+
 /** expo-notifications, or null where it can't run (web preview, missing module). */
-function notificationsModule(): any | null {
+function notificationsModule(): NotificationsModule | null {
+  if (notifications !== undefined) return notifications;
+  notifications = null;
   if (Platform.OS === 'web') return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('expo-notifications');
-  } catch {
-    return null;
+    notifications = (require('expo-notifications') as NotificationsModule | undefined) ?? null;
+  } catch (e) {
+    // The app ships with it, so this is a bug.
+    void reportAppError('global', e);
   }
+  return notifications;
 }
 
 /**
@@ -81,9 +96,20 @@ function notificationsModule(): any | null {
 export function showPushesWhileOpen(): void {
   const Notifications = notificationsModule();
   if (!Notifications) return;
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
-  });
+  // Android 8.0 (API 26) only: it closes the app (RemoteServiceException) when
+  // a notification's small icon is the adaptive launcher icon, and that's the
+  // icon this APK uses. So there, pushes that arrive while the app is open
+  // aren't shown (they're still in the in-app inbox). The real fix is a
+  // notification icon, which needs a new APK; pushes that arrive while the app
+  // is in the background still use the launcher icon until then.
+  const show = !(Platform.OS === 'android' && Platform.Version === 26);
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({ shouldShowAlert: show, shouldPlaySound: show, shouldSetBadge: false }),
+    });
+  } catch (e) {
+    void reportAppError('global', e);
+  }
 }
 
 /**
@@ -95,17 +121,40 @@ export function onPushTapped(open: (screen: string) => void): () => void {
   const Notifications = notificationsModule();
   if (!Notifications) return () => {};
   const handle = (resp: any) => {
-    const screen = resp?.notification?.request?.content?.data?.screen;
-    if (typeof screen === 'string') open(screen);
+    try {
+      const screen = resp?.notification?.request?.content?.data?.screen;
+      if (typeof screen === 'string') open(screen);
+    } catch (e) {
+      void reportAppError('global', e);
+    }
+    // Forget a handled tap, so it isn't acted on again when this is set up
+    // again (e.g. after signing out and back in).
+    try {
+      Notifications.clearLastNotificationResponseAsync().catch((e) => void reportAppError('global', e));
+    } catch (e) {
+      void reportAppError('global', e);
+    }
   };
-  const sub = Notifications.addNotificationResponseReceivedListener(handle);
+  let sub: { remove: () => void } | undefined;
+  try {
+    sub = Notifications.addNotificationResponseReceivedListener(handle);
+  } catch (e) {
+    void reportAppError('global', e);
+  }
   // The tap that started the app. Only a recent one: Android can hand back
   // an old response on a later, ordinary launch.
   Notifications.getLastNotificationResponseAsync()
-    .then((resp: any) => {
+    .then((resp) => {
       const at = Number(resp?.notification?.date ?? 0);
       if (resp && Date.now() - at < 60_000) handle(resp);
     })
-    .catch(() => {});
-  return () => sub.remove();
+    // Nothing for the customer to see, but it shouldn't fail: report it.
+    .catch((e) => void reportAppError('global', e));
+  return () => {
+    try {
+      sub?.remove();
+    } catch (e) {
+      void reportAppError('global', e);
+    }
+  };
 }
