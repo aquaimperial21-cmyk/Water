@@ -24,7 +24,7 @@ Railway deletes the trial database around 2026-11-12.
 3. Run `bash deploy/hostinger/dump-railway.sh` and paste the URL.
    It saves `deploy/hostinger/backups/railway-<date>.dump`.
 4. Backend service → **Variables** → copy the values of
-   `FIREBASE_SERVICE_ACCOUNT_JSON` and any `RAZORPAY_*` / `MSG91_*` keys into
+   `FIREBASE_SERVICE_ACCOUNT_JSON` and any `RAZORPAY_*` keys into
    your password manager. You need them in steps 3 and 6.
 
 ## 2. Buy the VPS

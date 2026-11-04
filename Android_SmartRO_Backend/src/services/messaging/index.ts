@@ -1,11 +1,10 @@
 // Provider-agnostic messaging driver. The stub logs to console + persists to
-// Notification table. Swap in a real driver (Gupshup / MSG91 / Twilio) by
-// setting MESSAGING_DRIVER env and adding a sibling file that exports the
-// same `MessagingDriver` shape.
+// Notification table. To send real SMS/WhatsApp later, add a sibling driver
+// file that exports the same `MessagingDriver` shape and select it with the
+// MESSAGING_DRIVER env. Only the stub exists today.
 
 import type { TemplateKey } from './templates';
 import { stubDriver } from './stub';
-import { msg91Driver } from './msg91';
 
 export type Channel = 'WHATSAPP' | 'SMS' | 'INAPP' | 'PUSH';
 
@@ -37,15 +36,11 @@ let cached: MessagingDriver | null = null;
 export function getMessagingDriver(): MessagingDriver {
   if (cached) return cached;
   const which = process.env.MESSAGING_DRIVER ?? 'stub';
-  switch (which) {
-    case 'msg91':
-      cached = msg91Driver;
-      break;
-    case 'stub':
-    default:
-      cached = stubDriver;
-      break;
+  if (which !== 'stub') {
+    // eslint-disable-next-line no-console
+    console.warn(`[messaging] MESSAGING_DRIVER="${which}" is not available; using the stub`);
   }
+  cached = stubDriver;
   // eslint-disable-next-line no-console
   console.log(`[messaging] driver = ${cached!.name}`);
   return cached!;

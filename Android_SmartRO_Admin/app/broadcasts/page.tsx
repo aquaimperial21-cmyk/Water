@@ -163,7 +163,7 @@ export default function BroadcastsPage() {
               Messages are persisted to the Notification table for audit. To go live, set
               <code className="bg-surface-warm rounded px-1 text-[11px] mx-1">MESSAGING_DRIVER</code>
               in the backend <code className="bg-surface-warm rounded px-1 text-[11px]">.env</code> to your provider key
-              (Gupshup / MSG91 / Twilio) and add the driver file.
+              (for example Gupshup or Twilio) and add the driver file.
             </p>
           </Card>
         </div>

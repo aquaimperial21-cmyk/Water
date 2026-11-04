@@ -15,7 +15,7 @@ export const stubDriver: MessagingDriver = {
   },
 
   // Parses a generic inbound shape that real providers (Gupshup / Twilio /
-  // MSG91) all loosely match. We accept either a single message envelope or
+  //) all loosely match. We accept either a single message envelope or
   // a webhook batch and return the first parseable item.
   parseInboundWebhook(body: unknown): InboundMessage | null {
     const b = body as Record<string, unknown>;
