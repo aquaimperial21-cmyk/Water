@@ -14,11 +14,11 @@ import {
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Catalog, PlanCityPrice, Product } from '../../api/endpoints';
+import { Catalog, City, PlanCityPrice, Product } from '../../api/endpoints';
 import { tokens } from '@theme/tokens';
 import { Aurora, Pill, Skeleton, WaterDrop } from '@ui/index';
 import { paiseToInr } from '../../utils/format';
-import { getDefaultCity } from '../../utils/city';
+import { getChosenCity, getCities, saveChosenCity } from '../../utils/city';
 import { planLabel, termLength, termPricePaise } from '../../utils/plans';
 import type { RootStackParamList } from '../../navigation';
 
@@ -61,36 +61,65 @@ export function ProductDetailScreen({ route, navigation }: Props) {
   const [product, setProduct] = React.useState<Product | null>(null);
   const [prices, setPrices] = React.useState<PlanCityPrice[]>([]);
   const [selectedPriceId, setSelectedPriceId] = React.useState<string | null>(null);
+  const [cities, setCities] = React.useState<City[]>([]);
   const [cityId, setCityId] = React.useState<string | null>(null);
+  const [pricesLoading, setPricesLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  // The city whose prices were asked for last, so a slow answer for a city
+  // the customer already switched away from is dropped.
+  const wantedCity = React.useRef<string | null>(null);
   const [tab, setTab] = React.useState<Tab>('overview');
   const [favorite, setFavorite] = React.useState(false);
   const [openFaq, setOpenFaq] = React.useState<number | null>(0);
   const scrollY = React.useRef(new Animated.Value(0)).current;
+
+  // Show one city's prices. Prices differ per city, so nothing is shown
+  // until the customer's city is known.
+  const loadPrices = React.useCallback(async (productId: string, id: string) => {
+    wantedCity.current = id;
+    setCityId(id);
+    setPrices([]);
+    setSelectedPriceId(null);
+    setPricesLoading(true);
+    try {
+      const cityPrices = await Catalog.pricing(productId, id);
+      if (wantedCity.current !== id) return;
+      setPrices(cityPrices);
+      // Pick the 6-month plan if available
+      const popular = cityPrices.find((c) => monthsOf(c) === 6) ?? cityPrices[0];
+      setSelectedPriceId(popular?.id ?? null);
+    } catch {
+      if (wantedCity.current === id) setPrices([]);
+    } finally {
+      if (wantedCity.current === id) setPricesLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
     (async () => {
       try {
-        const city = await getDefaultCity();
-        if (!alive) return;
-        setCityId(city.id);
-        const p = await Catalog.product(slug);
+        const [p, list, chosen] = await Promise.all([Catalog.product(slug), getCities(), getChosenCity()]);
         if (!alive) return;
         setProduct(p);
-        const cityPrices = await Catalog.pricing(p.id, city.id);
-        if (!alive) return;
-        setPrices(cityPrices);
-        // Pick the 6-month plan if available
-        const popular = cityPrices.find((c) => monthsOf(c) === 6) ?? cityPrices[0];
-        setSelectedPriceId(popular?.id ?? null);
+        setCities(list);
+        if (chosen) await loadPrices(p.id, chosen.id);
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
-  }, [slug]);
+    return () => {
+      alive = false;
+      wantedCity.current = null;
+    };
+  }, [slug, loadPrices]);
+
+  const chooseCity = (c: City) => {
+    if (!product || c.id === cityId) return;
+    void saveChosenCity(c);
+    void loadPrices(product.id, c.id);
+  };
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [120, 220],
@@ -326,6 +355,38 @@ export function ProductDetailScreen({ route, navigation }: Props) {
           ) : null}
         </View>
 
+        {/* City first: prices and technicians differ per city. */}
+        {cities.length > 1 ? (
+          <View style={{ marginTop: 32 }}>
+            <Text style={styles.sectionEyebrow}>Your city</Text>
+            <Text style={styles.sectionTitle}>Where should we install?</Text>
+            <View style={pickerStyles.pillRow}>
+              {cities.map((c) => {
+                const isSel = c.id === cityId;
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => chooseCity(c)}
+                    style={[pickerStyles.pill, isSel && pickerStyles.pillActive]}
+                  >
+                    <Text
+                      style={[pickerStyles.pillLabel, isSel && pickerStyles.pillLabelActive]}
+                      numberOfLines={1}
+                    >
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {cityId && !pricesLoading && prices.length === 0 ? (
+              <Text style={styles.cityNote}>
+                Not available in {cities.find((c) => c.id === cityId)?.name ?? 'this city'} yet.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         {/* Plan picker — 2-step tenure toggle in DrinkPrime style. */}
         <PlanPicker
           prices={prices}
@@ -355,7 +416,7 @@ export function ProductDetailScreen({ route, navigation }: Props) {
         <View style={styles.footerCard}>
           <View style={{ paddingHorizontal: 4 }}>
             <Text style={styles.footerLabel}>Today's bill</Text>
-            <Text style={styles.footerValue}>{paiseToInr(subtotal)}</Text>
+            <Text style={styles.footerValue}>{selected ? paiseToInr(subtotal) : '—'}</Text>
           </View>
           <Pressable
             onPress={() => {
@@ -367,7 +428,12 @@ export function ProductDetailScreen({ route, navigation }: Props) {
                 });
               }
             }}
-            style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.95 }]}
+            disabled={!selected || !cityId}
+            style={({ pressed }) => [
+              styles.bookCta,
+              pressed && { opacity: 0.95 },
+              (!selected || !cityId) && { opacity: 0.5 },
+            ]}
           >
             <LinearGradient
               colors={[tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]}
@@ -375,7 +441,9 @@ export function ProductDetailScreen({ route, navigation }: Props) {
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFillObject}
             />
-            <Text style={styles.bookCtaText}>Book installation</Text>
+            <Text style={styles.bookCtaText}>
+              {!cityId ? 'Pick your city' : selected ? 'Book installation' : 'Not available'}
+            </Text>
             <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.4} />
           </Pressable>
         </View>
@@ -760,6 +828,12 @@ const styles = StyleSheet.create({
 
   sectionEyebrow: { ...tokens.text.label, color: tokens.color.textSubtle },
   sectionTitle: { ...tokens.text.headingLg, color: tokens.color.text, marginTop: 2 },
+  cityNote: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 13,
+    color: tokens.color.textMuted,
+    marginTop: 10,
+  },
 
   planCard: {
     width: 220,
