@@ -30,6 +30,7 @@ import { HelpScreen } from '../screens/profile/HelpScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { WaitlistScreen } from '../screens/catalog/WaitlistScreen';
 import { onPushTapped, registerPushToken, showPushesWhileOpen } from '../utils/push';
+import { setCurrentScreen } from '../utils/crashReporter';
 
 showPushesWhileOpen();
 
@@ -180,7 +181,16 @@ export function RootNavigator() {
     );
   }
   return (
-    <NavigationContainer ref={navRef} theme={navTheme} onReady={() => setNavReady(true)}>
+    <NavigationContainer
+      ref={navRef}
+      theme={navTheme}
+      onReady={() => {
+        setNavReady(true);
+        setCurrentScreen(navRef.getCurrentRoute()?.name);
+      }}
+      // Crash reports say which screen the customer was on.
+      onStateChange={() => setCurrentScreen(navRef.getCurrentRoute()?.name)}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

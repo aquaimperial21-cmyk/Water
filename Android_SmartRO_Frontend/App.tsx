@@ -1,4 +1,6 @@
 import 'react-native-gesture-handler';
+// First, before any other app module runs: catch and report errors.
+import './src/utils/installCrashHandlers';
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,9 +15,16 @@ import {
 } from '@expo-google-fonts/manrope';
 import { RootNavigator } from './src/navigation';
 import { MessageHost } from './src/components/ui/MessageHost';
+import { AppErrorBoundary } from './src/components/AppErrorBoundary';
+import { reportUpdateProblems } from './src/utils/crashReporter';
 import { tokens } from './src/theme';
 
 export default function App() {
+  // An update that crashed at launch (and was rolled back) gets reported.
+  React.useEffect(() => {
+    void reportUpdateProblems();
+  }, []);
+
   const [fontsLoaded] = useFonts({
     Manrope_400Regular,
     Manrope_600SemiBold,
@@ -35,8 +44,10 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
-        <RootNavigator />
-        <MessageHost />
+        <AppErrorBoundary>
+          <RootNavigator />
+          <MessageHost />
+        </AppErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
