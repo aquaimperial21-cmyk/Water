@@ -3,6 +3,8 @@ import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-nati
 import { confirmAction, showDialog, toast } from '../../utils/messages';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -13,18 +15,20 @@ import {
   HelpCircle,
   Lock,
   LogOut,
+  RefreshCw,
+  Smartphone,
   MapPin,
   MessageCircle,
   Server,
   ShieldCheck,
   Trash2,
   User,
-  ChevronRight,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../store/auth';
 import { openLegal } from '../../utils/legal';
 import { Auth, Kyc, Referrals, ReferralInfo } from '../../api/endpoints';
 import { apiBaseUrl, apiErrorMessage } from '../../api/client';
+import { formatDate } from '../../utils/format';
 import { tokens } from '@theme/tokens';
 import { Aurora, ListGroup, ListRow, Pill } from '@ui/index';
 import type { RootStackParamList } from '../../navigation';
@@ -97,6 +101,39 @@ export function ProfileScreen() {
   // would show the first one is already in flight.
   const deletingRef = React.useRef(false);
   const [deleting, setDeleting] = React.useState(false);
+  const [checkingUpdate, setCheckingUpdate] = React.useState(false);
+
+  // New screens and fixes arrive as over-the-air updates (EAS Update): the app
+  // downloads them on launch by itself and uses them from the next start.
+  // This button fetches one now and restarts into it.
+  async function checkForUpdate() {
+    if (checkingUpdate) return;
+    if (!Updates.isEnabled) {
+      toast.info('Updates are not available in this build');
+      return;
+    }
+    setCheckingUpdate(true);
+    try {
+      const check = await Updates.checkForUpdateAsync();
+      if (!check.isAvailable) {
+        toast.success('You have the latest version');
+        return;
+      }
+      await Updates.fetchUpdateAsync();
+      const restart = await confirmAction({
+        title: 'Update ready',
+        message: 'Restart the app now to use the new version?',
+        confirmLabel: 'Restart',
+        cancelLabel: 'Later',
+      });
+      if (restart) await Updates.reloadAsync();
+      else toast.info('The update will be used next time you open the app');
+    } catch {
+      toast.error('Could not check for updates', 'Check your internet connection and try again.');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
 
   async function confirmDeleteAccount() {
     if (deletingRef.current) return;
@@ -263,10 +300,16 @@ export function ProfileScreen() {
               showChevron={false}
             />
             <ListRow
-              leading={<ChevronRight size={16} color={tokens.color.accentInk} />}
+              leading={<Smartphone size={16} color={tokens.color.accentInk} />}
               title="App version"
-              trailing={<Text style={styles.aboutMeta}>2.4.1 (build 482)</Text>}
+              subtitle={installedCodeLabel()}
+              trailing={<Text style={styles.aboutMeta}>{Constants.expoConfig?.version ?? '—'}</Text>}
               showChevron={false}
+            />
+            <ListRow
+              leading={<RefreshCw size={16} color={tokens.color.accentInk} />}
+              title={checkingUpdate ? 'Checking for updates…' : 'Check for updates'}
+              onPress={checkForUpdate}
             />
           </ListGroup>
         </View>
@@ -297,6 +340,12 @@ export function ProfileScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+/** Which code is running: what came with the APK, or a downloaded update. */
+function installedCodeLabel(): string {
+  if (!Updates.isEnabled || Updates.isEmbeddedLaunch || !Updates.createdAt) return 'As installed';
+  return `Updated ${formatDate(Updates.createdAt)}`;
 }
 
 function prettyHost(url: string) {
