@@ -7,7 +7,6 @@ import { MotiView } from 'moti';
 import {
   Bell,
   ChevronRight,
-  Star,
   ShieldCheck,
   Wallet,
   Home as HomeIcon,
@@ -17,7 +16,6 @@ import {
   CreditCard,
   Wrench,
   Check,
-  X,
   ArrowRight,
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -58,42 +56,15 @@ import {
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Filter = 'HOME' | 'COMMERCIAL';
 
-const TRUST = { rating: 4.8, reviews: 12480, slaHours: 24 };
-
-const TESTIMONIAL = {
-  name: 'Ananya R.',
-  city: 'Bengaluru',
-  text:
-    'No filter shopping, no service haggling. ImperialAqua just works — like the water in my taps was always meant to be this clean.',
-  rating: 5,
-};
+// Only true facts here: no star ratings or customer quotes until we have
+// real ones from real customers.
+const TRUST = { slaHours: 24 };
 
 const HOW_STEPS = [
   { Icon: ClipboardList, title: 'Book the perfect plan for you', sub: 'Pick a purifier and rental cycle.' },
   { Icon: UserCheck, title: 'Submit your details', sub: 'Address & quick KYC in 2 minutes.' },
   { Icon: CreditCard, title: 'Make the payment', sub: 'Plan rent upfront + a refundable deposit, securely via Razorpay.' },
   { Icon: Wrench, title: 'Get ImperialAqua installed in 48 hours', sub: 'Free pro install. Sip clean water.' },
-];
-
-type CompareRow = {
-  feature: string;
-  ours: string;
-  theirs: string;
-  advantage: string;
-  oursPositive?: boolean;
-  theirsPositive?: boolean;
-};
-
-const COMPARE_ROWS: CompareRow[] = [
-  { feature: 'Machine cost', ours: 'Rented', theirs: '₹15,000–₹20,000', advantage: 'No machine to buy — plan rent + a refundable deposit', oursPositive: true, theirsPositive: false },
-  { feature: 'Rental plans', ours: '1–12 months', theirs: 'Absent', advantage: 'Rent for 1, 3, 6 or 12 months, paid upfront', oursPositive: true, theirsPositive: false },
-  { feature: 'Purification technology', ours: 'RO + UV Lamp', theirs: 'RO + UV LED', advantage: 'Suitable for all types of water', oursPositive: true },
-  { feature: 'UV technology', ours: '4 W UV lamp', theirs: '0.7 W in-tank UV LED', advantage: 'High-powered UV lamp', oursPositive: true },
-  { feature: 'Copper-impregnated post-carbon', ours: 'Present', theirs: 'Absent', advantage: 'Antimicrobial & health benefits of copper', oursPositive: true, theirsPositive: false },
-  { feature: 'Low-pressure operation', ours: 'Present', theirs: 'Absent', advantage: 'No need for an additional pump', oursPositive: true, theirsPositive: false },
-  { feature: 'Purification capacity', ours: '15 L / hr', theirs: '12 L / hr', advantage: 'Higher purification capacity', oursPositive: true },
-  { feature: 'Water storage capacity', ours: '8 litres', theirs: '6 litres', advantage: 'Higher storage capacity', oursPositive: true },
-  { feature: 'Storage tank', ours: 'Transparent', theirs: 'Opaque', advantage: 'Water-level indication for the user', oursPositive: true },
 ];
 
 export function HomeScreen() {
@@ -305,7 +276,7 @@ export function HomeScreen() {
           </View>
         </MotiView>
 
-        {/* Comparison (mt-12) */}
+        {/* Why rent (mt-12) */}
         <MotiView
           from={{ opacity: 0, translateY: 8 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -336,56 +307,16 @@ export function HomeScreen() {
               </Text>
             </View>
           </View>
-
-          <View style={styles.compareCard}>
-            <View style={styles.compareHeadRow}>
-              <View style={styles.compareCellHead}>
-                <Text style={styles.compareHeadText}>Feature</Text>
-              </View>
-              <View style={[styles.compareCellHead, styles.compareCellHeadOurs]}>
-                <WaterDrop size={16} tone="white" />
-                <Text style={[styles.compareHeadText, { color: '#FFFFFF', marginTop: 4 }]}>ImperialAqua</Text>
-              </View>
-              <View style={styles.compareCellHead}>
-                <Text style={styles.compareHeadText}>Other purifiers</Text>
-              </View>
-            </View>
-
-            {COMPARE_ROWS.map((row, i) => (
-              <View key={row.feature}>
-                <View
-                  style={[
-                    styles.compareDataRow,
-                    i % 2 === 1 && { backgroundColor: tokens.color.surfaceWarm },
-                  ]}
-                >
-                  <View style={styles.compareCell}>
-                    <Text style={styles.compareFeature}>{row.feature}</Text>
-                  </View>
-                  <View style={[styles.compareCell, { backgroundColor: tokens.color.accentTint }]}>
-                    <CompareValue value={row.ours} positive={row.oursPositive} />
-                  </View>
-                  <View style={styles.compareCell}>
-                    <CompareValue value={row.theirs} positive={row.theirsPositive} muted />
-                  </View>
-                </View>
-                <View style={styles.compareAdvantage}>
-                  <Check size={12} color={tokens.color.accent} />
-                  <Text style={styles.compareAdvantageText}>{row.advantage}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
         </MotiView>
 
         {/* Trust strip (mt-10) */}
         <View style={styles.trust}>
           <View style={styles.trustCell}>
             <View style={styles.trustValueRow}>
-              <Star size={14} color={tokens.color.star} fill={tokens.color.star} />
-              <Text style={styles.trustValue}>{TRUST.rating}</Text>
+              <Wrench size={14} color={tokens.color.accentGlow} />
+              <Text style={styles.trustValue}>Free</Text>
             </View>
-            <Text style={styles.trustSub}>{TRUST.reviews.toLocaleString('en-IN')}+ reviews</Text>
+            <Text style={styles.trustSub}>Installation</Text>
           </View>
           <View style={styles.trustDivider} />
           <View style={styles.trustCell}>
@@ -403,19 +334,6 @@ export function HomeScreen() {
             </View>
             <Text style={styles.trustSub}>Full-refund trial</Text>
           </View>
-        </View>
-
-        {/* Testimonial */}
-        <View style={styles.testimonial}>
-          <View style={styles.starsRow}>
-            {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
-              <Star key={i} size={14} color={tokens.color.star} fill={tokens.color.star} />
-            ))}
-          </View>
-          <Text style={styles.quote}>"{TESTIMONIAL.text}"</Text>
-          <Text style={styles.quoteWho}>
-            — {TESTIMONIAL.name}, {TESTIMONIAL.city}
-          </Text>
         </View>
 
         <Text style={styles.helpFooter}>Need help? <Text style={{ color: tokens.color.accent, fontFamily: 'Manrope_700Bold' }}>Chat with us</Text></Text>
@@ -722,10 +640,6 @@ function ProductCard({ product, onPress }: { product: Product; onPress: () => vo
         <View style={styles.cardCapacityChip}>
           <Text style={styles.cardCapacityText}>{product.capacityLitres} L/hr</Text>
         </View>
-        <View style={styles.cardRatingChip}>
-          <Star size={10} color={tokens.color.star} fill={tokens.color.star} />
-          <Text style={styles.cardRatingText}>4.8</Text>
-        </View>
       </View>
 
       <View style={styles.cardBody}>
@@ -754,43 +668,6 @@ function ProductCard({ product, onPress }: { product: Product; onPress: () => vo
         </View>
       </View>
     </Pressable>
-  );
-}
-
-function CompareValue({
-  value,
-  positive,
-  muted,
-}: {
-  value: string;
-  positive?: boolean;
-  muted?: boolean;
-}) {
-  if (positive === true) {
-    return (
-      <View style={styles.compareValRow}>
-        <Check size={14} color={tokens.color.success} />
-        <Text style={[styles.compareValText, { color: tokens.color.success }]}>{value}</Text>
-      </View>
-    );
-  }
-  if (positive === false) {
-    return (
-      <View style={styles.compareValRow}>
-        <X size={14} color={tokens.color.danger} />
-        <Text style={[styles.compareValText, { color: tokens.color.danger }]}>{value}</Text>
-      </View>
-    );
-  }
-  return (
-    <Text
-      style={[
-        styles.compareValText,
-        { color: muted ? tokens.color.textMuted : tokens.color.text },
-      ]}
-    >
-      {value}
-    </Text>
   );
 }
 
@@ -959,19 +836,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   cardCapacityText: { fontFamily: 'Manrope_700Bold', color: tokens.color.accentInk, fontSize: 10 },
-  cardRatingChip: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(14,23,38,0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  cardRatingText: { color: '#FFFFFF', fontFamily: 'Manrope_700Bold', fontSize: 10 },
 
   cardBody: { padding: 12 },
   cardTagline: {
@@ -1069,60 +933,6 @@ const styles = StyleSheet.create({
   savingsHeading: { color: '#FFFFFF', fontFamily: 'Manrope_800ExtraBold', fontSize: 15 },
   savingsBody: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
 
-  compareCard: {
-    marginTop: 16,
-    borderRadius: 24,
-    backgroundColor: tokens.color.surface,
-    borderWidth: 1,
-    borderColor: tokens.color.border,
-    overflow: 'hidden',
-  },
-  compareHeadRow: { flexDirection: 'row' },
-  compareCellHead: {
-    flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-    backgroundColor: tokens.color.surfaceWarm,
-    alignItems: 'center',
-  },
-  compareCellHeadOurs: { backgroundColor: tokens.color.accent },
-  compareHeadText: {
-    fontFamily: 'Manrope_700Bold',
-    fontSize: 10,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: tokens.color.textMuted,
-    textAlign: 'center',
-  },
-  compareDataRow: { flexDirection: 'row' },
-  compareCell: {
-    flex: 1,
-    padding: 10,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compareFeature: {
-    fontFamily: 'Manrope_700Bold',
-    color: tokens.color.text,
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  compareValRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  compareValText: { fontFamily: 'Manrope_700Bold', fontSize: 12, textAlign: 'center' },
-  compareAdvantage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: tokens.color.accentTint,
-    borderTopWidth: 1,
-    borderTopColor: tokens.color.accentSoft,
-    borderBottomWidth: 1,
-    borderBottomColor: tokens.color.accentSoft,
-  },
-  compareAdvantageText: { fontFamily: 'Manrope_700Bold', fontSize: 11, color: tokens.color.accentInk, flex: 1 },
 
   /* Trust strip — mt-10 rounded-2xl bg-foreground p-4 */
   trust: {
@@ -1139,17 +949,6 @@ const styles = StyleSheet.create({
   trustDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
 
   /* Testimonial — mt-6 rounded-3xl bg-primary-tint border-primary-soft p-5 */
-  testimonial: {
-    marginTop: 24,
-    backgroundColor: tokens.color.accentTint,
-    borderRadius: 32,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: tokens.color.accentSoft,
-  },
-  starsRow: { flexDirection: 'row', gap: 2 },
-  quote: { ...tokens.text.bodyMd, color: tokens.color.accentInk, marginTop: 12, lineHeight: 22, fontFamily: 'Manrope_600SemiBold' },
-  quoteWho: { fontFamily: 'Manrope_700Bold', color: 'rgba(10,74,107,0.7)', fontSize: 13, marginTop: 10 },
 
   helpFooter: { textAlign: 'center', marginTop: 24, ...tokens.text.bodySm, color: tokens.color.textMuted },
 });
