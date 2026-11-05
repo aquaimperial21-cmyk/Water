@@ -229,13 +229,13 @@ describe('POST /inquiries/website', () => {
     expect(await prisma.inquiry.count({ where: { phone: `+91${mobile}` } })).toBe(3);
   });
 
-  it('allows 5 enquiries per client address per 10 minutes', async () => {
+  it('allows 20 enquiries per client address per 10 minutes', async () => {
     const ip = newIp();
     const codes: number[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 21; i++) {
       codes.push((await postWebsite({ form: 'popup', name: `Same IP ${i}`, phone: newMobile() }, `${ip}, 172.16.0.1`)).status);
     }
-    expect(codes).toEqual([201, 201, 201, 201, 201, 429]);
+    expect(codes).toEqual([...Array(20).fill(201), 429]);
     // Another address is not affected.
     expect((await postWebsite({ form: 'popup', name: 'Other IP', phone: newMobile() })).status).toBe(201);
   });

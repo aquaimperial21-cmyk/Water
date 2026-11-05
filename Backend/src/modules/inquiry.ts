@@ -61,7 +61,11 @@ const websiteInquirySchema = z.object({
 });
 
 const WEBSITE_SOURCE = { contact: 'WEBSITE_CONTACT', popup: 'WEBSITE_POPUP' } as const;
-const IP_LIMIT = { count: 5, windowSeconds: 10 * 60 };
+// Website enquiries arrive through Vercel's proxy. If its X-Forwarded-For
+// ever carried Vercel's address instead of the visitor's, every visitor would
+// share one bucket, so this is a generous flood guard; the per-phone limit and
+// the honeypot do the real spam work.
+const IP_LIMIT = { count: 20, windowSeconds: 10 * 60 };
 const PHONE_LIMIT = { count: 3, windowSeconds: 60 * 60 };
 
 router.post(
