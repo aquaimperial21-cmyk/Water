@@ -175,12 +175,18 @@ model Inquiry {
   user          User?    @relation(fields: [userId], references: [id])
   name          String
   phone         String
-  pincode       String
+  pincode       String? // the app asks for it; the website forms don't
+  email         String?
+  // APP | WEBSITE_CONTACT | WEBSITE_POPUP (website forms: POST /inquiries/website)
+  source        String   @default("APP")
   cityId        String?
   city          City?    @relation(fields: [cityId], references: [id])
+  cityName      String? // city as the visitor typed it (website forms)
   productId     String?
+  productName   String? // product as the website sent it (slug or name)
   planId        String?
   preferredSlot String?
+  heardFrom     String? // how they heard about us (website forms)
   notes         String?
   status        String   @default("NEW") // NEW | CONTACTED | PROPOSAL_SENT | BOOKED | LOST
   createdAt     DateTime @default(now())
@@ -189,6 +195,7 @@ model Inquiry {
   events InquiryEvent[]
 
   @@index([status, createdAt])
+  @@index([source, createdAt])
 }
 
 model InquiryEvent {
@@ -196,7 +203,7 @@ model InquiryEvent {
   inquiryId   String
   inquiry     Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
   actorUserId String?
-  type        String // STATUS_CHANGE | NOTE | CALL | MESSAGE
+  type        String // CREATED | STATUS_CHANGE | NOTE | CALL | MESSAGE
   payload     String // JSON string
   createdAt   DateTime @default(now())
 

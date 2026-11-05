@@ -151,7 +151,7 @@ export async function deleteCustomerAccount(userId: string): Promise<void> {
       await tx.helpRequest.updateMany({ where: { userId }, data: { message: null } });
       const inquiries = await tx.inquiry.updateMany({
         where: { OR: [{ userId }, { phone: { in: phones } }] },
-        data: { name: 'Deleted user', phone: tombstone, notes: null },
+        data: { name: 'Deleted user', phone: tombstone, email: null, notes: null },
       });
       await tx.waitlistEntry.deleteMany({ where: { phone: { in: phones } } });
       await tx.otpAttempt.deleteMany({ where: { phone: { in: phones } } });
