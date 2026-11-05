@@ -16,12 +16,14 @@ import {
 import { RootNavigator } from './src/navigation';
 import { MessageHost } from './src/components/ui/MessageHost';
 import { AppErrorBoundary } from './src/components/AppErrorBoundary';
-import { reportAppError, reportUpdateProblems } from './src/utils/crashReporter';
+import { reportAppError, reportUpdateProblems, resendStoredReports } from './src/utils/crashReporter';
 import { tokens } from './src/theme';
 
 export default function App() {
-  // An update that crashed at launch (and was rolled back) gets reported.
+  // Reports an earlier run couldn't send go now, and an update that crashed at
+  // launch (and was rolled back) gets reported.
   React.useEffect(() => {
+    void resendStoredReports();
     void reportUpdateProblems();
   }, []);
 
