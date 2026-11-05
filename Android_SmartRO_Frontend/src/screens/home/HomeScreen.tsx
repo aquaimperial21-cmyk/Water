@@ -1,5 +1,13 @@
 import React from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  unstable_batchedUpdates,
+} from 'react-native';
 import { assetUrl } from '../../api/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -68,13 +76,21 @@ const HOW_STEPS = [
   { Icon: Wrench, title: 'Get ImperialAqua installed in 48 hours', sub: 'Free pro install. Sip clean water.' },
 ];
 
+/** Several state updates, one render. After an await the old architecture renders
+ *  once per update; react-native-web has no such API but batches by itself. */
+function batched(apply: () => void) {
+  if (typeof unstable_batchedUpdates === 'function') unstable_batchedUpdates(apply);
+  else apply();
+}
+
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
   const firstName = user?.fullName?.split(' ')[0] ?? 'there';
 
   const [filter, setFilter] = React.useState<Filter>('HOME');
-  const [products, setProducts] = React.useState<Product[]>([]);
+  // null until the first successful load: skeletons show only then, a refresh keeps the cards.
+  const [products, setProducts] = React.useState<Product[] | null>(null);
   // null until the first successful load: an unknown plan is not "no plan".
   const [subs, setSubs] = React.useState<Subscription[] | null>(null);
   const [health, setHealth] = React.useState<DeviceHealth | null>(null);
@@ -84,8 +100,12 @@ export function HomeScreen() {
   const [now, setNow] = React.useState(() => new Date());
   const galleryY = React.useRef(0);
   const scrollRef = React.useRef<ScrollView>(null);
+  // Bumped by every refresh, so one still in flight (say, before a quick
+  // Home/Office tap) can't overwrite a newer answer.
+  const genRef = React.useRef(0);
 
   const refresh = React.useCallback(async () => {
+    const gen = ++genRef.current;
     setLoading(true);
     try {
       const [ps, ss, bs, ns, hs] = await Promise.all([
@@ -96,21 +116,27 @@ export function HomeScreen() {
         Notifications.mine().catch(() => ({ items: [], unreadCount: 0 })),
         DeviceHealthApi.me().catch(() => null),
       ]);
-      // A reply that isn't the expected shape is treated like a failed request.
-      if (Array.isArray(ps)) setProducts(ps);
-      if (Array.isArray(ss)) setSubs(ss);
-      setHealth(hs);
-      setBanners(Array.isArray(bs) ? bs : []);
-      setUnread(ns?.unreadCount ?? 0);
-      setNow(new Date());
+      // A newer refresh has started: it applies its own answer and ends the loading.
+      if (gen !== genRef.current) return;
+      batched(() => {
+        // A reply that isn't the expected shape is treated like a failed request.
+        if (Array.isArray(ps)) setProducts(ps);
+        if (Array.isArray(ss)) setSubs(ss);
+        setHealth(hs);
+        setBanners(Array.isArray(bs) ? bs : []);
+        setUnread(ns?.unreadCount ?? 0);
+        setNow(new Date());
+        setLoading(false);
+      });
     } catch (e) {
       // Failed requests (offline included) are handled above, quietly: this is a bug.
       void reportAppError('promise', e);
-    } finally {
-      setLoading(false);
+      if (gen === genRef.current) setLoading(false);
     }
   }, [filter]);
 
+  // The only trigger: loads on focus, and again on a Home/Office tap (refresh
+  // changes with the filter, which re-runs this while the screen is focused).
   useFocusEffect(
     React.useCallback(() => {
       void refresh();
@@ -119,7 +145,6 @@ export function HomeScreen() {
       return () => clearInterval(tick);
     }, [refresh])
   );
-  React.useEffect(() => { void refresh(); }, [refresh]);
 
   // Same pick as My Plan: running > inactive > expired > closed, newest first.
   const featured = React.useMemo(() => (subs ? pickDefaultSubscription(subs, now) : null), [subs, now]);
@@ -201,7 +226,7 @@ export function HomeScreen() {
               <Text style={styles.eyebrowMuted}>Browse purifiers</Text>
               <Text style={styles.sectionTitle}>Built for every space</Text>
             </View>
-            <Text style={styles.sectionMeta}>{products.length} models</Text>
+            <Text style={styles.sectionMeta}>{products?.length ?? 0} models</Text>
           </View>
 
           <SegmentedControl<Filter>
@@ -215,7 +240,7 @@ export function HomeScreen() {
           />
 
           <View style={styles.grid}>
-            {loading
+            {!products && loading
               ? [0, 1, 2, 3].map((i) => (
                   <View key={i} style={styles.gridCell}>
                     <View style={styles.skelCard}>
@@ -227,7 +252,7 @@ export function HomeScreen() {
                     </View>
                   </View>
                 ))
-              : products.map((p) => (
+              : products?.map((p) => (
                   <View key={p.id} style={styles.gridCell}>
                     <ProductCard
                       product={p}
@@ -598,6 +623,37 @@ function BrowseCTA({ onBrowse, lastPlan }: { onBrowse: () => void; lastPlan: Sub
   );
 }
 
+/** The same washes as <Aurora>, standing still. Behind a photo the drift is hardly
+ *  seen, and two looping animations per card kept the phone redrawing every frame. */
+function StillAurora({ height }: { height: number }) {
+  return (
+    <View style={[styles.stillAurora, { height }]} pointerEvents="none">
+      <View style={[styles.stillBlob, { top: -40, left: -40, width: 320, height: 320 }]}>
+        <LinearGradient
+          colors={['rgba(35,186,251,0.55)', 'rgba(35,186,251,0)']}
+          start={{ x: 0.4, y: 0.4 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
+      <View style={[styles.stillBlob, { top: -50, right: -60, width: 300, height: 300 }]}>
+        <LinearGradient
+          colors={['rgba(42,116,244,0.32)', 'rgba(42,116,244,0)']}
+          start={{ x: 0.6, y: 0.4 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
+      <LinearGradient
+        colors={['rgba(250,246,235,0)', tokens.color.bg]}
+        start={{ x: 0.5, y: 0.55 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+    </View>
+  );
+}
+
 function ProductCard({ product, onPress }: { product: Product; onPress: () => void }) {
   // Prefer the server-side rollup (lowestMonthlyPaise) — it's the cheapest
   // across all cities + plans. Fall back to per-card pricing for back-compat
@@ -623,19 +679,28 @@ function ProductCard({ product, onPress }: { product: Product; onPress: () => vo
     product.personasMin != null && product.personasMax != null
       ? `${product.personasMin}–${product.personasMax} people`
       : null;
+  const photo = assetUrl(product.imageUrl);
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && { opacity: 0.96 }]}>
       <View style={styles.cardImage}>
-        <Aurora height={200} style={{ position: 'absolute' }} />
-        {product.imageUrl ? (
-          <Image
-            source={{ uri: assetUrl(product.imageUrl) ?? undefined }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
+        {photo ? (
+          <>
+            <StillAurora height={200} />
+            {/* resize: decoded at the card's size, not the upload's. Admin photos
+                (up to 8 MB) decoded in full can run the phone out of memory. */}
+            <Image
+              source={{ uri: photo }}
+              style={styles.cardPhoto}
+              resizeMode="cover"
+              resizeMethod="resize"
+            />
+          </>
         ) : (
-          <WaterDrop size={64} />
+          <>
+            <Aurora height={200} style={{ position: 'absolute' }} />
+            <WaterDrop size={64} />
+          </>
         )}
         {tagLabel ? (
           <View style={[styles.cardCapacityChip, { left: 12, right: 'auto' as any, backgroundColor: tokens.color.accent }]}>
@@ -831,6 +896,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  // Sized to the square box outright: resizeMethod="resize" decodes the photo at this size.
+  cardPhoto: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  // As Aurora's own wrap and blobs.
+  stillAurora: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  stillBlob: { position: 'absolute', borderRadius: 999, overflow: 'hidden' },
   cardCapacityChip: {
     position: 'absolute',
     top: 8,
