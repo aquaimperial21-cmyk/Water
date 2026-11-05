@@ -488,11 +488,11 @@ These are decisions hidden in the current code that you may not have realised yo
 
 1. You hand the filled form back (or paste the Gamma share link).
 2. We do one developer-side pass that touches:
-   - `Android_SmartRO_Backend/prisma/seed.ts` — cities, products, prices, real admin/technician accounts
-   - `Android_SmartRO_Frontend/src/screens/**` — copy, hero text, testimonials, brand names
-   - `Android_SmartRO_Frontend/src/theme/index.ts` + `Android_SmartRO_Admin/tailwind.config.ts` — brand colors
-   - `Android_SmartRO_Frontend/app.json` — app display name, slug, splash color
-   - `Android_SmartRO_Admin/app/layout.tsx` — admin console title and branding
-   - `Android_SmartRO_Backend/src/services/messaging/templates.ts` — SMS/email template brand strings
-   - `Android_SmartRO_Backend/src/modules/booking.ts` — GST rate, lock-in
+   - `Backend/prisma/seed.ts` — cities, products, prices, real admin/technician accounts
+   - `Frontend/src/screens/**` — copy, hero text, testimonials, brand names
+   - `Frontend/src/theme/index.ts` + `Admin/tailwind.config.ts` — brand colors
+   - `Frontend/app.json` — app display name, slug, splash color
+   - `Admin/app/layout.tsx` — admin console title and branding
+   - `Backend/src/services/messaging/templates.ts` — SMS/email template brand strings
+   - `Backend/src/modules/booking.ts` — GST rate, lock-in
 3. After that pass, the app is launch-ready content-wise — what's left is payments, real SMS (DLT approval), and Play-Store publishing.

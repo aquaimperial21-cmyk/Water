@@ -16,10 +16,10 @@ tar -czf - \
   --exclude=node_modules --exclude=dist --exclude=.next --exclude='.next.bak-*' \
   --exclude=coverage --exclude='*.tsbuildinfo' --exclude='*.log' \
   --exclude=.env --exclude='.env.local' --exclude='.env.*.local' \
-  --exclude=Android_SmartRO_Backend/uploads \
-  --exclude=Android_SmartRO_Backend/firebase-service-account.json \
+  --exclude=Backend/uploads \
+  --exclude=Backend/firebase-service-account.json \
   --exclude=deploy/hostinger/backups \
-  Android_SmartRO_Backend Android_SmartRO_Admin deploy/hostinger \
+  Backend Admin deploy/hostinger \
 | ssh "$SERVER" "set -e
     rm -rf /opt/smartro/src.new && mkdir -p /opt/smartro/src.new
     tar -xzf - -C /opt/smartro/src.new

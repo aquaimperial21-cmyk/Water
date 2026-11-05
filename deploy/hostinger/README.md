@@ -76,9 +76,9 @@ Razorpay dashboard → Webhooks → URL `https://<host>/api/v1/webhooks/razorpay
 
 ## 7. Point the app and firmware at the new address
 
-The old Railway URL is in `Android_SmartRO_Frontend/eas.json`,
-`Android_SmartRO_Frontend/src/api/client.ts` and
-`Android_SmartRO_Firmware/smartro_valve/platformio.ini`. Replace it with
+The old Railway URL is in `Frontend/eas.json`,
+`Frontend/src/api/client.ts` and
+`Firmware/smartro_valve/platformio.ini`. Replace it with
 `https://<host>/api/v1`, then make a new EAS build. After a week on
 Hostinger with no problems, cancel Railway.
 

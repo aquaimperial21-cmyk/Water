@@ -27,12 +27,12 @@ services:
     runtime: node
     plan: free
     region: singapore
-    rootDir: Android_SmartRO_Backend
+    rootDir: Backend
     buildCommand: npm install && npx prisma generate && npm run build && npx prisma migrate deploy
     # ↑ applies pending prisma/migrations; fails the build (keeping the old
     #   version live) if a migration fails. See the baseline note above.
     # After the first deploy succeeds, seed the database ONCE from your laptop:
-    #   cd Android_SmartRO_Backend
+    #   cd Backend
     #   DATABASE_URL="<your-neon-url>" npx tsx prisma/seed.ts
     # Re-running the seed wipes and recreates all test data.
     startCommand: npm start

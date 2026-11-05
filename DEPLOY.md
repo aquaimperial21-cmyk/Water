@@ -20,7 +20,7 @@ card needed for the basic flow.
                     └────────────────┘
 ```
 
-For real production with live SMS/payments, see `Android_SmartRO_Backend/fly.toml`
+For real production with live SMS/payments, see `Backend/fly.toml`
 and the existing `.env.production.example` — that's a separate guide.
 
 ---
@@ -58,7 +58,7 @@ Render and Vercel both deploy from GitHub. If you haven't already:
 ## Step 2 — Backend on Render  *(15 min)*
 
 The repo already has a blueprint at
-`Android_SmartRO_Backend/render.yaml` that does most of the work.
+`Backend/render.yaml` that does most of the work.
 
 1. Go to **https://render.com** → sign up with GitHub.
 2. **Dashboard → New → Blueprint**.
@@ -77,7 +77,7 @@ The first deploy created the schema but no data. Seed it once locally —
 this creates the admin user, products, pricing, and demo customers:
 
 ```bash
-cd Android_SmartRO_Backend
+cd Backend
 npm install
 SEED_ADMIN_PASSWORD="pick-a-strong-one" SEED_TECH_PASSWORD="pick-another" \n  DATABASE_URL="postgresql://…your-neon-url…" npx tsx prisma/seed.ts
 ```
@@ -104,7 +104,7 @@ Customers (OTP login, OTP returned in dev response):
 1. Go to **https://vercel.com** → sign up with GitHub.
 2. **Add New → Project** → import your repo.
 3. Configure:
-   - **Root Directory:** `Android_SmartRO_Admin`
+   - **Root Directory:** `Admin`
    - **Framework Preset:** Next.js (auto-detected)
 4. Expand **Environment Variables** and add (before clicking Deploy):
    ```
@@ -134,7 +134,7 @@ Save. Render redeploys automatically.
 The fastest way to test on a real phone — no APK build, no Play Store.
 
 1. Install **Expo Go** on your test phone from Play Store / App Store.
-2. Edit `Android_SmartRO_Frontend/app.json` → change the API URL to your
+2. Edit `Frontend/app.json` → change the API URL to your
    Render backend:
    ```json
    "extra": {
@@ -143,7 +143,7 @@ The fastest way to test on a real phone — no APK build, no Play Store.
    ```
 3. From your laptop:
    ```bash
-   cd Android_SmartRO_Frontend
+   cd Frontend
    npm install
    npx expo start --tunnel
    ```
@@ -163,7 +163,7 @@ share with testers:
 ```bash
 npm install -g eas-cli
 eas login
-cd Android_SmartRO_Frontend
+cd Frontend
 
 # Edit eas.json — change "preview" profile's EXPO_PUBLIC_API_URL to your
 # Render URL (currently set to https://api.smartro.in/api/v1).
@@ -239,7 +239,7 @@ stubbed until you're going to real production. Payments are the exception.
   `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, then add the webhook.
   On a phone, Checkout needs an EAS build; it doesn't run in Expo Go. Full
   steps:
-  [Android_SmartRO_Backend/README.md → Razorpay payments](Android_SmartRO_Backend/README.md#razorpay-payments).
+  [Backend/README.md → Razorpay payments](Backend/README.md#razorpay-payments).
 - **Server SMS** — there is no SMS provider; `MESSAGING_DRIVER=stub` only
   logs messages. Customer phone login uses Firebase.
 - **Expo Push notifications** — `PUSH_DRIVER=stub` logs to console only.
@@ -247,5 +247,5 @@ stubbed until you're going to real production. Payments are the exception.
   uploaded files (invoice PDFs, KYC images) are lost on each redeploy. Fine
   for testing.
 
-See `Android_SmartRO_Backend/.env.production.example` for the real-prod
+See `Backend/.env.production.example` for the real-prod
 template (Fly.io + Razorpay + Expo).

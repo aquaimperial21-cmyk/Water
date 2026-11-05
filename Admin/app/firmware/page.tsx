@@ -3,14 +3,14 @@
 // Firmware updates (OTA) for the purifier chips (ESP32).
 //
 //   • Upload a signed release: the .bin and its .release.json, both made by
-//     `node tools/release.mjs sign` in Android_SmartRO_Firmware. The browser
+//     `node tools/release.mjs sign` in Firmware. The browser
 //     reads the manifest and checks the pair before anything is sent.
 //   • Roll it out: Off → Test (listed serials) → All purifiers. Purifiers
 //     install at night (02:00–05:00 IST) unless "Install now" is on.
 //   • Watch each purifier's update and retry the ones that failed.
 //
 // Refreshes every 30 s while the tab is visible.
-// Release guide: Android_SmartRO_Firmware/smartro_valve/OTA.md
+// Release guide: Firmware/smartro_valve/OTA.md
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -672,7 +672,7 @@ function UploadCard({
         sub={
           <>
             Make both files with <code className="font-mono">node tools/release.mjs sign</code> (in
-            Android_SmartRO_Firmware). They are in its <code className="font-mono">dist/</code> folder.
+            Firmware). They are in its <code className="font-mono">dist/</code> folder.
           </>
         }
       />

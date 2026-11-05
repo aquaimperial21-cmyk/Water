@@ -5,12 +5,12 @@ Next.js 14 (App Router) + TypeScript + Tailwind.
 ## Quick start
 
 ```bash
-cd Android_SmartRO_Admin
+cd Admin
 npm install
 npm run dev          # http://localhost:3000
 ```
 
-**Backend must be running first** (`Android_SmartRO_Backend`).
+**Backend must be running first** (`Backend`).
 
 ## Demo login
 

@@ -5,7 +5,7 @@ React Native + Expo (SDK 51), TypeScript. Runs on iOS, Android, and the web (pre
 ## Quick start
 
 ```bash
-cd Android_SmartRO_Frontend
+cd Frontend
 npm install            # ~2 min first time
 npm start              # opens Expo dev tools, scan QR with Expo Go on your phone
 # or
@@ -14,7 +14,7 @@ npm run android        # Android emulator
 npm run web            # browser preview (limited but renders most screens)
 ```
 
-**Backend must be running first** — see `../Android_SmartRO_Backend/README.md`.
+**Backend must be running first** — see `../Backend/README.md`.
 
 ## Demo login
 

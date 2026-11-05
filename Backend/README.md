@@ -5,7 +5,7 @@ Node.js + Express + Prisma + SQLite + JWT.
 ## Quick start
 
 ```bash
-cd Android_SmartRO_Backend
+cd Backend
 npm install
 SEED_ADMIN_PASSWORD=... SEED_TECH_PASSWORD=... npm run setup   # migrate + seed
 npm run dev             # starts on http://localhost:4000
@@ -128,7 +128,7 @@ Paid rows show up in Dashboard → **Transactions → Payments**. In the databas
 
 ### 5. Customer app
 
-- **Web:** `npm run web` in `Android_SmartRO_Frontend` loads Razorpay
+- **Web:** `npm run web` in `Frontend` loads Razorpay
   `checkout.js`. It works straight away.
 - **Android/iOS:** Checkout uses `react-native-razorpay`, a native module, so it
   does **not** run in Expo Go. Make a new native build:

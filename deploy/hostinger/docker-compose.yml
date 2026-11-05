@@ -36,7 +36,7 @@ services:
     # From your laptop use an SSH tunnel (see README.md).
 
   api:
-    build: ../../Android_SmartRO_Backend
+    build: ../../Backend
     restart: unless-stopped
     env_file:
       - ${SMARTRO_HOME:-/opt/smartro}/.env
@@ -66,7 +66,7 @@ services:
 
   admin:
     build:
-      context: ../../Android_SmartRO_Admin
+      context: ../../Admin
       args:
         NEXT_PUBLIC_API_URL: https://${PUBLIC_HOST:?set PUBLIC_HOST in .env}/api/v1
     restart: unless-stopped

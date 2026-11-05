@@ -9,7 +9,7 @@ Runs on the ESP32 inside each purifier. It:
    **OFF always works. ON only works while the plan is paid.** The ESP32 enforces this, not the app.
 
 Protocol details (server endpoints, local API, signatures):
-[../../Android_SmartRO_Backend/docs/esp32-integration.md](../../Android_SmartRO_Backend/docs/esp32-integration.md).
+[../../Backend/docs/esp32-integration.md](../../Backend/docs/esp32-integration.md).
 
 ## Wiring
 
@@ -38,7 +38,7 @@ Before testing, check your PC's address with `ipconfig` ("IPv4 Address" under Wi
 
 1. **Let the ESP32 reach your PC.** Windows blocks Node on networks marked *Public*.
    Settings → Network & internet → Wi-Fi → your network → Network profile type → **Private**.
-2. **Restart the backend** so it picks up the new routes: in `Android_SmartRO_Backend` press Ctrl+C, then run `npm run dev`.
+2. **Restart the backend** so it picks up the new routes: in `Backend` press Ctrl+C, then run `npm run dev`.
    Check from your phone's browser that `http://192.168.1.10:4000/health` opens.
 3. **Flash the ESP32.** Plug in the bare board. In the PlatformIO sidebar, open smartro_valve → env:lan → **Upload**, then **Monitor**.
 4. **Set the identity.** Type these into the monitor. The values are the seeded test purifier with an active plan:
@@ -57,12 +57,12 @@ Before testing, check your PC's address with `ipconfig` ("IPv4 Address" under Wi
    [valve] OPEN  -> water flows
    [cloud] heartbeat sent (IP 192.168.1.x)
    ```
-7. **Use the app.** In `Android_SmartRO_Frontend`, run `npm run web` and log in as Priya: `+919876543210`, using the dev OTP.
+7. **Use the app.** In `Frontend`, run `npm run web` and log in as Priya: `+919876543210`, using the dev OTP.
    Then go to My Plan → Smart health → Water switch → **Turn water off**. The relay clicks and the monitor shows `[app] water switched OFF from the app`.
 
 To check that the payment rule holds: suspend Priya's subscription in the admin. The valve closes at the next check, and the app's ON button shows "Recharge". While a plan is paid the next check can be up to a day away, so type `refresh` in the monitor to see it at once.
 
-The `next check in` time comes from the server's `pollIntervalSec`: about once a day while a plan is paid, faster after it ends so water comes back soon after a recharge. The full schedule is in the [integration doc](../../Android_SmartRO_Backend/docs/esp32-integration.md#how-often-the-purifier-checks). The purifier also checks earlier, whichever comes first:
+The `next check in` time comes from the server's `pollIntervalSec`: about once a day while a plan is paid, faster after it ends so water comes back soon after a recharge. The full schedule is in the [integration doc](../../Backend/docs/esp32-integration.md#how-often-the-purifier-checks). The purifier also checks earlier, whichever comes first:
 
 - when the app asks (`POST /api/refresh`, below). The app does this right after a pause, resume or recharge while the phone is on the same Wi-Fi;
 - 5 s after the saved plan ends, to see a recharge made at the last minute (the valve itself closes at the end time, with or without internet);

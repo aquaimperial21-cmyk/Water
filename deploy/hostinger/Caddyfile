@@ -1,6 +1,6 @@
 {
 	# Let's Encrypt only. Caddy would otherwise fall back to ZeroSSL, and the
-	# ESP32 firmware (Android_SmartRO_Firmware/smartro_valve/src/certs.h)
+	# ESP32 firmware (Firmware/smartro_valve/src/certs.h)
 	# trusts only the Let's Encrypt roots, so purifiers would stop connecting.
 	acme_ca https://acme-v02.api.letsencrypt.org/directory
 }

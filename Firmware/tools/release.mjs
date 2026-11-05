@@ -16,9 +16,9 @@
 //
 // Path overrides (for tests; normal use needs none):
 //   SMARTRO_SIGNING_KEY    private key file  (default ~/.smartro/firmware-signing-key.pem)
-//   SMARTRO_FIRMWARE_DIR   the Android_SmartRO_Firmware folder (default: this script's parent)
+//   SMARTRO_FIRMWARE_DIR   the Firmware folder (default: this script's parent)
 //   SMARTRO_BACKEND_PEM    backend copy of the public key
-//                          (default <repo>/Android_SmartRO_Backend/keys/firmware-signing-public.pem)
+//                          (default <repo>/Backend/keys/firmware-signing-public.pem)
 //
 // Node 18+, no dependencies.
 
@@ -37,7 +37,7 @@ const BUILD_BIN = path.join(PROJECT_DIR, '.pio', 'build', 'production', 'firmwar
 const PUBKEY_H = path.join(PROJECT_DIR, 'src', 'ota_pubkey.h');
 const BACKEND_PEM = path.resolve(
   process.env.SMARTRO_BACKEND_PEM ||
-    path.join(REPO_DIR, 'Android_SmartRO_Backend', 'keys', 'firmware-signing-public.pem')
+    path.join(REPO_DIR, 'Backend', 'keys', 'firmware-signing-public.pem')
 );
 const DIST_DIR = path.join(FW_DIR, 'dist');
 const KEY_PATH = path.resolve(
@@ -500,7 +500,7 @@ function usage() {
   node tools/release.mjs keygen
       Make the signing key. Only for a brand-new setup.
 
-Guide: Android_SmartRO_Firmware/smartro_valve/OTA.md`);
+Guide: Firmware/smartro_valve/OTA.md`);
 }
 
 const [cmd, ...rest] = process.argv.slice(2);

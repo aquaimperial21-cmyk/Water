@@ -1,6 +1,6 @@
 # Google Play readiness: SmartRO customer app (`in.smartro.customer`)
 
-Checked 3 Nov 2026 against `Android_SmartRO_Frontend` (Expo SDK 51, RN 0.74.5, EAS, no `android/` folder) and current Google policy. Numbers in [brackets] point to Sources at the end.
+Checked 3 Nov 2026 against `Frontend` (Expo SDK 51, RN 0.74.5, EAS, no `android/` folder) and current Google policy. Numbers in [brackets] point to Sources at the end.
 Operator: **Mahesh Enterprises** (sole proprietorship), Ahmednagar, Maharashtra. Production API: `https://srv2122898.hstgr.cloud/api/v1`. `/health` returned 200 on 3 Nov; `/privacy`, `/terms` and `/delete-account` returned 404.
 
 **Verdict:** Play would refuse the upload today. The app targets API 34, but Play has required API 36 since 31 Aug 2026, and the last extension ran out on 1 Nov 2026 [1]. Policy pages, account deletion and reviewer access also have to be finished before review.

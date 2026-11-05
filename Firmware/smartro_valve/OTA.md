@@ -50,11 +50,11 @@ Do these in order. Don't skip the test.
    pio run -e production
    ```
    Run it in a PlatformIO terminal. Or use the PlatformIO sidebar: env:production → **Build** (not Upload).
-3. **Sign it.** In the `Android_SmartRO_Firmware` folder:
+3. **Sign it.** In the `Firmware` folder:
    ```
    node tools/release.mjs sign
    ```
-   It writes two files into `Android_SmartRO_Firmware/dist/`:
+   It writes two files into `Firmware/dist/`:
    `smartro_valve-1.2.0.bin` and `smartro_valve-1.2.0.release.json`.
    It refuses if something is wrong. See [What `sign` checks](#what-sign-checks).
 4. **Upload.** Admin console → **Firmware updates** → *Upload a release*.
@@ -125,7 +125,7 @@ Open PlatformIO **Monitor** with the purifier plugged in by USB.
 > - Keep an **offline backup**, for example on a USB stick in a safe place. Check the backup once.
 > - **Never** email it, put it in chat, cloud drives or the repo, or copy it to the server. The server only needs the public key.
 
-The public half is safe to share. It is in `src/ota_pubkey.h` (chip) and `Android_SmartRO_Backend/keys/firmware-signing-public.pem` (server).
+The public half is safe to share. It is in `src/ota_pubkey.h` (chip) and `Backend/keys/firmware-signing-public.pem` (server).
 Its fingerprint is `1825f759d433d6a2`. Every `.release.json` shows the fingerprint of the key that signed it.
 
 `node tools/release.mjs keygen` makes a new key. It is **only for a brand-new setup**. It refuses if a key already exists.

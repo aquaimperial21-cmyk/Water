@@ -175,7 +175,7 @@ Response (200):
 
 ## Remote firmware updates (OTA)
 
-Images are signed on the release PC (`Android_SmartRO_Firmware/tools/release.mjs`):
+Images are signed on the release PC (`Firmware/tools/release.mjs`):
 ECDSA P-256 over SHA-256 of the exact `.bin` bytes, DER signature in base64,
 `sha256` in lowercase hex. The server checks every upload against
 `keys/firmware-signing-public.pem` (override: `FIRMWARE_PUBKEY_PATH`), and
@@ -384,7 +384,7 @@ the backend, with manual IP entry as a fallback.
 ## Firmware
 
 The real firmware is the PlatformIO project at
-`Android_SmartRO_Firmware/smartro_valve`. Build, flash and provisioning steps
+`Firmware/smartro_valve`. Build, flash and provisioning steps
 are in its README.
 
 ## Smoke-testing without hardware

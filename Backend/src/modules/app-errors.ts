@@ -1,7 +1,7 @@
 // Crash reports from the customer app.
 //
 // The app has an error screen and a global error handler
-// (Android_SmartRO_Frontend/src/utils/crashReporter.ts). When something
+// (Frontend/src/utils/crashReporter.ts). When something
 // breaks it posts here: what broke, on which screen, in which app version
 // and over-the-air update. Each report becomes one "[app-error]" line in the
 // server log (smartro logs api | grep app-error), which is all we need to

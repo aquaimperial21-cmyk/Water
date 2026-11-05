@@ -1,4 +1,4 @@
-// Public website (Android_SmartRO_Website, hosted on Vercel) with the policy
+// Public website (Website, hosted on Vercel) with the policy
 // pages Razorpay and Google Play check. Same address in dev and release
 // builds; it does not depend on which API the app talks to.
 
