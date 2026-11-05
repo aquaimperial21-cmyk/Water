@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { assetUrl } from '../../api/client';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,6 +50,7 @@ const FAQS = [
 export function ProductDetailScreen({ route, navigation }: Props) {
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { slug } = route.params;
   const [product, setProduct] = React.useState<Product | null>(null);
   const [prices, setPrices] = React.useState<PlanCityPrice[]>([]);
@@ -204,21 +205,27 @@ export function ProductDetailScreen({ route, navigation }: Props) {
           transition={{ type: 'timing', duration: 320 }}
           style={styles.hero}
         >
-          <Aurora height={300} style={{ position: 'absolute' }} />
           {product.imageUrl ? (
+            // The photo covers the hero, so no aurora behind it. Sized to the
+            // hero (page padding 20 + border 1 each side) and decoded at that
+            // size: a big upload would otherwise be decoded at full resolution.
             <Image
               source={{ uri: assetUrl(product.imageUrl) ?? undefined }}
-              style={StyleSheet.absoluteFillObject}
+              style={{ position: 'absolute', top: 0, left: 0, width: windowWidth - 42, height: 286 }}
               resizeMode="cover"
+              resizeMethod="resize"
             />
           ) : (
-            <MotiView
-              from={{ scale: 0.92, opacity: 0.9 }}
-              animate={{ scale: 1.04, opacity: 1 }}
-              transition={{ type: 'timing', duration: 1800, loop: true, repeatReverse: true }}
-            >
-              <WaterDrop size={150} />
-            </MotiView>
+            <>
+              <Aurora height={300} style={{ position: 'absolute' }} />
+              <MotiView
+                from={{ scale: 0.92, opacity: 0.9 }}
+                animate={{ scale: 1.04, opacity: 1 }}
+                transition={{ type: 'timing', duration: 1800, loop: true, repeatReverse: true }}
+              >
+                <WaterDrop size={150} />
+              </MotiView>
+            </>
           )}
           <View style={[styles.heroChip, { left: 16, top: 16 }]}>
             <Pill tone="accent">{product.kind === 'COMMERCIAL' ? 'For offices' : 'For homes'}</Pill>

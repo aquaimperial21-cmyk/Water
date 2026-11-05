@@ -181,6 +181,7 @@ function HealthCards({ health, tds }: { health: DeviceHealth; tds: DeviceReading
           stroke={8}
           label={String(health.filterLifePct ?? 0)}
           caption="%"
+          pulse={false}
         />
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
