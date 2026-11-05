@@ -15,7 +15,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authOptional } from '../core/auth';
 import { asyncHandler, HttpError } from '../core/errors';
-import { hit } from '../core/ratelimit';
+import { clientKey, hit } from '../core/ratelimit';
 import { validateBody } from '../core/validate';
 
 const router = Router();
@@ -32,11 +32,6 @@ const reportSchema = z.object({
   platform: z.string().max(20).optional(),
   osVersion: z.string().max(40).optional(),
 });
-
-/** The client's address as Caddy saw it; falls back to the socket. */
-function clientKey(xff: string | undefined, ip: string | undefined): string {
-  return (xff?.split(',')[0]?.trim() || ip || 'unknown').slice(0, 64);
-}
 
 router.post(
   '/',

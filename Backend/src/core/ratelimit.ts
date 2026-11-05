@@ -1,6 +1,7 @@
 // Minimal in-process rate limiter.
 //
-// Used to stop password-guessing against /auth/password/login. It is per
+// Used to stop password-guessing against /auth/password/login, crash-report
+// floods (/app-errors) and website enquiry spam (/inquiries/website). It is per
 // instance, not shared across replicas — good enough while the API runs as a
 // single service, and the right seam to swap for Redis if it ever scales out.
 
@@ -44,4 +45,9 @@ export function hit(key: string, limit: number, windowSeconds: number): RateLimi
 
 export function clear(key: string): void {
   buckets.delete(key);
+}
+
+/** The client's address as Caddy saw it (first X-Forwarded-For value); falls back to the socket. */
+export function clientKey(xff: string | undefined, ip: string | undefined): string {
+  return (xff?.split(',')[0]?.trim() || ip || 'unknown').slice(0, 64);
 }
