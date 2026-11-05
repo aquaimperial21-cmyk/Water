@@ -81,8 +81,8 @@ export default function Privacy() {
         </li>
         <li><strong>SMS and WhatsApp messaging providers</strong> — to deliver reminders and service messages.</li>
         <li>
-          <strong>FormSubmit (formsubmit.co)</strong> — delivers enquiries sent through this website’s forms to our
-          email inbox.
+          <strong>Vercel</strong> — hosts this website and passes what you send through its enquiry forms on to our
+          servers.
         </li>
       </ul>
       <p>We may also disclose data where Indian law requires it, for example to a court or a government authority.</p>

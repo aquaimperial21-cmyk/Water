@@ -1,20 +1,31 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { enquiryErrors, formatRupees, lowestMonthlyPaise, planTerms, sendEnquiry, useCatalog } from '../api';
+import Honeypot from './Honeypot';
 
 const STORAGE_KEY = 'aqua_enquiry_popup_shown';
 const SHOW_DELAY_MS = 1500;
 const WHATSAPP = '919595190024';
-const FORM_ENDPOINT = 'https://formsubmit.co/ajax/aquaimperial21@gmail.com';
 
 const cities = ['Ahmednagar', 'Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Other'];
+// Fields this form can mark with a hint when the server rejects them.
+const INLINE_ERRORS = ['name', 'phone', 'city'];
+
+// [1, 3, 6, 12] -> "1, 3, 6 or 12-month"
+const listTerms = (terms) =>
+  terms.length > 1 ? `${terms.slice(0, -1).join(', ')} or ${terms.at(-1)}-month` : `${terms[0]}-month`;
 
 export default function EnquiryPopup() {
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState({ name: '', phone: '', city: '' });
+  const [data, setData] = useState({ name: '', phone: '', city: '', website: '' });
   const [errors, setErrors] = useState({});
   const [focused, setFocused] = useState('');
+  // The "Plans from" line uses live prices; until they load it names no price.
+  const catalog = useCatalog();
+  const fromPaise = lowestMonthlyPaise(catalog);
+  const terms = planTerms(catalog);
 
   useEffect(() => {
     if (sessionStorage.getItem(STORAGE_KEY)) return;
@@ -55,36 +66,18 @@ export default function EnquiryPopup() {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
     setLoading(true);
-    const submittedAt = new Date().toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: true,
-    }) + ' IST';
-    try {
-      const res = await fetch(FORM_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          _subject: 'New Enquiry — Aqua Imperial (Popup)',
-          _template: 'table',
-          _captcha: 'false',
-          _honey: '',
-          Name: data.name,
-          Phone: `+91 ${data.phone}`,
-          City: data.city,
-          Source: 'Website popup',
-          'Submitted At': submittedAt,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json.success !== 'true') throw new Error('submit-failed');
-      setSubmitted(true);
-    } catch (err) {
-      setErrors({ submit: 'Could not send. Please call or WhatsApp us.' });
-    } finally {
-      setLoading(false);
-    }
+    const result = await sendEnquiry({
+      form: 'popup',
+      name: data.name,
+      phone: data.phone.replace(/\D/g, ''),
+      city: data.city,
+      website: data.website,
+    });
+    setLoading(false);
+    if (result.ok) setSubmitted(true);
+    else setErrors(enquiryErrors(result, INLINE_ERRORS));
   };
 
   const handleWhatsApp = () => {
@@ -149,10 +142,14 @@ export default function EnquiryPopup() {
                       <span className="ep-title-accent">with service included</span>
                     </h2>
                     <p className="ep-sub">
-                      Plans from <strong>₹349/month</strong> on 1, 3, 6 or 12-month terms. Leave your number and we'll call you back.
+                      {fromPaise
+                        ? <>Plans from <strong>{formatRupees(fromPaise)}/month</strong></>
+                        : 'Monthly rental plans'}
+                      {' '}on {terms.length ? listTerms(terms) : '1, 3, 6 or 12-month'} terms. Leave your number and we'll call you back.
                     </p>
 
                     <form onSubmit={handleSubmit} noValidate className="ep-form">
+                      <Honeypot value={data.website} onChange={handleChange('website')} />
                       <Field
                         id="ep-name"
                         label="Full name"

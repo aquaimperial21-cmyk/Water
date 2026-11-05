@@ -1,83 +1,38 @@
-import { useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { formatRupees, planTerms, useCatalog } from '../api';
+import { cardPrice, liveCards, priceCities, staticCards } from '../catalog';
+import { whatsappLink } from '../siteInfo';
 
-const products = [
-  {
-    id: 1,
-    name: 'Aqua Imperial RO',
-    tagline: 'Best for renters and budget-friendly plans',
-    specs: ['Storage Tank of 6.5L Capacity', 'Essential minerals', 'Wall-mount or countertop'],
-    shortTermPrice: '₹399',
-    longTermPrice: '₹349',
-    badge: null,
-    color: '#0891B2',
-    icon: (
-      <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
-        <path d="M24 2C24 2 6 20 6 34C6 43.941 14.059 52 24 52C33.941 52 42 43.941 42 34C42 20 24 2 24 2Z" fill="url(#p1)"/>
-        <path d="M16 32C16 32 18 28 24 26" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
-        <defs><linearGradient id="p1" x1="24" y1="2" x2="24" y2="52"><stop stopColor="#67E8F9"/><stop offset="1" stopColor="#0891B2"/></linearGradient></defs>
-      </svg>
-    ),
-  },
-  {
-    id: 2,
-    name: 'Aqua Imperial Copper',
-    tagline: 'For those chasing the extra immunity boost',
-    specs: ['Storage Tank of 8L Capacity', 'Essential minerals & Copper', 'Wall-mount or countertop'],
-    shortTermPrice: '₹449',
-    longTermPrice: '₹404',
-    badge: null,
-    color: '#F59E0B',
-    icon: (
-      <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
-        <path d="M24 2C24 2 6 20 6 34C6 43.941 14.059 52 24 52C33.941 52 42 43.941 42 34C42 20 24 2 24 2Z" fill="url(#p2)"/>
-        <circle cx="24" cy="34" r="6" fill="rgba(255,255,255,0.2)"/>
-        <path d="M21 34L23 36L27 32" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-        <defs><linearGradient id="p2" x1="24" y1="2" x2="24" y2="52"><stop stopColor="#FCD34D"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs>
-      </svg>
-    ),
-  },
-  {
-    id: 3,
-    name: 'Aqua Imperial Alkaline',
-    tagline: 'For those seeking premium health & hydration',
-    specs: ['Storage Tank of 8L Capacity', 'Essential minerals & PH Booster', 'Wall-mount or countertop'],
-    shortTermPrice: '₹549',
-    longTermPrice: '₹495',
-    badge: null,
-    color: '#8B5CF6',
-    icon: (
-      <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
-        <path d="M24 2C24 2 6 20 6 34C6 43.941 14.059 52 24 52C33.941 52 42 43.941 42 34C42 20 24 2 24 2Z" fill="url(#p3)"/>
-        <path d="M20 40C20 40 22 43 24 43C26 43 28 40 28 40" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-        <defs><linearGradient id="p3" x1="24" y1="2" x2="24" y2="52"><stop stopColor="#C4B5FD"/><stop offset="1" stopColor="#7C3AED"/></linearGradient></defs>
-      </svg>
-    ),
-  },
-  {
-    id: 4,
-    name: 'Aqua Imperial Mineral+',
-    tagline: 'Made for low-TDS municipal water',
-    specs: ['Storage Tank of 6.5L Capacity', 'Essential minerals & Copper', 'Wall-mount or countertop'],
-    shortTermPrice: '₹499',
-    longTermPrice: '₹449',
-    badge: null,
-    color: '#22C55E',
-    icon: (
-      <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
-        <path d="M24 2C24 2 6 20 6 34C6 43.941 14.059 52 24 52C33.941 52 42 43.941 42 34C42 20 24 2 24 2Z" fill="url(#p4)"/>
-        <path d="M16 32C16 32 18 28 24 26" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
-        <defs><linearGradient id="p4" x1="24" y1="2" x2="24" y2="52"><stop stopColor="#86EFAC"/><stop offset="1" stopColor="#16A34A"/></linearGradient></defs>
-      </svg>
-    ),
-  },
-];
+const DEFAULT_CITY = 'pune';
+
+const scrollToContact = (e) => {
+  e.stopPropagation();
+  document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
+};
 
 export default function Products() {
   const [planType, setPlanType] = useState('long');
   const [hoveredId, setHoveredId] = useState(null);
+  const [chosenCity, setChosenCity] = useState(null);
   const [ref, inView] = useInView({ threshold: 0.1, triggerOnce: true });
+  const catalog = useCatalog();
+  const ready = catalog.status === 'ready';
+
+  // The site's own cards show straight away; the live catalog replaces them
+  // when it arrives. If it never does, the static cards stay, without prices.
+  const cards = useMemo(
+    () => (ready ? liveCards(catalog.products) : staticCards()),
+    [ready, catalog.products],
+  );
+  const cities = useMemo(() => (ready ? priceCities(catalog.products) : []), [ready, catalog.products]);
+  const city =
+    cities.find((c) => c.id === chosenCity) ??
+    cities.find((c) => c.name.toLowerCase() === DEFAULT_CITY) ??
+    cities[0] ??
+    null;
+  const longestTerm = ready ? planTerms(catalog).at(-1) : null;
 
   return (
     <section
@@ -135,45 +90,60 @@ export default function Products() {
             border: '1px solid rgba(8,145,178,0.12)',
             boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
           }}>
-            <button
-              onClick={() => setPlanType('short')}
-              style={{
-                padding: '10px 24px',
-                borderRadius: '10px',
-                border: 'none',
-                background: planType === 'short' ? 'linear-gradient(135deg, #0891B2, #0E7490)' : 'transparent',
-                color: planType === 'short' ? 'white' : '#64748B',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.25s',
-              }}
-            >
+            <ToggleButton active={planType === 'short'} onClick={() => setPlanType('short')}>
               Short-term Plans
-            </button>
-            <button
-              onClick={() => setPlanType('long')}
-              style={{
-                padding: '10px 24px',
-                borderRadius: '10px',
-                border: 'none',
-                background: planType === 'long' ? 'linear-gradient(135deg, #0891B2, #0E7490)' : 'transparent',
-                color: planType === 'long' ? 'white' : '#64748B',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.25s',
-              }}
-            >
+            </ToggleButton>
+            <ToggleButton active={planType === 'long'} onClick={() => setPlanType('long')}>
               Long-term Plans
-            </button>
+            </ToggleButton>
           </div>
           <div style={{ color: '#94A3B8', fontSize: '12px', marginTop: '10px' }}>
             {planType === 'short'
-              ? 'Monthly (1 month) or Quarterly (3 months) plans'
-              : 'Half-yearly (6 months) or Annual (12 months) plans — a lower monthly rate'}
+              ? 'The 1-month plan: the shortest lock-in'
+              : `Our longest plan${longestTerm ? ` (${longestTerm} months)` : ''}: the lowest monthly rate`}
+          </div>
+
+          {/* City switch: the row keeps its height while prices load or if they cannot */}
+          <div style={{
+            minHeight: '34px', marginTop: '14px',
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px',
+          }}>
+            {ready && cities.length > 0 ? (
+              <>
+                <span style={{ color: '#64748B', fontSize: '13px', fontWeight: 500 }}>Prices for</span>
+                {cities.map((c) => {
+                  const active = city?.id === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setChosenCity(c.id)}
+                      aria-pressed={active}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                        border: `1.5px solid ${active ? '#0891B2' : 'rgba(8,145,178,0.15)'}`,
+                        background: active ? 'rgba(8,145,178,0.06)' : '#ffffff',
+                        color: active ? '#0891B2' : '#64748B',
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '13px',
+                        fontWeight: active ? 600 : 500,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </>
+            ) : (
+              <span style={{ color: '#94A3B8', fontSize: '13px' }}>
+                {catalog.status === 'loading'
+                  ? 'Loading today’s prices…'
+                  : 'Prices differ by city. Ask us, or see them in the app.'}
+              </span>
+            )}
           </div>
         </motion.div>
 
@@ -184,9 +154,10 @@ export default function Products() {
           gap: '20px',
           alignItems: 'start',
         }}>
-          {products.map((product, i) => {
+          {cards.map((product, i) => {
             const isHovered = hoveredId === product.id;
-            const price = planType === 'short' ? product.shortTermPrice : product.longTermPrice;
+            const price = product.live && city ? cardPrice(product.live, city.id, planType) : null;
+            const priceState = price ? 'price' : catalog.status === 'loading' ? 'loading' : 'ask';
 
             return (
               <motion.div
@@ -244,7 +215,7 @@ export default function Products() {
                       transition: 'all 0.3s',
                     }}
                   >
-                    {product.icon}
+                    <DropIcon {...product.drop} />
                   </motion.div>
                 </div>
 
@@ -286,7 +257,7 @@ export default function Products() {
                   ))}
                 </div>
 
-                {/* Price */}
+                {/* Price: every state takes the same height, so nothing moves when prices arrive */}
                 <div style={{
                   background: isHovered ? 'rgba(255,255,255,0.06)' : `${product.color}06`,
                   border: `1px solid ${isHovered ? 'rgba(255,255,255,0.08)' : product.color + '12'}`,
@@ -294,9 +265,9 @@ export default function Products() {
                   textAlign: 'center', marginBottom: '16px',
                   transition: 'all 0.3s',
                 }}>
-                  <AnimatePresence mode="wait">
+                  <AnimatePresence mode="wait" initial={false}>
                     <motion.div
-                      key={planType}
+                      key={`${priceState}-${planType}-${city?.id ?? ''}`}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.9 }}
@@ -304,23 +275,45 @@ export default function Products() {
                     >
                       <div style={{
                         fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '36px', fontWeight: 800, lineHeight: 1,
+                        height: '36px', lineHeight: 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: isHovered ? '#67E8F9' : product.color,
                         transition: 'color 0.3s',
                       }}>
-                        {price}
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: isHovered ? 'rgba(255,255,255,0.5)' : '#94A3B8' }}>/mo</span>
+                        {priceState === 'price' && (
+                          <span style={{ fontSize: '36px', fontWeight: 800 }}>
+                            {formatRupees(price.paise)}
+                            <span style={{ fontSize: '14px', fontWeight: 500, color: isHovered ? 'rgba(255,255,255,0.5)' : '#94A3B8' }}>/mo</span>
+                          </span>
+                        )}
+                        {priceState === 'loading' && (
+                          <motion.span
+                            animate={{ opacity: [0.35, 0.7, 0.35] }}
+                            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                            style={{
+                              width: '110px', height: '28px', borderRadius: '8px',
+                              background: isHovered ? 'rgba(255,255,255,0.12)' : `${product.color}1A`,
+                            }}
+                          />
+                        )}
+                        {priceState === 'ask' && (
+                          <span style={{ fontSize: '24px', fontWeight: 800 }}>See plans</span>
+                        )}
+                      </div>
+                      <div style={{
+                        color: isHovered ? 'rgba(255,255,255,0.4)' : '#94A3B8',
+                        fontSize: '11px', fontWeight: 600, marginTop: '6px',
+                        textTransform: 'uppercase', letterSpacing: '0.5px',
+                        transition: 'color 0.3s',
+                      }}>
+                        {priceState === 'price'
+                          ? price.months === 1 ? '1-month plan' : `on a ${price.months}-month plan`
+                          : priceState === 'loading'
+                            ? 'Fetching price'
+                            : product.live && city ? `Ask us for ${city.name}` : 'Ask us for your city'}
                       </div>
                     </motion.div>
                   </AnimatePresence>
-                  <div style={{
-                    color: isHovered ? 'rgba(255,255,255,0.4)' : '#94A3B8',
-                    fontSize: '11px', fontWeight: 600, marginTop: '6px',
-                    textTransform: 'uppercase', letterSpacing: '0.5px',
-                    transition: 'color 0.3s',
-                  }}>
-                    {planType === 'short' ? 'Monthly · Quarterly' : 'Half-yearly · Annual'}
-                  </div>
                   <div style={{
                     color: isHovered ? 'rgba(255,255,255,0.4)' : '#94A3B8',
                     fontSize: '11px', marginTop: '4px',
@@ -333,10 +326,7 @@ export default function Products() {
                 {/* Buttons */}
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
+                    onClick={scrollToContact}
                     style={{
                       flex: 1,
                       background: 'transparent',
@@ -350,12 +340,17 @@ export default function Products() {
                       transition: 'all 0.25s',
                     }}
                   >
-                    Know more
+                    {priceState === 'ask' ? 'Enquire' : 'Know more'}
                   </button>
                   <button
                     onClick={(e) => {
+                      if (priceState !== 'ask') return scrollToContact(e);
                       e.stopPropagation();
-                      document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
+                      const where = product.live && city ? ` in ${city.name}` : '';
+                      window.open(
+                        whatsappLink(`Hi Aqua Imperial! Please share the plans and prices for ${product.name}${where}.`),
+                        '_blank',
+                      );
                     }}
                     style={{
                       flex: 1,
@@ -373,7 +368,7 @@ export default function Products() {
                       transition: 'all 0.25s',
                     }}
                   >
-                    Subscribe
+                    {priceState === 'ask' ? 'WhatsApp' : 'Subscribe'}
                   </button>
                 </div>
               </motion.div>
@@ -411,5 +406,50 @@ export default function Products() {
         </motion.div>
       </div>
     </section>
+  );
+}
+
+function ToggleButton({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '10px 24px',
+        borderRadius: '10px',
+        border: 'none',
+        background: active ? 'linear-gradient(135deg, #0891B2, #0E7490)' : 'transparent',
+        color: active ? 'white' : '#64748B',
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: '14px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        transition: 'all 0.25s',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// The water-drop icon on each card: a gradient drop with a small mark on it.
+function DropIcon({ from, to, mark }) {
+  const id = `drop${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return (
+    <svg width="48" height="64" viewBox="0 0 48 64" fill="none">
+      <path d="M24 2C24 2 6 20 6 34C6 43.941 14.059 52 24 52C33.941 52 42 43.941 42 34C42 20 24 2 24 2Z" fill={`url(#${id})`}/>
+      {mark === 'shine' && (
+        <path d="M16 32C16 32 18 28 24 26" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
+      )}
+      {mark === 'check' && (
+        <>
+          <circle cx="24" cy="34" r="6" fill="rgba(255,255,255,0.2)"/>
+          <path d="M21 34L23 36L27 32" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+        </>
+      )}
+      {mark === 'smile' && (
+        <path d="M20 40C20 40 22 43 24 43C26 43 28 40 28 40" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
+      )}
+      <defs><linearGradient id={id} x1="24" y1="2" x2="24" y2="52"><stop stopColor={from}/><stop offset="1" stopColor={to}/></linearGradient></defs>
+    </svg>
   );
 }
