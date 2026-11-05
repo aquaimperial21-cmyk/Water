@@ -34,12 +34,13 @@ router.get(
     // My Plan shows a pending refund after a cancel, and the next technician
     // visit (install, service, filter) whether it hangs off the booking or a
     // ticket. A visit stays listed for a day past its slot so a late
-    // technician doesn't make it vanish.
+    // technician doesn't make it vanish. A ₹0 refund is no refund: old cancels
+    // queued them and nothing settles them, so the newest could hide a real one.
     const subIds = subs.map((s) => s.id);
     const bookingIds = subs.map((s) => s.bookingId);
     const [refunds, jobs] = await Promise.all([
       prisma.payment.findMany({
-        where: { subscriptionId: { in: subIds }, kind: 'REFUND' },
+        where: { subscriptionId: { in: subIds }, kind: 'REFUND', amountPaise: { gt: 0 } },
         orderBy: { createdAt: 'desc' },
         select: { subscriptionId: true, amountPaise: true, status: true, createdAt: true },
       }),
@@ -239,20 +240,27 @@ router.post(
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const refund = await tx.payment.create({
-        data: {
-          userId: sub.userId,
-          subscriptionId: sub.id,
-          bookingId: sub.bookingId,
-          kind: 'REFUND',
-          amountPaise: refundPaise,
-          // Refunds are queued in INITIATED — settled by ops or by the
-          // Razorpay refund webhook (see modules/payment.ts).
-          status: 'INITIATED',
-          gatewayRef: `REFUND_PENDING_${Date.now()}`,
-          gatewayPaymentId: originalPayment?.gatewayPaymentId ?? null,
-        },
-      });
+      // Nothing to pay back (a ₹0 deposit after lock-in, every TEST plan):
+      // no refund row. Only the refund webhook settles one and Razorpay can't
+      // refund ₹0, so a ₹0 row stayed "in progress" for ever, hid a real
+      // refund on My Plan and blocked account deletion.
+      const refund =
+        refundPaise > 0
+          ? await tx.payment.create({
+              data: {
+                userId: sub.userId,
+                subscriptionId: sub.id,
+                bookingId: sub.bookingId,
+                kind: 'REFUND',
+                amountPaise: refundPaise,
+                // Refunds are queued in INITIATED — settled by ops or by the
+                // Razorpay refund webhook (see modules/payment.ts).
+                status: 'INITIATED',
+                gatewayRef: `REFUND_PENDING_${Date.now()}`,
+                gatewayPaymentId: originalPayment?.gatewayPaymentId ?? null,
+              },
+            })
+          : null;
       const updatedSub = await tx.subscription.update({
         where: { id: sub.id },
         data: {
@@ -299,7 +307,10 @@ router.post(
           userId: sub.userId,
           channel: 'INAPP',
           title: 'Cancellation received',
-          body: `Refund of ₹${Math.round(refundPaise / 100)} will be processed in 5–7 working days.`,
+          body:
+            refundPaise > 0
+              ? `Refund of ₹${Math.round(refundPaise / 100)} will be processed in 5–7 working days.`
+              : 'Your plan is closed.',
         },
       });
       return { subscription: updatedSub, refundPayment: refund, refundPaise };

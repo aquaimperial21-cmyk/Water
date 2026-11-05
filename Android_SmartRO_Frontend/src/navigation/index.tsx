@@ -30,6 +30,7 @@ import { HelpScreen } from '../screens/profile/HelpScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { WaitlistScreen } from '../screens/catalog/WaitlistScreen';
 import { onPushTapped, registerPushToken, showPushesWhileOpen } from '../utils/push';
+import { reportAppError, setCurrentScreen } from '../utils/crashReporter';
 
 showPushesWhileOpen();
 
@@ -99,13 +100,9 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
               accessibilityLabel={item.label}
               accessibilityState={{ selected: isFocused }}
             >
-              <MotiView
-                animate={{
-                  paddingHorizontal: isFocused ? 14 : 10,
-                }}
-                transition={{ type: 'spring', damping: 22, stiffness: 240 }}
-                style={styles.pill}
-              >
+              {/* Plain padding. Springing it re-ran layout on every frame for no
+                  visible change: the pill fills the tab and centres its content. */}
+              <View style={[styles.pill, { paddingHorizontal: isFocused ? 14 : 10 }]}>
                 {isFocused ? (
                   <LinearGradient
                     colors={[tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]}
@@ -128,7 +125,7 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
                     <Text style={styles.activeLabel}>{item.label}</Text>
                   </MotiView>
                 ) : null}
-              </MotiView>
+              </View>
             </Pressable>
           );
         })}
@@ -168,7 +165,15 @@ export function RootNavigator() {
   React.useEffect(() => {
     if (!user || !navReady) return;
     return onPushTapped((screen) => {
-      if (screen === 'Notifications' && navRef.isReady()) navRef.navigate('Notifications');
+      if (screen !== 'Notifications') return;
+      try {
+        // Only if the stack has that screen right now: it exists only while signed in.
+        if (navRef.isReady() && navRef.getRootState()?.routeNames?.includes('Notifications')) {
+          navRef.navigate('Notifications');
+        }
+      } catch (e) {
+        void reportAppError('global', e);
+      }
     });
   }, [user, navReady, navRef]);
 
@@ -180,7 +185,16 @@ export function RootNavigator() {
     );
   }
   return (
-    <NavigationContainer ref={navRef} theme={navTheme} onReady={() => setNavReady(true)}>
+    <NavigationContainer
+      ref={navRef}
+      theme={navTheme}
+      onReady={() => {
+        setNavReady(true);
+        setCurrentScreen(navRef.getCurrentRoute()?.name);
+      }}
+      // Crash reports say which screen the customer was on.
+      onStateChange={() => setCurrentScreen(navRef.getCurrentRoute()?.name)}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

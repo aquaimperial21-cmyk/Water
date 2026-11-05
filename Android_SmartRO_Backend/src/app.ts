@@ -24,6 +24,7 @@ import referralRoutes from './modules/referral';
 import docRoutes from './modules/docs';
 import supportRoutes from './modules/support';
 import firmwareRoutes, { blockPublicFirmware } from './modules/firmware';
+import appErrorRoutes from './modules/app-errors';
 
 export function buildApp() {
   const app = express();
@@ -63,6 +64,7 @@ export function buildApp() {
   v1.use('/notifications', notificationRoutes);
   v1.use('/devices', deviceRoutes);
   v1.use('/firmware', firmwareRoutes); // remote firmware updates (admin)
+  v1.use('/app-errors', appErrorRoutes); // crash reports from the customer app
   v1.use('/webhooks', webhookRoutes);
   v1.use('/webhooks/razorpay', razorpayWebhookRouter);
   v1.use('/payments', paymentRoutes);

@@ -17,17 +17,7 @@ export function Stepper({ steps, current }: Props) {
         const done = i < current;
         return (
           <View key={label} style={styles.item}>
-            <View style={styles.bar}>
-              <MotiView
-                from={{ width: '0%' }}
-                animate={{ width: done || active ? '100%' : '0%' }}
-                transition={{ type: 'timing', duration: 360 }}
-                style={[
-                  StyleSheet.absoluteFillObject,
-                  { backgroundColor: tokens.color.accent, borderRadius: 999 },
-                ]}
-              />
-            </View>
+            <StepBar filled={done || active} />
             <View style={styles.labelRow}>
               <View
                 style={[
@@ -49,6 +39,28 @@ export function Stepper({ steps, current }: Props) {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+// The fill is always full width and slides in from the left; the bar clips it.
+// Moving it with translateX (not a % width) keeps layout out of every frame.
+// It waits for the bar's width so it can start fully off to the left.
+function StepBar({ filled }: { filled: boolean }) {
+  const [w, setW] = React.useState(0);
+  return (
+    <View style={styles.bar} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      {w > 0 ? (
+        <MotiView
+          from={{ translateX: -w }}
+          animate={{ translateX: filled ? 0 : -w }}
+          transition={{ type: 'timing', duration: 360 }}
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: tokens.color.accent, borderRadius: 999 },
+          ]}
+        />
+      ) : null}
     </View>
   );
 }

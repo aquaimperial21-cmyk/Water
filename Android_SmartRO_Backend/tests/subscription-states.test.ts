@@ -508,6 +508,57 @@ describe('Cancel', () => {
     expect(await status(enRoute.id)).toBe('CANCELLED');
     expect(await status(done.id)).toBe('DONE');
   });
+
+  /** The notifications a call made, as [title, body]. */
+  const notesSince = async (since: Date) =>
+    (await prisma.notification.findMany({ where: { userId, createdAt: { gte: since } }, orderBy: { createdAt: 'asc' } }))
+      .map((n) => [n.title, n.body]);
+
+  it('with nothing to pay back (₹0 deposit, after lock-in): no refund row, and the notification says the plan is closed', async () => {
+    const past = new Date(Date.now() - DAY);
+    // The TEST product has no deposit, like every TEST plan.
+    const sub = await makeSub({ trialEndsAt: past, lockInUntil: past }, testPrice);
+    const since = new Date();
+
+    const r = await post(`/subscriptions/${sub.id}/cancel`);
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ refundPaise: 0, refundPayment: null });
+    expect(r.body.data.subscription).toMatchObject({ status: 'CLOSED', cancelReason: 'POST_LOCKIN_CANCEL' });
+    expect(await prisma.payment.count({ where: { subscriptionId: sub.id, kind: 'REFUND' } })).toBe(0);
+    expect(await notesSince(since)).toEqual([['Cancellation received', 'Your plan is closed.']]);
+  });
+
+  it('after lock-in with a deposit: queues the deposit refund against the original payment, as before', async () => {
+    const past = new Date(Date.now() - DAY);
+    const sub = await makeSub({ trialEndsAt: past, lockInUntil: past });
+    await prisma.booking.update({ where: { id: sub.bookingId }, data: { depositPaise: 150000 } });
+    const pid = `pay_S${rnd()}`;
+    await prisma.payment.create({
+      data: {
+        userId,
+        bookingId: sub.bookingId,
+        subscriptionId: sub.id,
+        kind: 'DEPOSIT',
+        amountPaise: 150000,
+        status: 'SUCCESS',
+        gatewayRef: `order_S${rnd()}`,
+        gatewayPaymentId: pid,
+      },
+    });
+    const since = new Date();
+
+    const r = await post(`/subscriptions/${sub.id}/cancel`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.refundPaise).toBe(150000);
+    const refunds = await prisma.payment.findMany({ where: { subscriptionId: sub.id, kind: 'REFUND' } });
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]).toMatchObject({ amountPaise: 150000, status: 'INITIATED', bookingId: sub.bookingId, gatewayPaymentId: pid });
+    expect(refunds[0]!.gatewayRef).toMatch(/^REFUND_PENDING_/);
+    expect(r.body.data.refundPayment.id).toBe(refunds[0]!.id);
+    expect(await notesSince(since)).toEqual([
+      ['Cancellation received', 'Refund of ₹1500 will be processed in 5–7 working days.'],
+    ]);
+  });
 });
 
 describe('GET /subscriptions/me', () => {
@@ -549,5 +600,26 @@ describe('GET /subscriptions/me', () => {
 
     expect(byId.get(c.id)!.refund).toBeNull();
     expect(byId.get(c.id)!.nextVisit).toBeNull();
+  });
+
+  it('shows the newest refund with money in it: a later ₹0 one does not hide ₹100 still on its way', async () => {
+    const closed = await makeSub({ status: 'CLOSED' });
+    const real = await prisma.payment.create({
+      data: { userId, subscriptionId: closed.id, kind: 'REFUND', amountPaise: 10000, status: 'INITIATED', createdAt: new Date(Date.now() - DAY) },
+    });
+    await prisma.payment.create({
+      data: { userId, subscriptionId: closed.id, kind: 'REFUND', amountPaise: 0, status: 'INITIATED' },
+    });
+    // A ₹0 refund alone (an old ₹0-deposit cancel) is no refund at all.
+    const zeroOnly = await makeSub({ status: 'CLOSED' });
+    await prisma.payment.create({
+      data: { userId, subscriptionId: zeroOnly.id, kind: 'REFUND', amountPaise: 0, status: 'INITIATED' },
+    });
+
+    const r = await request(app).get('/api/v1/subscriptions/me').set('Authorization', `Bearer ${token}`);
+    expect(r.status).toBe(200);
+    const byId = new Map<string, { refund: unknown }>(r.body.data.map((s: { id: string }) => [s.id, s]));
+    expect(byId.get(closed.id)!.refund).toEqual({ amountPaise: 10000, status: 'INITIATED', createdAt: real.createdAt.toISOString() });
+    expect(byId.get(zeroOnly.id)!.refund).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import request from 'supertest';
 import type { Prisma } from '@prisma/client';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/core/prisma';
+import { signAccessToken } from '../src/core/auth';
 
 const DAY = 24 * 60 * 60 * 1000;
 const app = buildApp();
@@ -18,6 +19,8 @@ let userId = '';
 let accessToken = '';
 let refreshToken = '';
 let newUserId = '';
+/** Customers made by single tests, cleaned up with the rest. */
+const otherUserIds: string[] = [];
 let price: Prisma.PlanCityPriceGetPayload<{ include: { plan: true } }>;
 
 async function otpLogin(fullName?: string) {
@@ -84,7 +87,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const ids = [userId, newUserId].filter(Boolean);
+  const ids = [userId, newUserId, ...otherUserIds].filter(Boolean);
   const where = { userId: { in: ids } };
   await prisma.ticket.deleteMany({ where });
   const payments = await prisma.payment.findMany({ where, select: { id: true } });
@@ -99,7 +102,7 @@ afterAll(async () => {
   await prisma.refreshToken.deleteMany({ where });
   await prisma.helpRequest.deleteMany({ where });
   await prisma.inquiry.deleteMany({ where: { OR: [where, { phone: `deleted:${userId}` }] } });
-  await prisma.auditLog.deleteMany({ where: { entityId: userId } });
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: ids } } });
   await prisma.otpAttempt.deleteMany({ where: { phone } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 });
@@ -141,6 +144,42 @@ describe('Account deletion', () => {
     const msg = await expectRefused('ACCOUNT_REFUND_PENDING');
     expect(msg).toContain('₹2,500.50');
     await prisma.payment.update({ where: { id: refund.id }, data: { status: 'SUCCESS' } });
+  });
+
+  describe('₹0 refunds left INITIATED by old cancels (nothing ever settles them)', () => {
+    /** A customer with only these REFUND rows in INITIATED, asking to be deleted. */
+    async function deleteWithRefunds(amountsPaise: number[]) {
+      const user = await prisma.user.create({
+        data: { kind: 'CUSTOMER', phone: `+9191${crypto.randomInt(10_000_000, 99_999_999)}`, fullName: 'Zero Refund' },
+      });
+      otherUserIds.push(user.id);
+      for (const amountPaise of amountsPaise) {
+        await prisma.payment.create({
+          data: { userId: user.id, kind: 'REFUND', amountPaise, status: 'INITIATED', gatewayRef: `REFUND_PENDING_${rnd()}` },
+        });
+      }
+      const res = await request(app)
+        .post('/api/v1/auth/account/delete')
+        .set('Authorization', `Bearer ${signAccessToken({ sub: user.id, kind: 'CUSTOMER' })}`)
+        .send({ confirm: 'DELETE' });
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      return { res, status: after.status };
+    }
+
+    it('only a ₹0 one: deletion goes ahead', async () => {
+      const { res, status } = await deleteWithRefunds([0]);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ data: { deleted: true } });
+      expect(status).toBe('DELETED');
+    });
+
+    it('a ₹100 one still on its way: still refused, for the ₹100', async () => {
+      const { res, status } = await deleteWithRefunds([10000, 0]);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('ACCOUNT_REFUND_PENDING');
+      expect(res.body.error.message).toContain('₹100;');
+      expect(status).toBe('ACTIVE');
+    });
   });
 
   it('erases the person, keeps the money trail, frees the number and ends every session', async () => {

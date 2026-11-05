@@ -39,7 +39,8 @@ export function DeviceHealthScreen() {
       ]);
       healthRef.current = h;
       setHealth(h);
-      setTds(t);
+      // An odd reply just hides the chart.
+      setTds(Array.isArray(t) ? t : []);
       setLoadError(null);
     } catch (e) {
       const message = apiErrorMessage(e);
@@ -180,6 +181,7 @@ function HealthCards({ health, tds }: { health: DeviceHealth; tds: DeviceReading
           stroke={8}
           label={String(health.filterLifePct ?? 0)}
           caption="%"
+          pulse={false}
         />
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -203,7 +205,7 @@ function HealthCards({ health, tds }: { health: DeviceHealth; tds: DeviceReading
         <Droplets size={20} color={tokens.color.accent} />
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>Total usage</Text>
-          <Text style={styles.cardSub}>{health.usageLitresTotal.toLocaleString('en-IN')} litres lifetime</Text>
+          <Text style={styles.cardSub}>{(health.usageLitresTotal ?? 0).toLocaleString('en-IN')} litres lifetime</Text>
         </View>
       </View>
 

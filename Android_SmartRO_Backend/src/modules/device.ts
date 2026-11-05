@@ -359,16 +359,29 @@ router.delete(
 
 // ─────────────────────────── Customer-facing device health ───────────────────────────
 
+/**
+ * The plan whose purifier is at the customer's home: the newest plan with a
+ * purifier paired, in any status. A newer plan without one (every booking
+ * before its installation) must not hide the purifier already on the wall.
+ * /me/health, /me/readings and /me/local-access all read this one plan, so
+ * the device dashboard and the water switch show the same purifier.
+ */
+function homePurifierPlan(userId: string) {
+  return {
+    where: { userId, deviceId: { not: null } },
+    orderBy: { createdAt: 'desc' },
+  } satisfies Prisma.SubscriptionFindFirstArgs;
+}
+
 router.get(
   '/me/health',
   authRequired(['CUSTOMER']),
   asyncHandler(async (req, res) => {
     const sub = await prisma.subscription.findFirst({
-      where: { userId: req.auth!.sub, status: { in: ['ACTIVE', 'GRACE'] } },
+      ...homePurifierPlan(req.auth!.sub),
       include: { device: true, plan: true },
-      orderBy: { createdAt: 'desc' },
     });
-    if (!sub || !sub.device) {
+    if (!sub?.device) {
       return res.json({ data: null });
     }
     const dev = sub.device;
@@ -397,9 +410,8 @@ router.get(
     const limit = Math.min(Number(req.query.limit ?? 50), 200);
 
     const sub = await prisma.subscription.findFirst({
-      where: { userId: req.auth!.sub },
-      include: { device: true },
-      orderBy: { createdAt: 'desc' },
+      ...homePurifierPlan(req.auth!.sub),
+      select: { deviceId: true },
     });
     if (!sub?.deviceId) return res.json({ data: [] });
 
@@ -422,9 +434,8 @@ router.get(
   authRequired(['CUSTOMER']),
   asyncHandler(async (req, res) => {
     const sub = await prisma.subscription.findFirst({
-      where: { userId: req.auth!.sub, deviceId: { not: null } },
+      ...homePurifierPlan(req.auth!.sub),
       include: { device: true },
-      orderBy: { createdAt: 'desc' },
     });
     res.set('Cache-Control', 'no-store');
     const dev = sub?.device;
