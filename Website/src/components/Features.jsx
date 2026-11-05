@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { formatRupees, lowestMonthlyPaise, useCatalog } from '../api';
 
 const comparisonData = [
   {
     feature: 'Monthly Cost',
     waterCan: '₹800–1200',
     otherPurifier: '₹1500+ EMI',
-    aquaImperial: '₹349/mo',
+    // Filled in from the live catalog (see Features below).
+    aquaImperial: 'Low monthly rent',
+    livePrice: true,
     highlight: true,
   },
   {
@@ -301,6 +304,7 @@ function CrossIcon() {
 export default function Features() {
   const [ref, inView] = useInView({ threshold: 0.1, triggerOnce: true });
   const [compRef, compInView] = useInView({ threshold: 0.1, triggerOnce: true });
+  const fromPaise = lowestMonthlyPaise(useCatalog());
 
   return (
     <section id="features" style={{ padding: '100px 0', background: '#ffffff', position: 'relative', overflow: 'hidden' }}>
@@ -416,7 +420,9 @@ export default function Features() {
                 fontSize: '13px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                {row.isBool ? (row.aquaImperial ? <CheckIcon /> : <CrossIcon />) : row.aquaImperial}
+                {row.isBool
+                  ? (row.aquaImperial ? <CheckIcon /> : <CrossIcon />)
+                  : row.livePrice && fromPaise ? `From ${formatRupees(fromPaise)}/mo` : row.aquaImperial}
               </div>
             </div>
           ))}

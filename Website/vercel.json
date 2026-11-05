@@ -3,6 +3,7 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/v1/:path*", "destination": "https://srv2122898.hstgr.cloud/api/v1/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

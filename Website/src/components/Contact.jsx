@@ -1,21 +1,35 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { EMAIL, PHONE, WHATSAPP } from '../siteInfo';
-
-const FORM_ENDPOINT = `https://formsubmit.co/ajax/${EMAIL}`;
+import { enquiryErrors, sendEnquiry, useCatalog } from '../api';
+import { liveCards, staticProductNames } from '../catalog';
+import Honeypot from './Honeypot';
 
 const cities = ['Ahmednagar', 'Pune', 'Mumbai', 'Nashik', 'Aurangabad', 'Nagpur', 'Kolhapur', 'Solapur', 'Satara', 'Other'];
-const products = ['Aqua Imperial RO', 'Aqua Imperial Copper', 'Aqua Imperial Alkaline', 'Aqua Imperial Mineral+', 'Not Sure (Need Guidance)'];
+const NOT_SURE = 'Not Sure (Need Guidance)';
+// Fields this form can mark with a hint when the server rejects them.
+const INLINE_ERRORS = ['name', 'phone', 'email', 'city', 'product'];
 
 export default function Contact() {
   const [ref, inView] = useInView({ threshold: 0.1, triggerOnce: true });
   const [formData, setFormData] = useState({
-    name: '', phone: '', email: '', city: '', product: '', message: '', source: '',
+    name: '', phone: '', email: '', city: '', product: '', message: '', source: '', website: '',
   });
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // The live catalog's models, or the site's own list until (unless) it loads.
+  const catalog = useCatalog();
+  const products = useMemo(
+    () => [
+      ...(catalog.status === 'ready' ? liveCards(catalog.products).map((c) => c.name) : staticProductNames()),
+      NOT_SURE,
+    ],
+    [catalog],
+  );
+  const product = products.includes(formData.product) ? formData.product : '';
 
   const validate = () => {
     const e = {};
@@ -29,41 +43,22 @@ export default function Contact() {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    setErrors({});
     setLoading(true);
-    const submittedAt = new Date().toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: true,
-    }) + ' IST';
-    try {
-      const res = await fetch(FORM_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          _subject: 'New Enquiry — Aqua Imperial (Contact form)',
-          _template: 'table',
-          _captcha: 'false',
-          _honey: '',
-          ...(formData.email ? { _replyto: formData.email } : {}),
-          Name: formData.name,
-          Phone: `+91 ${formData.phone}`,
-          Email: formData.email || '—',
-          City: formData.city,
-          'Interested Model': formData.product || '—',
-          'Heard From': formData.source || '—',
-          Message: formData.message || '—',
-          Source: 'Website contact form',
-          'Submitted At': submittedAt,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json.success !== 'true') throw new Error('submit-failed');
-      setSubmitted(true);
-    } catch (err) {
-      setErrors({ submit: 'Could not send. Please call or WhatsApp us.' });
-    } finally {
-      setLoading(false);
-    }
+    const result = await sendEnquiry({
+      form: 'contact',
+      name: formData.name,
+      phone: formData.phone.replace(/\D/g, ''),
+      email: formData.email,
+      city: formData.city,
+      product,
+      heardFrom: formData.source,
+      message: formData.message,
+      website: formData.website,
+    });
+    setLoading(false);
+    if (result.ok) setSubmitted(true);
+    else setErrors(enquiryErrors(result, INLINE_ERRORS));
   };
 
   const handleChange = (field) => (e) => {
@@ -324,18 +319,19 @@ export default function Contact() {
                     </p>
 
                     <form onSubmit={handleSubmit} noValidate>
+                      <Honeypot value={formData.website} onChange={handleChange('website')} />
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}
                         className="form-grid">
                         <InputField label="Full Name *" placeholder="Your full name" value={formData.name} onChange={handleChange('name')} error={errors.name} />
                         <InputField label="Phone Number *" placeholder="10-digit mobile" value={formData.phone} onChange={handleChange('phone')} error={errors.phone} type="tel" />
                       </div>
 
-                      <InputField label="Email Address" placeholder="your@email.com (optional)" value={formData.email} onChange={handleChange('email')} type="email" style={{ marginBottom: '14px' }} />
+                      <InputField label="Email Address" placeholder="your@email.com (optional)" value={formData.email} onChange={handleChange('email')} error={errors.email} type="email" style={{ marginBottom: '14px' }} />
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}
                         className="form-grid">
                         <SelectField label="Select City *" value={formData.city} onChange={handleChange('city')} error={errors.city} options={cities} placeholder="Your city" />
-                        <SelectField label="Interested Model" value={formData.product} onChange={handleChange('product')} options={products} placeholder="Select model" />
+                        <SelectField label="Interested Model" value={product} onChange={handleChange('product')} error={errors.product} options={products} placeholder="Select model" />
                       </div>
 
                       <div style={{ marginBottom: '14px' }}>
@@ -403,6 +399,23 @@ export default function Contact() {
                           textAlign: 'center',
                         }}>
                           {errors.submit}
+                          {errors.offline && (
+                            <button
+                              type="button"
+                              onClick={handleWhatsApp}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                margin: '10px auto 0',
+                                background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                                color: 'white', border: 'none',
+                                padding: '8px 16px', borderRadius: '10px',
+                                fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: '13px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Chat on WhatsApp
+                            </button>
+                          )}
                         </div>
                       )}
 
