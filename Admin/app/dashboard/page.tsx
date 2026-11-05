@@ -69,12 +69,18 @@ export default function Dashboard() {
               sub="Awaiting technician action"
               trend={stats.openTickets > 5 ? 'up' : 'flat'}
             />
-            <Stat
-              label="New inquiries today"
-              value={stats.newInquiriesToday}
-              sub={`${stats.openInquiries} in pipeline`}
-              trend={stats.newInquiriesToday > 0 ? 'up' : 'flat'}
-            />
+            {/* Counts every enquiry: app, website form and website popup. */}
+            <Link
+              href="/inquiries"
+              className="block rounded-3xl transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/15"
+            >
+              <Stat
+                label="New inquiries today"
+                value={stats.newInquiriesToday}
+                sub={`${stats.openInquiries} in pipeline · View →`}
+                trend={stats.newInquiriesToday > 0 ? 'up' : 'flat'}
+              />
+            </Link>
             <Stat
               label="Revenue this month"
               value={paiseToInr(stats.revenuePaiseThisMonth)}
