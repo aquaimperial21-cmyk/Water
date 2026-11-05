@@ -100,13 +100,9 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
               accessibilityLabel={item.label}
               accessibilityState={{ selected: isFocused }}
             >
-              <MotiView
-                animate={{
-                  paddingHorizontal: isFocused ? 14 : 10,
-                }}
-                transition={{ type: 'spring', damping: 22, stiffness: 240 }}
-                style={styles.pill}
-              >
+              {/* Plain padding. Springing it re-ran layout on every frame for no
+                  visible change: the pill fills the tab and centres its content. */}
+              <View style={[styles.pill, { paddingHorizontal: isFocused ? 14 : 10 }]}>
                 {isFocused ? (
                   <LinearGradient
                     colors={[tokens.color.gradientAccentFrom, tokens.color.gradientAccentTo]}
@@ -129,7 +125,7 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
                     <Text style={styles.activeLabel}>{item.label}</Text>
                   </MotiView>
                 ) : null}
-              </MotiView>
+              </View>
             </Pressable>
           );
         })}

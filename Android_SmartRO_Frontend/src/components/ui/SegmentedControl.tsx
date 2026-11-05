@@ -31,13 +31,31 @@ export function SegmentedControl<T extends string>({
 
   return (
     <View style={[styles.track, fullWidth && styles.trackFull, style]}>
-      {active ? (
-        <MotiView
-          animate={{ translateX: active.x, width: active.w }}
-          transition={{ type: 'spring', damping: 24, stiffness: 240 }}
-          style={styles.thumb}
-        />
-      ) : null}
+      {/* One thumb per option, with that option's width as a plain style;
+          only the selected one shows. Every thumb follows the selection with
+          translateX + scaleX only (animating width re-ran layout every frame),
+          so the visible one slides and resizes as before and sits at scale 1
+          when still. scaleX works from the centre; translateX makes up for it.
+          Keep translateX before scaleX: Moti applies them in key order, and
+          this order leaves the shift unscaled. */}
+      {active
+        ? options.map((opt) => {
+            const own = layouts[opt.value];
+            if (!own || own.w <= 0) return null;
+            return (
+              <MotiView
+                key={opt.value}
+                pointerEvents="none"
+                animate={{
+                  translateX: active.x - (own.w - active.w) / 2,
+                  scaleX: active.w / own.w,
+                }}
+                transition={{ type: 'spring', damping: 24, stiffness: 240 }}
+                style={[styles.thumb, { width: own.w, opacity: opt.value === value ? 1 : 0 }]}
+              />
+            );
+          })
+        : null}
       {options.map((opt) => {
         const isActive = opt.value === value;
         return (
