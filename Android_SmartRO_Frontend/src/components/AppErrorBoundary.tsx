@@ -6,7 +6,15 @@ import React from 'react';
 import { InteractionManager, Pressable, Text, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import { tokens } from '@theme/tokens';
-import { onFatalError, reportAppError } from '../utils/crashReporter';
+import { flushReports, onFatalError, reportAppError } from '../utils/crashReporter';
+
+/**
+ * Waits, at most 3 s, for the reports still on their way (the one about what
+ * broke, usually). Any not sent by then are sent on the next launch.
+ */
+function waitForReports(): Promise<void> {
+  return Promise.race([flushReports(), new Promise<void>((resolve) => setTimeout(resolve, 3000))]);
+}
 
 /**
  * Restarts the app (into a downloaded update, if there is one) once the
@@ -51,12 +59,15 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   private restart = () => {
     if (this.state.restarting) return;
     // A full reload starts clean; if that isn't possible, try drawing again.
+    // The report of what broke gets to finish first.
     if (Updates.isEnabled) {
       this.setState({ restarting: true });
-      restartApp().catch((e) => {
-        void reportAppError('updates', e);
-        this.setState({ error: null, restarting: false });
-      });
+      waitForReports()
+        .then(() => restartApp())
+        .catch((e) => {
+          void reportAppError('updates', e);
+          this.setState({ error: null, restarting: false });
+        });
     } else {
       this.setState({ error: null });
     }
