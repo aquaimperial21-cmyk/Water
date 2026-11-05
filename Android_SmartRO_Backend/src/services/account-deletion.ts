@@ -83,8 +83,10 @@ async function assertDeletable(tx: Tx, userId: string): Promise<void> {
     );
   }
 
+  // A ₹0 refund owes nothing, and nothing ever settles one: old cancels queued
+  // them, and they refused deletion for ever.
   const refunds = await tx.payment.aggregate({
-    where: { userId, kind: 'REFUND', status: 'INITIATED' },
+    where: { userId, kind: 'REFUND', status: 'INITIATED', amountPaise: { gt: 0 } },
     _sum: { amountPaise: true },
     _count: true,
   });
